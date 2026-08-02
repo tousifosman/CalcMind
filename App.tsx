@@ -1,6 +1,5 @@
-import { StatusBar } from 'expo-status-bar';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 
 type Operator = '+' | '-' | '×' | '÷';
 
@@ -91,7 +90,7 @@ export default function App() {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" />
+      <StatusBar barStyle="light-content" />
       <View style={styles.displayWrap}>
         <Text style={styles.display} numberOfLines={1} adjustsFontSizeToFit>
           {display}
