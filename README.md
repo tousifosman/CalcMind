@@ -1,31 +1,33 @@
 # CalcMind
 
-A mind map like calculator, built with [Expo](https://expo.dev) / React Native, and also shipped as a web page hosted on GitHub Pages.
+A mind map like calculator, built with the bare [React Native CLI](https://reactnative.dev), and also shipped as a web page (via `react-native-web` + Webpack) hosted on GitHub Pages.
+
+This project intentionally avoids Expo/EAS — everything here is open source and runs on your own machine or CI, with no vendor build service required.
 
 ## Development
 
 ```bash
 npm install
-npm start          # opens the Expo dev tools (press "w" for web, or scan the QR code for a device)
+npm start          # starts the Metro bundler
 ```
 
-Platform-specific shortcuts:
+In another terminal:
 
 ```bash
-npm run android
-npm run ios
-npm run web
+npm run android     # requires Android Studio / an emulator or device
+npm run ios         # requires Xcode (macOS only)
+npm run web          # starts a Webpack dev server for the browser build
 ```
 
 ## Web build
 
-The app is built for the web with `react-native-web` via Expo's static export:
+The app is built for the web with `react-native-web` via a plain Webpack config (`webpack.config.js`):
 
 ```bash
 npm run build:web
 ```
 
-This exports a static site to `dist/` and rewrites asset URLs to relative paths (via `scripts/fix-web-base-path.js`) so it works correctly when served from a GitHub Pages project subpath (`https://<user>.github.io/<repo>/`).
+This outputs a static site to `dist/` with relative asset paths (`publicPath: './'`), so it works correctly when served from a GitHub Pages project subpath (`https://<user>.github.io/<repo>/`).
 
 ## Deployment
 
