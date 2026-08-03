@@ -63,7 +63,7 @@ flowchart LR
 |---|---|---|---|
 | ~~**P0**~~ | ~~Foundations~~ | — | **Done** — `08620f9` |
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
-| **P2** | Nodes + keypad | 10 | Next |
+| **P2** | Nodes + keypad | 10 | In progress — 1/10 |
 | **P3** | Snapping | 7 | Blocked on P2 |
 | **P4** | Engine | 9 | Blocked on P3 — **critical path** |
 | **P5** | Persistence | 8 | Blocked on P4 |
@@ -144,13 +144,17 @@ by P3's chain layout, which is why it is not folded into the view components.
 **Touches.** `src/chains/measure.ts`.
 **Depends on.** P2.1.
 
-- [ ] Symbol nodes use `operatorWidth` / `equalsWidth`; numbers and results use measured text
+- [x] Symbol nodes use `operatorWidth` / `equalsWidth`; numbers and results use measured text
       width + `2 × numberPaddingX`, **floored at `nodeHeight`** so single digits stay square-ish.
-- [ ] Measurement is cached per `(raw, fontSize)`; changing `raw` invalidates that entry only.
-- [ ] Works identically on web and native — no DOM-only measurement path.
-- [ ] Width is computed from the **displayed** string (P2.1), not the raw one, so `1.020` and
+- [x] Measurement is cached per `(raw, fontSize)`; changing `raw` invalidates that entry only.
+- [x] Works identically on web and native — no DOM-only measurement path.
+- [x] Width is computed from the **displayed** string (P2.1), not the raw one, so `1.020` and
       `1020` are not silently the same width in a grouping locale.
-- [ ] Unit tests cover the `nodeHeight` floor and cache invalidation on `raw` change.
+- [x] Unit tests cover the `nodeHeight` floor and cache invalidation on `raw` change.
+- No native or DOM text engine is asked for glyph widths — there is no synchronous,
+  platform-identical API for it. `measure.ts` sums a fixed per-glyph advance-width table instead,
+  a first guess like the identity palette (§11.1), not a measurement. See
+  `docs/journal/2026-08-03.md` for why and what would replace it.
 
 ### P2.3 — Node CRUD commands
 
@@ -160,16 +164,16 @@ undoable and the P3/P4 commands have a pattern to follow.
 **Touches.** `src/store/commands.ts`, `src/model/factories.ts`.
 **Depends on.** P2.1.
 
-- [ ] Commands: `addNumberNode(position, raw)`, `addOperatorNode`, `addParenNode`, `addEqualsNode`,
+- [x] Commands: `addNumberNode(position, raw)`, `addOperatorNode`, `addParenNode`, `addEqualsNode`,
       `setNodeRaw`, `deleteNode`.
-- [ ] Each produces exactly one undo entry. Successive `setNodeRaw` calls to the **same** node
+- [x] Each produces exactly one undo entry. Successive `setNodeRaw` calls to the **same** node
       within 500ms coalesce into one, so undo does not walk back a keystroke at a time (§13).
-- [ ] A free node carries `chainId: null` and an **authoritative** `position` (§6).
-- [ ] `deleteNode` on a chain member never leaves a dangling id in `chain.members`. Re-layout is
+- [x] A free node carries `chainId: null` and an **authoritative** `position` (§6).
+- [x] `deleteNode` on a chain member never leaves a dangling id in `chain.members`. Re-layout is
       P3's job; consistency is this task's.
-- [ ] A no-op command records no history entry. See `2026-08-03` Findings for the unconditional-
+- [x] A no-op command records no history entry. See `2026-08-03` Findings for the unconditional-
       timestamp trap that made this test pass only by coincidence.
-- [ ] Undo/redo test per command.
+- [x] Undo/redo test per command.
 
 ### P2.4 — Node views, one per kind
 

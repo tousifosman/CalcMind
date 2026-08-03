@@ -40,11 +40,13 @@ export interface EqualsNode extends NodeBase {
   kind: 'equals';
 }
 
+export type ParenSide = 'open' | 'close';
+
 /** Grouping. Present in v1 because Tydlig's keypad has parens and retrofitting a
  *  node kind means a schema migration (§10.2). */
 export interface ParenNode extends NodeBase {
   kind: 'paren';
-  side: 'open' | 'close';
+  side: ParenSide;
 }
 
 export interface ResultNode extends NodeBase {
