@@ -1,8 +1,9 @@
-# CalcMind — Architecture & Development Plan
+# CalcMind — Architecture
 
-> **Status:** design proposal, not yet implemented. The repository currently holds a bare
-> React Native scaffold with a conventional keypad calculator in `App.tsx`; everything below
-> describes what replaces it.
+> **Status:** partially implemented. P0 (foundations) and P1 (canvas pan/zoom) are built, and
+> `App.tsx` renders the canvas. Everything else below is design ahead of implementation.
+> **[`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md)** tracks what is done and what the remaining
+> tasks are; this document defines the design they are built against.
 >
 > **Reference app:** [Tydlig](http://tydligapp.com/) by Andreas Karlsson (iOS, 2013).
 > `tydligapp.com` itself is unreachable from the authoring environment — plain HTTP to that host
@@ -1073,44 +1074,17 @@ Jest is already configured and green in this repo.
 
 ## 15. Development plan
 
-```mermaid
-flowchart LR
-    P0["P0 · Foundations<br/>deps, tokens, store skeleton"] --> P1["P1 · Canvas<br/>pan, zoom, transforms"]
-    P1 --> P2["P2 · Nodes<br/>create, edit, delete"]
-    P2 --> P3["P3 · Snapping<br/>drag, chains, detach"]
-    P3 --> P4["P4 · Engine<br/>parse, evaluate, results"]
-    P4 --> P5["P5 · Persistence<br/>save, load, migrate"]
-    P4 --> P6["P6 · Linking<br/>references, DAG, hues"]
-    P6 --> P6b["P6b · Labels + slider<br/>named values, scrubbing"]
-    P5 --> P7["P7 · Polish<br/>undo, keyboard, a11y"]
-    P6b --> P7
-```
+**Moved to [`DEVELOPMENT_PLAN.md`](DEVELOPMENT_PLAN.md).** The phase order, per-phase acceptance
+criteria and sequencing notes live there, expanded into tasks that each carry an objective, the
+architecture sections they implement, and their own acceptance criteria — with the phases already
+built struck through.
 
-| Phase | Goal | Acceptance criteria |
-|---|---|---|
-| **P0** | Foundations | Deps installed; `ui/tokens.ts` matches §1.2; empty store + commands compile; `tsc`, `eslint`, `jest` green; `npm run build:web` still produces `dist/`. |
-| **P1** | Canvas | Pan and pinch-zoom at 60fps on device and web; `worldToScreen`/`screenToWorld` are inverses under unit test; zoom clamps at 0.25/4. |
-| **P2** | Nodes + keypad | Tap empty canvas → number node in edit mode; keypad per §8.5 with digits, operators, parens, locale decimal key; hardware keyboard mapped; delete works; `raw` round-trips `"3."`; `13,5` displays per locale while storing `13.5`. |
-| **P3** | Snapping | Two free nodes snap into a chain; insertion between members works with a visible caret; dragging out past `DETACH_DISTANCE` detaches without re-snapping; single-member chains dissolve; chains lay out flush with no gaps. |
-| **P4** | Engine | `1221 + 3 - 20 =` produces a read-only `1204`; precedence correct; `2 × (3 + 4) = 14` with balanced parens, unbalanced reads `Incomplete`; editing an input updates the result; every error state in §10.4 renders; result node rejects edits. |
-| **P5** | Persistence | Autosave debounces and force-flushes on background; kill the app mid-edit and lose at most the debounce window; corrupt the primary file and `.bak` recovers it; a `schemaVersion: 99` file is refused with a clear message; round-trip test passes. |
-| **P6** | Linking | **Continuation (§8.7): result selected + operator → new chain seeded with a reference, connector drawn.** Dragging a result into another chain also creates a reference; identity hues assigned deterministically and stable across reload; edits cascade in topological order; a deliberate cycle marks only the cycle as `CircularReference`; deleting a target leaves an *explained* `DanglingReference` with both recovery actions. |
-| **P6b** | Labels + slider | Label any value; the label renders above the declaration *and* every reference, and editing it updates all of them (§11.1); the `10,000 = [10,000]` declare-and-label idiom works end to end; selecting a number raises the slider popover (§8.8) and scrubbing cascades live at 60fps as one undo entry with autosave suppressed until release. |
-| **P7** | Polish | Undo/redo across all commands with edit coalescing; full keyboard support; result dot texture; light/dark theme; identity palette checked for deuteranopia/protanopia; screen-reader labels announce node kind, value, label, and link parent. |
+This section number is kept, rather than renumbering §16 and §17 up, because both are cited from
+the journal, from commit messages, and from within this document.
 
-Sequencing notes: P5 and P6 both depend only on P4 and can proceed in parallel. P4 is the
-critical path — it is what turns a drawing app into a calculator, so it should not be deferred
-behind polish.
-
-**P6b is not optional garnish.** Labels are what let a canvas be read back a week later, and the
-slider is what turns a correct dependency graph into something you can ask "what if" of. The
-reference app leads its own marketing with both. If the plan has to be cut, cut graphing (§17.2),
-not these.
-
-One caveat on P6: continuation (§8.7) is the *primary* way users create links, so it is not
-really "phase 6 polish" — if P6 slips, the app ships as a canvas of unrelated sums and loses the
-point. Consider pulling continuation forward into P4 and leaving only the general DAG, hue
-assignment, and cycle handling in P6.
+The split is deliberate. This document describes the design and is rewritten in place as the
+design changes; the plan is a progress record that gets ticked off. Holding both in one file made
+it unclear which parts were claims about the present and which were intentions.
 
 ---
 

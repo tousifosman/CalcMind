@@ -12,10 +12,12 @@ also shipped as a static web build via `react-native-web` + Webpack.
 
 ## Read these before working
 
+- **`docs/DEVELOPMENT_PLAN.md`** — what is built and what to build next, as tasks carrying their
+  own objective, architecture references and acceptance criteria. **Start here to pick up work**;
+  each task tells you which architecture sections to read for it.
 - **`docs/ARCHITECTURE.md`** — the design, and the authority on what it currently is.
-  Section-numbered (`§7`, `§8.7`); cite sections rather than restating them. Contains the
-  phased plan (P0–P7) with per-phase acceptance criteria, and a decisions log with revisit
-  conditions.
+  Section-numbered (`§7`, `§8.7`); cite sections rather than restating them. Contains a decisions
+  log with revisit conditions.
 - **`docs/journal/GUIDELINES.md`** — how to read the journal before deciding anything, and
   how to write an entry before you finish. Both halves are expected of you.
 
@@ -35,8 +37,9 @@ is binding — do not re-derive the superseded version of it.
   `docs/journal/GUIDELINES.md` has the format and the closing checklist.
 - **Verify before claiming.** Green `tsc` is not a working app; a branch is not `main`.
   Both are recorded mistakes (`docs/journal/2026-08-03.md`, revisions 8 and 10).
-- **Keep docs from going stale.** If a change contradicts `README.md`, `AGENTS.md`, or
-  `docs/ARCHITECTURE.md`, fix them in the same commit.
+- **Keep docs from going stale.** If a change contradicts `README.md`, `AGENTS.md`,
+  `docs/ARCHITECTURE.md` or `docs/DEVELOPMENT_PLAN.md`, fix them in the same commit. Tick a task's
+  acceptance criteria in the same commit as the code that satisfies them.
 - **Dependency versions here are deliberate.** Check the journal's Findings before
   upgrading or adding anything — notably the reanimated / gesture-handler pairing.
 - **Match the surrounding code.** Comment density and naming in this repo are deliberate;
