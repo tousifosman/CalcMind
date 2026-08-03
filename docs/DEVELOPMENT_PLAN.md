@@ -144,13 +144,17 @@ by P3's chain layout, which is why it is not folded into the view components.
 **Touches.** `src/chains/measure.ts`.
 **Depends on.** P2.1.
 
-- [ ] Symbol nodes use `operatorWidth` / `equalsWidth`; numbers and results use measured text
+- [x] Symbol nodes use `operatorWidth` / `equalsWidth`; numbers and results use measured text
       width + `2 × numberPaddingX`, **floored at `nodeHeight`** so single digits stay square-ish.
-- [ ] Measurement is cached per `(raw, fontSize)`; changing `raw` invalidates that entry only.
-- [ ] Works identically on web and native — no DOM-only measurement path.
-- [ ] Width is computed from the **displayed** string (P2.1), not the raw one, so `1.020` and
+- [x] Measurement is cached per `(raw, fontSize)`; changing `raw` invalidates that entry only.
+- [x] Works identically on web and native — no DOM-only measurement path.
+- [x] Width is computed from the **displayed** string (P2.1), not the raw one, so `1.020` and
       `1020` are not silently the same width in a grouping locale.
-- [ ] Unit tests cover the `nodeHeight` floor and cache invalidation on `raw` change.
+- [x] Unit tests cover the `nodeHeight` floor and cache invalidation on `raw` change.
+- No native or DOM text engine is asked for glyph widths — there is no synchronous,
+  platform-identical API for it. `measure.ts` sums a fixed per-glyph advance-width table instead,
+  a first guess like the identity palette (§11.1), not a measurement. See
+  `docs/journal/2026-08-03.md` for why and what would replace it.
 
 ### P2.3 — Node CRUD commands
 
