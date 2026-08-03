@@ -63,7 +63,7 @@ flowchart LR
 |---|---|---|---|
 | ~~**P0**~~ | ~~Foundations~~ | — | **Done** — `08620f9` |
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
-| **P2** | Nodes + keypad | 10 | In progress — 1/10 |
+| **P2** | Nodes + keypad | 10 | In progress — 4/10 (P2.1–P2.3, P2.7) |
 | **P3** | Snapping | 7 | Blocked on P2 |
 | **P4** | Engine | 9 | Blocked on P3 — **critical path** |
 | **P5** | Persistence | 8 | Blocked on P4 |
