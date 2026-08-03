@@ -63,7 +63,7 @@ flowchart LR
 |---|---|---|---|
 | ~~**P0**~~ | ~~Foundations~~ | — | **Done** — `08620f9` |
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
-| **P2** | Nodes + keypad | 10 | Next |
+| **P2** | Nodes + keypad | 10 | In progress — 1/10 |
 | **P3** | Snapping | 7 | Blocked on P2 |
 | **P4** | Engine | 9 | Blocked on P3 — **critical path** |
 | **P5** | Persistence | 8 | Blocked on P4 |
@@ -164,16 +164,16 @@ undoable and the P3/P4 commands have a pattern to follow.
 **Touches.** `src/store/commands.ts`, `src/model/factories.ts`.
 **Depends on.** P2.1.
 
-- [ ] Commands: `addNumberNode(position, raw)`, `addOperatorNode`, `addParenNode`, `addEqualsNode`,
+- [x] Commands: `addNumberNode(position, raw)`, `addOperatorNode`, `addParenNode`, `addEqualsNode`,
       `setNodeRaw`, `deleteNode`.
-- [ ] Each produces exactly one undo entry. Successive `setNodeRaw` calls to the **same** node
+- [x] Each produces exactly one undo entry. Successive `setNodeRaw` calls to the **same** node
       within 500ms coalesce into one, so undo does not walk back a keystroke at a time (§13).
-- [ ] A free node carries `chainId: null` and an **authoritative** `position` (§6).
-- [ ] `deleteNode` on a chain member never leaves a dangling id in `chain.members`. Re-layout is
+- [x] A free node carries `chainId: null` and an **authoritative** `position` (§6).
+- [x] `deleteNode` on a chain member never leaves a dangling id in `chain.members`. Re-layout is
       P3's job; consistency is this task's.
-- [ ] A no-op command records no history entry. See `2026-08-03` Findings for the unconditional-
+- [x] A no-op command records no history entry. See `2026-08-03` Findings for the unconditional-
       timestamp trap that made this test pass only by coincidence.
-- [ ] Undo/redo test per command.
+- [x] Undo/redo test per command.
 
 ### P2.4 — Node views, one per kind
 
