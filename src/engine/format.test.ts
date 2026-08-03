@@ -56,6 +56,13 @@ describe('parseUserInput', () => {
   test('rejects text that is not a number in the given locale', () => {
     expect(() => parseUserInput('abc', 'en-US')).toThrow();
   });
+
+  test('rejects malformed grouping that would silently produce a different number', () => {
+    // '13.5' in de-DE: '.' is the group separator, so stripping blindly would give '135'
+    expect(() => parseUserInput('13.5', 'de-DE')).toThrow();
+    // '1.23' in en-US: '.' is the decimal separator, so '123' would be wrong
+    expect(() => parseUserInput('1.23.45', 'en-US')).toThrow();
+  });
 });
 
 describe('parse . format is identity over generated decimals', () => {

@@ -13,16 +13,30 @@ function latnLocale(locale: string): string {
   return `${locale}-u-nu-latn`;
 }
 
+// Separator values are derived from Intl.NumberFormat, which is expensive to construct.
+// Cache per locale so formatForDisplay and parseUserInput (called on every keystroke) pay
+// the construction cost at most once per locale tag seen in a session.
+const _decimalCache = new Map<string, string>();
+const _groupCache = new Map<string, string>();
+
 /** The glyph the locale uses for a decimal point - what the keypad's decimal key displays
  *  (P2.7), while the key itself still inserts a canonical '.' into raw. */
 export function decimalSeparatorFor(locale: string): string {
-  const part = new Intl.NumberFormat(latnLocale(locale)).formatToParts(1.1).find((p) => p.type === 'decimal');
-  return part ? part.value : '.';
+  const key = latnLocale(locale);
+  if (_decimalCache.has(key)) return _decimalCache.get(key)!;
+  const part = new Intl.NumberFormat(key).formatToParts(1.1).find((p) => p.type === 'decimal');
+  const sep = part ? part.value : '.';
+  _decimalCache.set(key, sep);
+  return sep;
 }
 
 function groupSeparatorFor(locale: string): string {
-  const part = new Intl.NumberFormat(latnLocale(locale)).formatToParts(1000).find((p) => p.type === 'group');
-  return part ? part.value : '';
+  const key = latnLocale(locale);
+  if (_groupCache.has(key)) return _groupCache.get(key)!;
+  const part = new Intl.NumberFormat(key).formatToParts(1000).find((p) => p.type === 'group');
+  const sep = part ? part.value : '';
+  _groupCache.set(key, sep);
+  return sep;
 }
 
 /** Groups an integer digit string per the locale, through `Intl.NumberFormat`, for anything that
@@ -62,10 +76,35 @@ export function formatForDisplay(raw: string, locale: string): string {
  *  grouping separator, replaces its decimal separator with '.', and passes digits, sign and a
  *  trailing separator through unchanged - `parseUserInput('3,', 'de-DE')` is `'3.'`, not `'3'`
  *  (§6). Throws if the result isn't canonical raw, which means the input wasn't a number in this
- *  locale to begin with. */
+ *  locale to begin with.
+ *
+ *  Validates grouping placement when the group separator overlaps with the canonical '.' to
+ *  prevent silent mis-normalisation: `'13.5'` in de-DE (where '.' groups) rejects rather than
+ *  silently producing `'135'`. */
 export function parseUserInput(text: string, locale: string): string {
   const group = groupSeparatorFor(locale);
   const decimal = decimalSeparatorFor(locale);
+
+  // When the group separator is the same character as the canonical decimal point ('.'),
+  // stripping it blindly can silently change the number: '13.5' in de-DE becomes '135'.
+  // Validate that every '.' in the integer portion is a proper thousands separator
+  // (first segment 1-3 digits, subsequent segments exactly 3 digits).
+  if (group === '.') {
+    const withoutSign = text.startsWith('-') ? text.slice(1) : text;
+    const decIdx = withoutSign.indexOf(decimal);
+    const integerPortion = decIdx === -1 ? withoutSign : withoutSign.slice(0, decIdx);
+    if (integerPortion.includes('.')) {
+      const segments = integerPortion.split('.');
+      const validGrouping =
+        /^\d+$/.test(segments[0]) &&
+        segments[0].length >= 1 &&
+        segments[0].length <= 3 &&
+        segments.slice(1).every((s) => s.length === 3 && /^\d+$/.test(s));
+      if (!validGrouping) {
+        throw new Error(`parseUserInput: not a number in locale ${locale}: ${JSON.stringify(text)}`);
+      }
+    }
+  }
 
   let normalised = group !== '' ? text.split(group).join('') : text;
   if (decimal !== '.') {
