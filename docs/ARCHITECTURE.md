@@ -150,11 +150,71 @@ into, which is useful for knowing what not to design ourselves into a corner on:
 Two things this validates in the design below: `label` has to live on the node base rather than
 only on numbers (§6), and the grammar has to have a credible path to function application (§10.2).
 
-*Sources:* [MacStories review](https://www.macstories.net/reviews/tydlig-an-innovative-free-form-calculator-for-ios/)
+#### The developer's own feature list, and the idiom that ties it together
+
+From the product site itself, plus its full-resolution screenshots. Direct quotes are the
+developer's:
+
+- **Responsive results** — "Edit any number on the canvas and see all affected results update
+  automatically."
+- **Linked numbers** — "With a result selected, press any operation to make a linked number **on
+  the line below**. You can also **drag a result** to create a link." Both paths, confirmed: the
+  continuation shortcut in §8.7 *and* drag-to-link.
+- **Text labels** — "Add a text label to a number to describe what it represents. **Like a
+  spreadsheet, but with freedom.**"
+- **Value sliders** — "Use the slider on any number to tweak its value and see how results and
+  graphs update live. Tap on the slider to make it snap to whole numbers." See §8.8.
+- **Graphing** — "Long press any number you want to make **x** and tap the graph action to create a
+  graph. You can link **multiple values as x**, even **up a hierarchy** of linked numbers."
+- **Freeform canvas** — "Drag numbers **and expressions** around … the canvas will expand
+  indefinitely." Whole expressions are draggable, not only individual nodes — see §17.1.
+- **External keyboard** — Bluetooth keyboards for digits and `+ - * /`.
+- **And more** — PDF sharing, printing, left-handed mode, undo, adjustable text size,
+  scientific notation.
+
+**The idiom that makes it usable: declare, label, reference.** The clearest screenshot builds a
+compound-interest model out of three named values:
+
+```
+10,000  = [10,000]    ← labelled "Initial Deposit"   (blue)
+20      = [20]        ← labelled "Years"             (cyan)
+4 %     = [0.04]      ← labelled "Interest"          (pink)
+
+Initial Deposit   Interest      Years        Accumulated
+10,000 ( 1 + 0.04 / 12 ) ^ ( 12 × 20 ) = [22,225.82]   (purple)
+
+Accumulated   Initial Deposit   Profit
+22,225.82  −  10,000  = [12,225.82]                    (green)
+
+Profit        Years       Profit per month
+12,225.82  /  20  / 12  = [50.94]                      (orange)
+```
+
+Three things fall out of that, and they change the design below:
+
+1. **A trivial expression is how you declare a variable.** `10,000 = [10,000]` exists purely so its
+   result can be labelled and referenced. No separate "variable" concept is needed — the result
+   node *is* the named value.
+2. **Labels render above every cell that shares an identity, not just the declaration.** In the
+   screenshot "Initial Deposit" appears above the declaration's result *and* above both references
+   to it. So a label belongs to the identity and is drawn on all its cells (§11.1).
+3. **Implicit multiplication exists, but only before a parenthesis.** `10,000 ( 1 + … )` has no `×`.
+   That is standard maths notation, and it is a narrower rule than "adjacent numbers multiply" —
+   see §10.2 and decision 4.
+
+The graph in that screenshot also shows its **current operating point**: dotted crosshairs at
+`(20, 22,225.82)`, with each axis tick labelled in the hue of the value it tracks.
+
+*Sources:* [tydligapp.com](http://tydligapp.com/), supplied as a complete MHTML archive and unpacked
+locally — 34 images including the developer's own feature illustrations and 2048×1536 iPad
+screenshots
+· [MacStories review](https://www.macstories.net/reviews/tydlig-an-innovative-free-form-calculator-for-ios/)
 · [App Store listing](https://apps.apple.com/us/app/tydlig/id721606556)
-· 1.0/1.1 screenshots via `cdn.macstories.net/002/…tydlig-iPad Screenshot 1/2.png` and `…tydlig-iPhone_1/2.png`
+· 1.0/1.1 screenshots via `cdn.macstories.net/002/…tydlig-iPad Screenshot 1/2.png`
 · 1.6 screenshots via the iTunes lookup API for app id `721606556`
-(all referenced, not redistributed here — they are the developer's and the publication's).
+
+All of it referenced, none redistributed in this repository — the screenshots and illustrations
+are Tydlig Software AB's and the publication's.
 
 ---
 
@@ -586,6 +646,25 @@ This is the single most important interaction in the app: it turns "I have an an
 now I keep working with it" in one keystroke, and it is what produces the linked trees that make
 the canvas worth having.
 
+### 8.8 Value slider
+
+Selecting a number raises a slider in a popover anchored beneath its cell, with the range endpoints
+labelled. Dragging it rewrites that number and the whole dependent subgraph recomputes live —
+results, and any graphs, updating per frame.
+
+This is the feature that makes the dependency graph *felt* rather than merely correct: a static
+model answers one question, a scrubable one answers "what if". It is cheap to build on top of §11
+and should not be deferred to the far end of the plan.
+
+- **Range** is inferred from the current value: `[0, 10^ceil(log10(|v|))]` for positive values,
+  symmetric about zero when the value is negative, `[0, 10]` when the value is zero. The user can
+  edit the bounds.
+- **Tap the slider to snap** to integers; drag again for continuous values.
+- **Scrubbing is a drag, not a commit.** The whole gesture coalesces into a single undo entry, and
+  autosave is suppressed until release — otherwise one scrub writes hundreds of documents.
+- Recompute during scrub runs on the dirty subgraph only (§11) and must hold 60fps; if a subgraph
+  is too expensive, throttle recompute to the frame budget rather than dropping the interaction.
+
 ---
 
 ## 9. Chain validity
@@ -647,11 +726,17 @@ flowchart LR
 
 ```
 expr   := term (addop term)*
-term   := factor (mulop factor)*
+term   := factor ((mulop | ε) factor)*     -- ε only where the next factor is '('
 factor := number | reference | '(' expr ')'
 addop  := '+' | '-'
 mulop  := '×' | '÷'
 ```
+
+**Implicit multiplication, but only before `(`.** The reference app writes
+`10,000 ( 1 + 0.04 / 12 )` with no `×` (§1.3), which is ordinary maths notation. So a factor
+directly followed by an open paren multiplies. This is deliberately *not* the general
+"adjacent operands multiply" rule — two adjacent **numbers** remain invalid (§9, decision 4),
+because `12 34` is far more likely a mis-snap than a product, whereas `12(…)` is unambiguous.
 
 Left-associative; `× ÷` bind tighter than `+ -`. Parsing is precedence climbing — compact, and the
 natural place to add unary minus, `^`, and functions later without a rewrite.
@@ -744,13 +829,19 @@ identity, not just by a line.**
 
 ![CalcMind linking model](assets/linking-model.svg)
 
-- A result that **nothing references** carries no hue — it is a plain result node. Colour is spent
-  only where it means something.
-- The moment a result is referenced it is assigned an **identity hue** from a rotating palette,
-  drawn as a ring on the result cell.
-- Every **reference** to that result is filled with the same hue. Two cells sharing a hue are the
+- A value with **no identity** carries no hue — it is a plain node. Colour is spent only where it
+  means something.
+- A value **acquires an identity** when it becomes a named thing, which happens two ways: something
+  **references** it, or the user gives it a **label**. Either grants an **identity hue** from a
+  rotating palette, drawn as a ring on the cell. (The reference-only rule was wrong: the reference
+  app's own labels illustration colours three *inputs* purely because they are labelled.)
+- Every **reference** to that value is filled with the same hue. Two cells sharing a hue are the
   same value, wherever they sit on the canvas.
 - The **connector** between them is drawn in that hue too, as a bezier with an arrowhead.
+- **The label belongs to the identity, not the cell.** It renders above the declaring cell *and*
+  above every reference to it. In the compound-interest screenshot (§1.3) "Initial Deposit" appears
+  three times — once on the declaration, once over each reference. So `label` is looked up through
+  the identity, and editing it updates every cell at once.
 
 Rules that follow from this:
 
@@ -989,9 +1080,10 @@ flowchart LR
     P2 --> P3["P3 · Snapping<br/>drag, chains, detach"]
     P3 --> P4["P4 · Engine<br/>parse, evaluate, results"]
     P4 --> P5["P5 · Persistence<br/>save, load, migrate"]
-    P4 --> P6["P6 · Linking<br/>references, DAG"]
+    P4 --> P6["P6 · Linking<br/>references, DAG, hues"]
+    P6 --> P6b["P6b · Labels + slider<br/>named values, scrubbing"]
     P5 --> P7["P7 · Polish<br/>undo, keyboard, a11y"]
-    P6 --> P7
+    P6b --> P7
 ```
 
 | Phase | Goal | Acceptance criteria |
@@ -1003,11 +1095,17 @@ flowchart LR
 | **P4** | Engine | `1221 + 3 - 20 =` produces a read-only `1204`; precedence correct; `2 × (3 + 4) = 14` with balanced parens, unbalanced reads `Incomplete`; editing an input updates the result; every error state in §10.4 renders; result node rejects edits. |
 | **P5** | Persistence | Autosave debounces and force-flushes on background; kill the app mid-edit and lose at most the debounce window; corrupt the primary file and `.bak` recovers it; a `schemaVersion: 99` file is refused with a clear message; round-trip test passes. |
 | **P6** | Linking | **Continuation (§8.7): result selected + operator → new chain seeded with a reference, connector drawn.** Dragging a result into another chain also creates a reference; identity hues assigned deterministically and stable across reload; edits cascade in topological order; a deliberate cycle marks only the cycle as `CircularReference`; deleting a target leaves an *explained* `DanglingReference` with both recovery actions. |
-| **P7** | Polish | Undo/redo across all commands with edit coalescing; full keyboard support; result dot texture; light/dark theme; identity palette checked for deuteranopia/protanopia; screen-reader labels announce node kind, value, and link parent. |
+| **P6b** | Labels + slider | Label any value; the label renders above the declaration *and* every reference, and editing it updates all of them (§11.1); the `10,000 = [10,000]` declare-and-label idiom works end to end; selecting a number raises the slider popover (§8.8) and scrubbing cascades live at 60fps as one undo entry with autosave suppressed until release. |
+| **P7** | Polish | Undo/redo across all commands with edit coalescing; full keyboard support; result dot texture; light/dark theme; identity palette checked for deuteranopia/protanopia; screen-reader labels announce node kind, value, label, and link parent. |
 
 Sequencing notes: P5 and P6 both depend only on P4 and can proceed in parallel. P4 is the
 critical path — it is what turns a drawing app into a calculator, so it should not be deferred
 behind polish.
+
+**P6b is not optional garnish.** Labels are what let a canvas be read back a week later, and the
+slider is what turns a correct dependency graph into something you can ask "what if" of. The
+reference app leads its own marketing with both. If the plan has to be cut, cut graphing (§17.2),
+not these.
 
 One caveat on P6: continuation (§8.7) is the *primary* way users create links, so it is not
 really "phase 6 polish" — if P6 slips, the app ships as a canvas of unrelated sums and loses the
@@ -1023,7 +1121,7 @@ assignment, and cycle handling in P6.
 | 1 | Bare React Native CLI, no Expo | No dependency that can acquire a price; already migrated | Needing many native modules makes manual linking painful |
 | 2 | Token order stored explicitly | Sorting by `x` lets a rendering bug change a user's answer (§6.1) | Never |
 | 3 | `decimal.js`, not native floats | `0.1 + 0.2` must be `0.3` in a calculator | Bundle size becomes critical |
-| 4 | Adjacent numbers are invalid | Guessing between `12·34` and `1234` produces silently wrong answers (§9) | Users ask for implicit multiplication |
+| 4 | Adjacent numbers invalid, but `n(` multiplies | `12 34` is more likely a mis-snap than a product; `12(…)` is unambiguous maths and the reference app uses it (§10.2) | Never for the paren case; the number-number case if users ask |
 | 5 | Plain JSON documents | Inspectable, diffable, hand-editable; no lock-in | Documents grow large enough to need a binary format |
 | 6 | Derived values persisted as labelled cache | Paint before evaluating; readable files. Engine always wins | Cache drift causes real confusion |
 | 7 | Newer-schema files refused, not migrated | Guessing an unknown shape corrupts work | Never |
@@ -1038,8 +1136,15 @@ assignment, and cycle handling in P6.
 
 ## 17. Open questions
 
-1. **Chain move vs member detach gesture** (§8.3) — still needs validation with real use. The one
-   genuinely unresolved interaction.
+### 17.1 Chain move vs member detach
+
+Still the one genuinely unresolved interaction (§8.3). The reference app's own copy says you can
+drag "numbers **and expressions**", so both gestures exist there and are presumably distinguished by
+grab target or dwell. Our proposal — plain drag detaches a member, long-press-then-drag moves the
+whole chain — is consistent with that but unverified. It is one line in `useNodeDrag`; decide it
+with a real device in hand rather than on paper.
+
+### 17.2 Everything else
 2. ~~**Keypad model**~~ — **resolved** (§8.5). Tydlig's dismissible, non-fullscreen keypad with a
    separated operator column, observed directly from its screenshots.
 3. **Multi-document UX** — is there a document browser, or one canvas that grows forever? Tydlig
