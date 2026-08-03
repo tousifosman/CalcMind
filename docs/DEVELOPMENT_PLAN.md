@@ -242,14 +242,14 @@ from digits.
 **Touches.** `src/keypad/Keypad.tsx`, `src/app/AppShell.tsx`.
 **Depends on.** P2.1 (decimal glyph).
 
-- [ ] Regions exactly as tabulated in §8.5: digits `7 8 9 / 4 5 6 / 1 2 3 / 0`; number editing
+- [x] Regions exactly as tabulated in §8.5: digits `7 8 9 / 4 5 6 / 1 2 3 / 0`; number editing
       (locale decimal separator, `+/-`, backspace); grouping `(` `)`; operators `÷ × − + =` in a
       separated accent column; mode strip.
-- [ ] Not full-screen, and dismissible. Tapping empty canvas toggles it (§8.5).
-- [ ] The decimal key **shows the locale glyph** (P2.1) and inserts a canonical `.`.
-- [ ] `functions` and `graph` in the mode strip render visibly **disabled** — they are later work
+- [x] Not full-screen, and dismissible. Tapping empty canvas toggles it (§8.5).
+- [x] The decimal key **shows the locale glyph** (P2.1) and inserts a canonical `.`.
+- [x] `functions` and `graph` in the mode strip render visibly **disabled** — they are later work
       (§10.2 extension path, §17.2), so they must read as not-yet rather than silently missing.
-- [ ] Keypad visibility is ephemeral state, outside undo history.
+- [x] Keypad visibility is ephemeral state, outside undo history.
 
 ### P2.8 — Input dispatch: keypad and hardware keyboard
 
