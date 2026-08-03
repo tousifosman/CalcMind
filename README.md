@@ -4,6 +4,18 @@ A mind map like calculator, built with the bare [React Native CLI](https://react
 
 This project intentionally avoids Expo/EAS — everything here is open source and runs on your own machine or CI, with no vendor build service required.
 
+## Design
+
+CalcMind is a free-form canvas calculator: numbers and operators are nodes placed anywhere on an
+infinite canvas, snapping together into formulas that recompute as you edit them.
+
+**[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** is the full design — the domain model, snapping
+and evaluation engines, the on-disk document format, and the phased development plan. Read it
+before starting feature work.
+
+> The current `App.tsx` is still a conventional keypad calculator; the canvas model described in
+> that document has not been built yet.
+
 ## Development
 
 ```bash

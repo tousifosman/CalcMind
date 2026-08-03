@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1505 277" width="1505" height="277" role="img" aria-label="Formula 1221 + 3 - 20 = 1204 rendered as a segmented pill of nodes">
+  <title>CalcMind formula reference: 1221 + 3 - 20 = 1204</title>
+  <desc>Traced from the supplied reference image. Exact colours sampled from the source PNG.
+  Teal #44BDAD = number node, amber #FFBF28 = operator node, purple #7030A0 = equals node,
+  salmon #FF7E79 with dot texture = derived result node (read-only).
+  Each segment carries a lighter tint of its own colour as the outer border band.</desc>
+
+  <defs>
+    <!-- Rounded silhouette of the whole chain: the border-tint layer is clipped to this. -->
+    <clipPath id="outerClip">
+      <rect x="0" y="0" width="1505" height="277" rx="12" ry="12"/>
+    </clipPath>
+    <!-- Inset silhouette: the solid cell fills are clipped to this, 11px inside the outer edge. -->
+    <clipPath id="innerClip">
+      <rect x="11" y="11" width="1483" height="256" rx="6" ry="6"/>
+    </clipPath>
+    <!-- Dot lattice of the result node: 1px light dots on a 4x4 tile, offset every other row.
+         Signals "computed, not editable". -->
+    <pattern id="resultTexture" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="#FF7E79"/>
+      <rect x="1" y="0" width="1" height="1" fill="#FFD1CF"/>
+      <rect x="3" y="2" width="1" height="1" fill="#FFD1CF"/>
+    </pattern>
+  </defs>
+
+  <!-- Layer 1: border band - each segment's lighter tint, clipped to the rounded silhouette. -->
+  <g clip-path="url(#outerClip)">
+    <rect x="0"    y="0" width="361" height="277" fill="#8CE0D2"/>
+    <rect x="361"  y="0" width="136" height="277" fill="#FFD78E"/>
+    <rect x="497"  y="0" width="136" height="277" fill="#8CE0D2"/>
+    <rect x="633"  y="0" width="136" height="277" fill="#FFD78E"/>
+    <rect x="769"  y="0" width="220" height="277" fill="#8CE0D2"/>
+    <rect x="989"  y="0" width="140" height="277" fill="#AA557F"/>
+    <rect x="1129" y="0" width="376" height="277" fill="#FFA3A0"/>
+  </g>
+
+  <!-- Layer 2: solid cell fills, clipped to the inset silhouette. Cells are flush - the chain
+       reads as one continuous pill, which is what makes a snapped formula feel like one object. -->
+  <g clip-path="url(#innerClip)">
+    <rect x="11"   y="11" width="350" height="256" fill="#44BDAD"/>
+    <rect x="361"  y="11" width="136" height="256" fill="#FFBF28"/>
+    <rect x="497"  y="11" width="136" height="256" fill="#44BDAD"/>
+    <rect x="633"  y="11" width="136" height="256" fill="#FFBF28"/>
+    <rect x="769"  y="11" width="220" height="256" fill="#44BDAD"/>
+    <rect x="989"  y="11" width="140" height="256" fill="#7030A0"/>
+    <rect x="1129" y="11" width="365" height="256" fill="url(#resultTexture)"/>
+  </g>
+
+  <!-- Layer 3: numerals. Baseline y=191, cap height 91px as measured from the source. -->
+  <g fill="#FFFFFF" font-family="Montserrat, 'Trebuchet MS', 'Helvetica Neue', Arial, sans-serif"
+     font-weight="800" font-size="127" text-anchor="middle">
+    <text x="180"  y="191">1221</text>
+    <text x="565"  y="191">3</text>
+    <text x="881"  y="191">20</text>
+    <text x="1318" y="191">1204</text>
+  </g>
+
+  <!-- Layer 4: operator glyphs drawn as bars, not text - exact and font-independent.
+       All operators sit on a common maths axis at y=155, matching the source. -->
+  <g fill="#FFFFFF">
+    <!-- plus, centred (429, 155) -->
+    <rect x="399" y="148" width="60" height="14"/>
+    <rect x="422" y="125" width="14" height="60"/>
+    <!-- minus, centred (701, 155) -->
+    <rect x="684" y="148.5" width="34" height="13"/>
+    <!-- equals, centred (1059, 155) -->
+    <rect x="1029" y="135.5" width="60" height="13"/>
+    <rect x="1029" y="161.5" width="60" height="13"/>
+  </g>
+</svg>
