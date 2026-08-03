@@ -13,8 +13,13 @@ infinite canvas, snapping together into formulas that recompute as you edit them
 and evaluation engines, the on-disk document format, and the phased development plan. Read it
 before starting feature work.
 
-> The current `App.tsx` is still a conventional keypad calculator; the canvas model described in
-> that document has not been built yet.
+**[docs/journal/](docs/journal/README.md)** is the dated working record: what was decided, what
+was discovered about the toolchain, and which earlier beliefs turned out to be wrong. The
+architecture document is rewritten in place as the design changes, so the journal is the only
+thing that remembers the version before. Worth skimming before trusting an assumption.
+
+> Progress: P0 (foundations) and P1 (canvas pan/zoom) are done. `App.tsx` renders the canvas;
+> nodes and the keypad start in P2.
 
 ## Development
 
@@ -39,7 +44,7 @@ The app is built for the web with `react-native-web` via a plain Webpack config 
 npm run build:web
 ```
 
-This outputs a static site to `dist/` with relative asset paths (`publicPath: './'`), so it works correctly when served from a GitHub Pages project subpath (`https://<user>.github.io/<repo>/`).
+This outputs a static site to `dist/` with relative asset paths (`publicPath: './'` in production), so it works correctly when served from a GitHub Pages project subpath (`https://<user>.github.io/<repo>/`). In development the config switches to an absolute `'/'`, which webpack-dev-server needs to route requests to its in-memory bundle.
 
 ## Deployment
 
