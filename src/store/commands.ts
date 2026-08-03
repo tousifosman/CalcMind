@@ -65,6 +65,17 @@ let lastRawEdit: { nodeId: NodeId; at: number; stackLength: number } | null = nu
 
 export function setNodeRaw(nodeId: NodeId, raw: string): void {
   const store = useDocumentStore.getState();
+
+  // Read-only enforcement lives here, not in each node view (§11.3): every edit, from
+  // whichever input path (keypad, hardware keyboard, a future paste), ends up calling this
+  // command, so this is the one place that can't be bypassed. A result node existing but
+  // being the wrong kind is not the same as "nothing to edit" - it must reject, not silently
+  // no-op, or an edit attempt on a read-only cell looks indistinguishable from success.
+  const targetNode = store.document.nodes[nodeId];
+  if (targetNode && targetNode.kind !== 'number') {
+    throw new Error(`setNodeRaw: node ${nodeId} is a ${targetNode.kind} node and is read-only`);
+  }
+
   const stackLengthBefore = store.undoStack.length;
   const now = Date.now();
   const canCoalesce =
@@ -79,7 +90,7 @@ export function setNodeRaw(nodeId: NodeId, raw: string): void {
   });
 
   if (useDocumentStore.getState().undoStack.length === stackLengthBefore) {
-    return; // no-op edit (raw unchanged, node missing, or not a number node)
+    return; // no-op edit (raw unchanged, or node missing - wrong kind already threw above)
   }
 
   if (canCoalesce) {

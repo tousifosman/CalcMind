@@ -63,7 +63,7 @@ flowchart LR
 |---|---|---|---|
 | ~~**P0**~~ | ~~Foundations~~ | — | **Done** — `08620f9` |
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
-| **P2** | Nodes + keypad | 10 | In progress — 1/10 |
+| **P2** | Nodes + keypad | 10 | In progress — 4/10 |
 | **P3** | Snapping | 7 | Blocked on P2 |
 | **P4** | Engine | 9 | Blocked on P3 — **critical path** |
 | **P5** | Persistence | 8 | Blocked on P4 |
@@ -184,18 +184,18 @@ undoable and the P3/P4 commands have a pattern to follow.
 `ResultNode.tsx`.
 **Depends on.** P2.1, P2.2.
 
-- [ ] One component per kind, styled entirely from `ui/tokens.ts` — no hard-coded colours or sizes.
-- [ ] Cells sit **flush** with the correct border band per §1.2's role table; numbers teal,
+- [x] One component per kind, styled entirely from `ui/tokens.ts` — no hard-coded colours or sizes.
+- [x] Cells sit **flush** with the correct border band per §1.2's role table; numbers teal,
       operators amber, `=` purple, results salmon.
-- [ ] `ResultNode` renders solid `#FF7E79` with the `#FFA3A0` band and **no dot texture** — §11.3
+- [x] `ResultNode` renders solid `#FF7E79` with the `#FFA3A0` band and **no dot texture** — §11.3
       defers texture to v1.1 (P7.3), and hue plus border already carry read-only-ness.
-- [ ] `ResultNode` is read-only: edit attempts are rejected, not silently swallowed.
-- [ ] Paren nesting depth renders as a subtle tint step on the paren cells (§10.2).
-- [ ] `label` renders above the cell when present. Identity hue is P6.5, so a neutral colour is
+- [x] `ResultNode` is read-only: edit attempts are rejected, not silently swallowed.
+- [x] Paren nesting depth renders as a subtle tint step on the paren cells (§10.2).
+- [x] `label` renders above the cell when present. Identity hue is P6.5, so a neutral colour is
       correct here — do not invent a provisional hue rule.
-- [ ] Each is `React.memo`'d and reads its own slice through a per-node selector, so one node
+- [x] Each is `React.memo`'d and reads its own slice through a per-node selector, so one node
       changing does not re-render its siblings (§11.4).
-- [ ] A component test per kind, plus one asserting the result node rejects edits (§14).
+- [x] A component test per kind, plus one asserting the result node rejects edits (§14).
 
 ### P2.5 — Node layer inside the canvas
 
