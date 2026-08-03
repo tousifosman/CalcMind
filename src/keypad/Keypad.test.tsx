@@ -1,10 +1,14 @@
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
-import { Keypad, KeypadKey } from './Keypad';
+import { Keypad, KeypadKey, isClearSwipe } from './Keypad';
 import { useUiStore } from '../store/uiStore';
+import { useDocumentStore } from '../store/documentStore';
+import { addNumberNode } from '../store/commands';
+import { createEmptyDocument } from '../model/factories';
 
 beforeEach(() => {
   act(() => {
-    useUiStore.setState({ keypadVisible: true });
+    useUiStore.setState({ keypadVisible: true, clearConfirmVisible: false });
+    useDocumentStore.setState({ document: createEmptyDocument(), undoStack: [], redoStack: [] });
   });
 });
 
@@ -113,5 +117,87 @@ describe('Keypad', () => {
       { region: 'backspace' },
       { region: 'sign' },
     ]);
+  });
+});
+
+describe('isClearSwipe (§8.5 swipe-across-backspace threshold)', () => {
+  test('a short drag is not a clear swipe', () => {
+    expect(isClearSwipe(10, 0)).toBe(false);
+  });
+
+  test('a long horizontal swipe is a clear swipe', () => {
+    expect(isClearSwipe(60, 2)).toBe(true);
+    expect(isClearSwipe(-60, -2)).toBe(true);
+  });
+
+  test('a long but mostly-vertical drag is not a clear swipe', () => {
+    expect(isClearSwipe(45, 40)).toBe(false);
+  });
+});
+
+describe('swipe-to-clear confirmation (P2.10, decision #15)', () => {
+  test('no confirmation dialog renders by default', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    expect(renderer.root.findAllByProps({ testID: 'keypad-clear-confirm' })).toHaveLength(0);
+  });
+
+  test('the confirmation dialog appears once requested', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    act(() => {
+      useUiStore.getState().requestClearConfirm();
+    });
+
+    expect(findByTestID(renderer, 'keypad-clear-confirm')).toBeTruthy();
+  });
+
+  test('confirming clears every node in one undo entry and closes the dialog', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '42');
+    const stackBefore = useDocumentStore.getState().undoStack.length;
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    act(() => {
+      useUiStore.getState().requestClearConfirm();
+    });
+
+    act(() => {
+      findByTestID(renderer, 'keypad-clear-confirm-clear').props.onPress();
+    });
+
+    expect(useDocumentStore.getState().document.nodes[id]).toBeUndefined();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(stackBefore + 1);
+    expect(useUiStore.getState().clearConfirmVisible).toBe(false);
+    expect(renderer.root.findAllByProps({ testID: 'keypad-clear-confirm' })).toHaveLength(0);
+  });
+
+  test('dismissing leaves the document byte-identical', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '42');
+    const documentBefore = useDocumentStore.getState().document;
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    act(() => {
+      useUiStore.getState().requestClearConfirm();
+    });
+
+    act(() => {
+      findByTestID(renderer, 'keypad-clear-confirm-cancel').props.onPress();
+    });
+
+    expect(useDocumentStore.getState().document).toBe(documentBefore);
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '42' });
+    expect(useUiStore.getState().clearConfirmVisible).toBe(false);
   });
 });
