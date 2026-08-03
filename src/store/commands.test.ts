@@ -6,6 +6,7 @@ import {
   addEqualsNode,
   setNodeRaw,
   deleteNode,
+  clearDocument,
 } from './commands';
 import { createEmptyDocument } from '../model/factories';
 
@@ -215,6 +216,40 @@ describe('deleteNode', () => {
   test('deleting a node that does not exist is a no-op', () => {
     const before = useDocumentStore.getState().undoStack.length;
     deleteNode('does-not-exist');
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+  });
+});
+
+describe('clearDocument', () => {
+  test('removes every node and chain in a single undo entry', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addNumberNode({ x: 20, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.c_test = { id: 'c_test', members: [a, b], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'c_test';
+      draft.nodes[b].chainId = 'c_test';
+    });
+    const stackBefore = useDocumentStore.getState().undoStack.length;
+
+    clearDocument();
+
+    expect(useDocumentStore.getState().document.nodes).toEqual({});
+    expect(useDocumentStore.getState().document.chains).toEqual({});
+    expect(useDocumentStore.getState().undoStack).toHaveLength(stackBefore + 1);
+  });
+
+  test('undo restores every node and chain that clearing removed', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    clearDocument();
+
+    useDocumentStore.getState().undo();
+
+    expect(useDocumentStore.getState().document.nodes[a]).toMatchObject({ raw: '1' });
+  });
+
+  test('clearing an already-empty document is a no-op', () => {
+    const before = useDocumentStore.getState().undoStack.length;
+    clearDocument();
     expect(useDocumentStore.getState().undoStack).toHaveLength(before);
   });
 });

@@ -6,9 +6,12 @@
 // of the same dispatch, is P2.8's job once node commands (P2.3) and selection (P2.6)
 // exist to give key presses something to act on.
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { runOnJS } from 'react-native-reanimated';
 import { decimalSeparatorFor } from '../engine/format';
 import { glyphColor, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
+import { clearDocument } from '../store/commands';
 
 export type Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 
@@ -34,9 +37,29 @@ const DIGIT_ROWS: Digit[][] = [
   ['1', '2', '3'],
 ];
 
+/** How far a pan across the backspace key has to travel, and how much more
+ *  horizontal than vertical it has to be, before it reads as Tydlig's
+ *  swipe-to-clear gesture (§8.5) rather than an accidental drag or a vertical
+ *  scroll. Screen pixels, not world units - this is a keypad-local gesture,
+ *  not the canvas geometry §7 requires zoom-independent thresholds for. */
+const CLEAR_SWIPE_MIN_DISTANCE = 40;
+const CLEAR_SWIPE_MIN_HORIZONTAL_DOMINANCE = 2;
+
+/** Pure so it is testable without a real gesture runtime (the jest mock for
+ *  react-native-gesture-handler drops gesture callbacks - see its header
+ *  comment). Exported for that reason. */
+export function isClearSwipe(translationX: number, translationY: number): boolean {
+  const dx = Math.abs(translationX);
+  const dy = Math.abs(translationY);
+  return dx >= CLEAR_SWIPE_MIN_DISTANCE && dx >= dy * CLEAR_SWIPE_MIN_HORIZONTAL_DOMINANCE;
+}
+
 export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   const visible = useUiStore((state) => state.keypadVisible);
   const hideKeypad = useUiStore((state) => state.hideKeypad);
+  const clearConfirmVisible = useUiStore((state) => state.clearConfirmVisible);
+  const requestClearConfirm = useUiStore((state) => state.requestClearConfirm);
+  const dismissClearConfirm = useUiStore((state) => state.dismissClearConfirm);
 
   if (!visible) {
     return null;
@@ -45,6 +68,20 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   function press(key: KeypadKey) {
     onKeyPress?.(key);
   }
+
+  // Only confirming clears (decision #15) - cancel just closes the prompt and
+  // leaves the document exactly as it was.
+  function confirmClear() {
+    clearDocument();
+    dismissClearConfirm();
+  }
+
+  const backspaceSwipe = Gesture.Pan().onEnd((e) => {
+    'worklet';
+    if (isClearSwipe(e.translationX, e.translationY)) {
+      runOnJS(requestClearConfirm)();
+    }
+  });
 
   return (
     <View style={styles.container} testID="keypad">
@@ -81,7 +118,9 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               testID="keypad-decimal"
             />
             <Key label="+/-" onPress={() => press({ region: 'sign' })} testID="keypad-sign" />
-            <Key label="⌫" onPress={() => press({ region: 'backspace' })} testID="keypad-backspace" />
+            <GestureDetector gesture={backspaceSwipe}>
+              <Key label="⌫" onPress={() => press({ region: 'backspace' })} testID="keypad-backspace" />
+            </GestureDetector>
           </View>
 
           <View style={styles.groupingRow} testID="keypad-grouping">
@@ -98,6 +137,28 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           <EqualsKey onPress={() => press({ region: 'equals' })} testID="keypad-equals" />
         </View>
       </View>
+
+      {clearConfirmVisible && (
+        <View style={styles.confirmOverlay} testID="keypad-clear-confirm">
+          <Text style={styles.confirmMessage}>Clear the whole canvas?</Text>
+          <View style={styles.confirmActions}>
+            <TouchableOpacity
+              style={styles.confirmCancel}
+              onPress={dismissClearConfirm}
+              testID="keypad-clear-confirm-cancel"
+            >
+              <Text style={styles.confirmCancelLabel}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.confirmClear}
+              onPress={confirmClear}
+              testID="keypad-clear-confirm-clear"
+            >
+              <Text style={styles.confirmClearLabel}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -261,5 +322,47 @@ const styles = StyleSheet.create({
   equalsKey: {
     backgroundColor: rolePalette.equals.fill,
     marginBottom: 0,
+  },
+  confirmOverlay: {
+    marginTop: 10,
+    padding: 12,
+    borderRadius: 8,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#DADADA',
+  },
+  confirmMessage: {
+    color: '#333333',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  confirmActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  confirmCancel: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginRight: KEY_GAP,
+    backgroundColor: '#DADADA',
+  },
+  confirmCancelLabel: {
+    color: '#333333',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  confirmClear: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: rolePalette.operator.fill,
+  },
+  confirmClearLabel: {
+    color: glyphColor,
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

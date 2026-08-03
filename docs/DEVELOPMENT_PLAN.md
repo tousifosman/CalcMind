@@ -63,7 +63,7 @@ flowchart LR
 |---|---|---|---|
 | ~~**P0**~~ | ~~Foundations~~ | — | **Done** — `08620f9` |
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
-| **P2** | Nodes + keypad | 10 | In progress — 5/10 |
+| **P2** | Nodes + keypad | 10 | In progress — 6/10 (P2.1–P2.4, P2.7, P2.10) |
 | **P3** | Snapping | 7 | Blocked on P2 |
 | **P4** | Engine | 9 | Blocked on P3 — **critical path** |
 | **P5** | Persistence | 8 | Blocked on P4 |
@@ -295,9 +295,9 @@ stray gesture, even with undo).
 **Touches.** `src/keypad/Keypad.tsx`, `src/store/commands.ts`.
 **Depends on.** P2.7.
 
-- [ ] Swiping across backspace raises a confirmation. **Only confirming clears.**
-- [ ] Clearing is a single undo entry (§13).
-- [ ] Dismissing the confirmation leaves the document byte-identical.
+- [x] Swiping across backspace raises a confirmation. **Only confirming clears.**
+- [x] Clearing is a single undo entry (§13).
+- [x] Dismissing the confirmation leaves the document byte-identical.
 
 ### Phase exit check — P2
 
