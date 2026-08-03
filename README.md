@@ -10,8 +10,11 @@ CalcMind is a free-form canvas calculator: numbers and operators are nodes place
 infinite canvas, snapping together into formulas that recompute as you edit them.
 
 **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** is the full design — the domain model, snapping
-and evaluation engines, the on-disk document format, and the phased development plan. Read it
-before starting feature work.
+and evaluation engines, and the on-disk document format. Read it before starting feature work.
+
+**[docs/DEVELOPMENT_PLAN.md](docs/DEVELOPMENT_PLAN.md)** is the build order: what is already done,
+and the remaining phases broken into tasks that each carry an objective, the architecture sections
+they implement, and their own acceptance criteria.
 
 **[docs/journal/](docs/journal/README.md)** is the dated working record: what was decided, what
 was discovered about the toolchain, and which earlier beliefs turned out to be wrong. The
