@@ -295,9 +295,9 @@ stray gesture, even with undo).
 **Touches.** `src/keypad/Keypad.tsx`, `src/store/commands.ts`.
 **Depends on.** P2.7.
 
-- [ ] Swiping across backspace raises a confirmation. **Only confirming clears.**
-- [ ] Clearing is a single undo entry (§13).
-- [ ] Dismissing the confirmation leaves the document byte-identical.
+- [x] Swiping across backspace raises a confirmation. **Only confirming clears.**
+- [x] Clearing is a single undo entry (§13).
+- [x] Dismissing the confirmation leaves the document byte-identical.
 
 ### Phase exit check — P2
 

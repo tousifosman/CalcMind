@@ -98,6 +98,19 @@ export function setNodeRaw(nodeId: NodeId, raw: string): void {
   lastRawEdit = { nodeId, at: now, stackLength: useDocumentStore.getState().undoStack.length };
 }
 
+/** Swipe-to-clear (§8.5, decision #15): wipes every node and chain in one undo
+ *  entry. The confirmation gate lives in the keypad (P2.10) - this command trusts
+ *  its caller and does not ask again, so it stays a plain, testable mutation. */
+export function clearDocument(): void {
+  useDocumentStore.getState().applyCommand((draft) => {
+    const alreadyEmpty =
+      Object.keys(draft.nodes).length === 0 && Object.keys(draft.chains).length === 0;
+    if (alreadyEmpty) return;
+    draft.nodes = {};
+    draft.chains = {};
+  });
+}
+
 export function deleteNode(nodeId: NodeId): void {
   useDocumentStore.getState().applyCommand((draft) => {
     const node = draft.nodes[nodeId];
