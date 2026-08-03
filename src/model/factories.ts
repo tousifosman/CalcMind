@@ -4,6 +4,13 @@ import {
   CURRENT_SCHEMA_VERSION,
   NodeId,
   ChainId,
+  Vec2,
+  NumberNode,
+  OperatorNode,
+  OperatorSymbol,
+  ParenNode,
+  ParenSide,
+  EqualsNode,
 } from './types';
 
 export function createNodeId(): NodeId {
@@ -29,5 +36,51 @@ export function createEmptyDocument(name = 'Untitled'): CalcDocument {
     viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
     nodes: {},
     chains: {},
+  };
+}
+
+// Node factories build freestanding nodes: chainId: null, position authoritative
+// (§6). Callers own placing the result in a document via a command.
+
+export function createNumberNode(position: Vec2, raw: string): NumberNode {
+  return {
+    id: createNodeId(),
+    kind: 'number',
+    position,
+    chainId: null,
+    createdAt: Date.now(),
+    raw,
+  };
+}
+
+export function createOperatorNode(position: Vec2, op: OperatorSymbol): OperatorNode {
+  return {
+    id: createNodeId(),
+    kind: 'operator',
+    position,
+    chainId: null,
+    createdAt: Date.now(),
+    op,
+  };
+}
+
+export function createParenNode(position: Vec2, side: ParenSide): ParenNode {
+  return {
+    id: createNodeId(),
+    kind: 'paren',
+    position,
+    chainId: null,
+    createdAt: Date.now(),
+    side,
+  };
+}
+
+export function createEqualsNode(position: Vec2): EqualsNode {
+  return {
+    id: createNodeId(),
+    kind: 'equals',
+    position,
+    chainId: null,
+    createdAt: Date.now(),
   };
 }
