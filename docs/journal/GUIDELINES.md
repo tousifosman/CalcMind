@@ -36,7 +36,6 @@ first time. The journal exists so the second derivation gets interrupted.
 | Document | Answers | Tense |
 |---|---|---|
 | `ARCHITECTURE.md` | What is the design? | Present — always current |
-| `DEVELOPMENT_PLAN.md` | What is built, and what is next? | Future — ticked off as it lands |
 | `docs/journal/` | Why is it that? What did we try? What was wrong? | Past — append-only |
 | Commit messages | What changed in this diff, and why now? | Past — per change |
 
@@ -232,8 +231,7 @@ Real rewrites, from this project's own material.
       finding, with the misleading symptom.
 - [ ] Did I tell the user something that turned out to be wrong? → a revision. Not optional.
 - [ ] Does an open thread from a previous entry need carrying forward, or did it close?
-- [ ] Did anything I did make `ARCHITECTURE.md`, `DEVELOPMENT_PLAN.md`, `README.md` or
-      `AGENTS.md` stale? Fix them in the same commit — including ticking the acceptance
-      criteria of any task I finished.
+- [ ] Did anything I did make `ARCHITECTURE.md`, `README.md` or `AGENTS.md` stale? Fix them
+      in the same commit.
 - [ ] Is the index in `README.md` updated with today's entry?
 - [ ] Would a session that read only today's entry know what to do next?
