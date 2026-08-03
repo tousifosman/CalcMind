@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 600" width="1240" height="600" role="img" aria-label="CalcMind linking model: referenced results carry an identity hue shared by the reference cell and the connector">
+  <title>CalcMind linking model</title>
+  <desc>Three chained formulas. A result that something references gains an identity hue, drawn as a
+  ring on the result cell, as the fill of the referencing cell, and as the colour of the connector
+  between them. A terminal result nobody references keeps the plain result styling.</desc>
+  <defs>
+    <pattern id="dots" width="4" height="4" patternUnits="userSpaceOnUse">
+      <rect width="4" height="4" fill="#FF7E79"/>
+      <rect x="1" y="0" width="1" height="1" fill="#FFD1CF"/>
+      <rect x="3" y="2" width="1" height="1" fill="#FFD1CF"/>
+    </pattern>
+    <marker id="arrow_b" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M0 1 L9 5 L0 9 z" fill="#2F6BFF"/>
+    </marker>
+    <marker id="arrow_g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+      <path d="M0 1 L9 5 L0 9 z" fill="#22A75B"/>
+    </marker>
+    <clipPath id="clipOut_a"><rect x="0" y="0" width="416" height="108" rx="12"/></clipPath>
+    <clipPath id="clipIn_a"><rect x="4" y="4" width="408" height="100" rx="7"/></clipPath>
+    <clipPath id="clipOut_b"><rect x="0" y="0" width="416" height="108" rx="12"/></clipPath>
+    <clipPath id="clipIn_b"><rect x="4" y="4" width="408" height="100" rx="7"/></clipPath>
+    <clipPath id="clipOut_c"><rect x="0" y="0" width="416" height="108" rx="12"/></clipPath>
+    <clipPath id="clipIn_c"><rect x="4" y="4" width="408" height="100" rx="7"/></clipPath>
+  </defs>
+
+    <path d="M402.0 154 C402.0 196.0, 204.0 196.0, 204.0 238" fill="none" stroke="#2F6BFF" stroke-width="5" marker-end="url(#arrow_b)"/>
+    <path d="M512.0 358 C512.0 400.0, 314.0 400.0, 314.0 442" fill="none" stroke="#22A75B" stroke-width="5" marker-end="url(#arrow_g)"/>
+
+    <g transform="translate(40 46)">
+      <g clip-path="url(#clipOut_a)">
+      <rect x="0" y="0" width="104" height="108" fill="#8CE0D2"/>
+      <rect x="104" y="0" width="53" height="108" fill="#FFD78E"/>
+      <rect x="157" y="0" width="100" height="108" fill="#8CE0D2"/>
+      <rect x="257" y="0" width="55" height="108" fill="#AA557F"/>
+      <rect x="312" y="0" width="104" height="108" fill="#FFA3A0"/>
+      </g>
+      <g clip-path="url(#clipIn_a)">
+      <rect x="4" y="4" width="100" height="100" fill="#44BDAD"/>
+      <rect x="104" y="4" width="53" height="100" fill="#FFBF28"/>
+      <rect x="157" y="4" width="100" height="100" fill="#44BDAD"/>
+      <rect x="257" y="4" width="55" height="100" fill="#7030A0"/>
+      <rect x="312" y="4" width="100" height="100" fill="url(#dots)"/>
+      <rect x="315" y="7" width="94" height="94" fill="none" stroke="#2F6BFF" stroke-width="6"/>
+      </g>
+      <g fill="#FFFFFF" font-family="Montserrat, 'Trebuchet MS', 'Helvetica Neue', Arial, sans-serif" font-weight="800" font-size="50" text-anchor="middle">
+      <text x="54.0" y="79">25</text>
+      <text x="207.0" y="79">10</text>
+      <text x="362.0" y="79">35</text>
+      </g>
+      <g fill="#FFFFFF">
+      <rect x="119.0" y="57.5" width="23" height="6"/>
+      <rect x="127.5" y="49.0" width="6" height="23"/>
+      <rect x="273.0" y="53.0" width="23" height="5"/>
+      <rect x="273.0" y="63.0" width="23" height="5"/>
+      </g>
+    </g>
+    <g transform="translate(150 250)">
+      <g clip-path="url(#clipOut_b)">
+      <rect x="0" y="0" width="104" height="108" fill="#2F6BFF"/>
+      <rect x="104" y="0" width="53" height="108" fill="#FFD78E"/>
+      <rect x="157" y="0" width="100" height="108" fill="#8CE0D2"/>
+      <rect x="257" y="0" width="55" height="108" fill="#AA557F"/>
+      <rect x="312" y="0" width="104" height="108" fill="#FFA3A0"/>
+      </g>
+      <g clip-path="url(#clipIn_b)">
+      <rect x="4" y="4" width="100" height="100" fill="#2F6BFF"/>
+      <rect x="104" y="4" width="53" height="100" fill="#FFBF28"/>
+      <rect x="157" y="4" width="100" height="100" fill="#44BDAD"/>
+      <rect x="257" y="4" width="55" height="100" fill="#7030A0"/>
+      <rect x="312" y="4" width="100" height="100" fill="url(#dots)"/>
+      <rect x="315" y="7" width="94" height="94" fill="none" stroke="#22A75B" stroke-width="6"/>
+      </g>
+      <g fill="#FFFFFF" font-family="Montserrat, 'Trebuchet MS', 'Helvetica Neue', Arial, sans-serif" font-weight="800" font-size="50" text-anchor="middle">
+      <text x="54.0" y="79">35</text>
+      <text x="207.0" y="79">2</text>
+      <text x="362.0" y="79">37</text>
+      </g>
+      <g fill="#FFFFFF">
+      <rect x="119.0" y="57.5" width="23" height="6"/>
+      <rect x="127.5" y="49.0" width="6" height="23"/>
+      <rect x="273.0" y="53.0" width="23" height="5"/>
+      <rect x="273.0" y="63.0" width="23" height="5"/>
+      </g>
+    </g>
+    <g transform="translate(260 454)">
+      <g clip-path="url(#clipOut_c)">
+      <rect x="0" y="0" width="104" height="108" fill="#22A75B"/>
+      <rect x="104" y="0" width="53" height="108" fill="#FFD78E"/>
+      <rect x="157" y="0" width="100" height="108" fill="#8CE0D2"/>
+      <rect x="257" y="0" width="55" height="108" fill="#AA557F"/>
+      <rect x="312" y="0" width="104" height="108" fill="#FFA3A0"/>
+      </g>
+      <g clip-path="url(#clipIn_c)">
+      <rect x="4" y="4" width="100" height="100" fill="#22A75B"/>
+      <rect x="104" y="4" width="53" height="100" fill="#FFBF28"/>
+      <rect x="157" y="4" width="100" height="100" fill="#44BDAD"/>
+      <rect x="257" y="4" width="55" height="100" fill="#7030A0"/>
+      <rect x="312" y="4" width="100" height="100" fill="url(#dots)"/>
+      </g>
+      <g fill="#FFFFFF" font-family="Montserrat, 'Trebuchet MS', 'Helvetica Neue', Arial, sans-serif" font-weight="800" font-size="50" text-anchor="middle">
+      <text x="54.0" y="79">37</text>
+      <text x="207.0" y="79">3</text>
+      <text x="362.0" y="79">40</text>
+      </g>
+      <g fill="#FFFFFF">
+      <rect x="119.0" y="57.5" width="23" height="6"/>
+      <rect x="127.5" y="49.0" width="6" height="23"/>
+      <rect x="273.0" y="53.0" width="23" height="5"/>
+      <rect x="273.0" y="63.0" width="23" height="5"/>
+      </g>
+    </g>
+
+  <g font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" font-size="26" fill="#3B4252">
+    <text x="740" y="88" font-weight="700">referenced result</text>
+    <text x="740" y="120" fill="#6B7280">gains an identity hue, shown as a ring</text>
+    <text x="740" y="292" font-weight="700">reference cell</text>
+    <text x="740" y="324" fill="#6B7280">filled with the parent result's hue</text>
+    <text x="740" y="496" font-weight="700">terminal result</text>
+    <text x="740" y="528" fill="#6B7280">unreferenced — plain result styling</text>
+  </g>
+  <g stroke="#9CA3AF" stroke-width="2" stroke-dasharray="6 5" fill="none">
+    <path d="M468 100 H730"/>
+    <path d="M578 304 H730"/>
+    <path d="M688 508 H730"/>
+  </g>
+</svg>
