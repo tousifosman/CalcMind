@@ -33,9 +33,14 @@ function clampZoom(zoom: number): number {
 interface CanvasProps {
   children?: ReactNode;
   style?: ViewStyle;
+  /** Fired on a tap that doesn't turn into a pan (§8.5: tapping empty canvas toggles the
+   *  keypad). Hit-testing against nodes to distinguish an empty-canvas tap from a tap on
+   *  a node lands with P2.5/P2.6 - until then every tap is a canvas tap, since nothing is
+   *  rendered on it yet. */
+  onTap?: () => void;
 }
 
-export function Canvas({ children, style }: CanvasProps) {
+export function Canvas({ children, style, onTap }: CanvasProps) {
   const setViewport = useDocumentStore((state) => state.setViewport);
 
   // Read once, non-reactively: Canvas drives the viewport, it doesn't need to
@@ -93,7 +98,18 @@ export function Canvas({ children, style }: CanvasProps) {
       runOnJS(commitViewport)();
     });
 
-  const composedGesture = Gesture.Simultaneous(pan, pinch);
+  const tap = Gesture.Tap()
+    .maxDuration(250)
+    .onEnd((_e, success) => {
+      'worklet';
+      if (success && onTap) {
+        runOnJS(onTap)();
+      }
+    });
+
+  // Race, not Simultaneous: a drag activates pan before release and should win outright,
+  // while a tap only resolves on release once pan/pinch have failed to activate.
+  const composedGesture = Gesture.Race(Gesture.Simultaneous(pan, pinch), tap);
 
   const outerStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: -panX.value * zoom.value }, { translateY: -panY.value * zoom.value }],
