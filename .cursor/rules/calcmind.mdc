@@ -1,0 +1,21 @@
+---
+description: Routes every request to the repo's canonical agent instructions and working journal
+globs:
+alwaysApply: true
+---
+
+Read `AGENTS.md` at the repo root before working. It is the canonical instruction file for
+all AI tools here and points to the design document and the journal.
+
+Two things it will tell you that are worth knowing up front:
+
+- `docs/journal/` records beliefs this project held and then disproved. Run
+  `grep -rn "Previously believed" docs/journal/` before making a design decision, changing a
+  dependency version, or debugging something that "should work."
+- Write a journal entry before finishing a session in which a belief changed, a non-obvious
+  fact was learned, or a claim you made turned out wrong. Format is in
+  `docs/journal/GUIDELINES.md`.
+
+This rule is deliberately a pointer and holds no rules of its own, so it cannot drift out of
+step with `AGENTS.md`. Put substance there. Add further `.mdc` files here only for rules
+genuinely scoped to a path via `globs`.

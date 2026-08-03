@@ -16,10 +16,18 @@ before starting feature work.
 **[docs/journal/](docs/journal/README.md)** is the dated working record: what was decided, what
 was discovered about the toolchain, and which earlier beliefs turned out to be wrong. The
 architecture document is rewritten in place as the design changes, so the journal is the only
-thing that remembers the version before. Worth skimming before trusting an assumption.
+thing that remembers the version before. Worth skimming before trusting an assumption —
+**[docs/journal/GUIDELINES.md](docs/journal/GUIDELINES.md)** explains how to read it when making a
+decision, and how to add to it.
 
 > Progress: P0 (foundations) and P1 (canvas pan/zoom) are done. `App.tsx` renders the canvas;
 > nodes and the keypad start in P2.
+
+## Working with AI tools
+
+**[AGENTS.md](AGENTS.md)** is the canonical instruction file, read by Cursor, Copilot, Codex and
+most other agents. `CLAUDE.md` imports it (Claude Code doesn't read `AGENTS.md` itself) and
+`.cursor/rules/calcmind.mdc` points at it. Edit `AGENTS.md`; the other two are pointers.
 
 ## Development
 
