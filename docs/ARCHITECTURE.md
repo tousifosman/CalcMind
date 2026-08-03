@@ -125,10 +125,36 @@ error is there."
 CalcMind's answer to those two: snapping is the core mechanic rather than an absent one (§8), and
 a broken reference is a named, explained state rather than a question mark (§11).
 
+#### Where it ended up: Tydlig 1.6
+
+The above is version 1.0/1.1. The developer's final release (1.6, 2017) shows what the idea grows
+into, which is useful for knowing what not to design ourselves into a corner on:
+
+- **Labels are a headline feature, not a footnote.** Numbers *and* results carry a short user-typed
+  caption rendered directly above the cell in that value's identity hue — `Pluto mass`,
+  `Earth mass`, `Wave`, `Disturbance`, `Year`, `Orbit`. A canvas of labelled values reads like a
+  small spreadsheet with no grid. There is a dedicated tag button in the toolbar.
+- **Fan-out is normal.** One screenshot has a single pink `1` feeding four separate consumers —
+  `log₂(1)`, `ln(1)`, `log₁₀(1)` and a graph — with four connector curves radiating from it in its
+  hue. So the dependency structure is a real DAG with 1→N edges, not a chain of 1→1 links, and
+  connector rendering has to cope with a fan.
+- **Functions and scientific operators.** `^`, `%`, `√`, `!`, `x^y`, `)²`, `)³`, `ln`, `log₁₀`,
+  `log₂`, `e`, `π`, `Rand`, `mod`, `×10^`, `abs`, `ceil`, `floor`, and the full trig/hyperbolic set,
+  applied as `sin( 2 × 30 )` — function application over a parenthesised argument.
+- **Graphs are canvas objects.** A line-graph object references a formula and sweeps one of its
+  referenced inputs across a range, plotting a series per dependent result and colour-coding the
+  axis ticks to match each result's hue.
+- **Light and dark themes** both ship.
+- The toolbar gains **undo** and the label/tag button next to settings, share, documents, keypad.
+
+Two things this validates in the design below: `label` has to live on the node base rather than
+only on numbers (§6), and the grammar has to have a credible path to function application (§10.2).
+
 *Sources:* [MacStories review](https://www.macstories.net/reviews/tydlig-an-innovative-free-form-calculator-for-ios/)
 · [App Store listing](https://apps.apple.com/us/app/tydlig/id721606556)
-· release screenshots via `cdn.macstories.net/002/…tydlig-iPad Screenshot 1/2.png` and `…tydlig-iPhone_1/2.png`
-(referenced, not redistributed here — they are the developer's and the publication's).
+· 1.0/1.1 screenshots via `cdn.macstories.net/002/…tydlig-iPad Screenshot 1/2.png` and `…tydlig-iPhone_1/2.png`
+· 1.6 screenshots via the iTunes lookup API for app id `721606556`
+(all referenced, not redistributed here — they are the developer's and the publication's).
 
 ---
 
@@ -295,10 +321,10 @@ classDiagram
         +string kind
         +Vec2 position
         +string chainId
+        +string label
     }
     class NumberNode {
         +string raw
-        +string label
     }
     class OperatorNode {
         +string op
@@ -347,6 +373,10 @@ interface NodeBase {
   position: Vec2;
   chainId: ChainId | null;
   createdAt: number;
+  /** Short user caption rendered above the cell in the node's identity hue.
+   *  On the base rather than on numbers alone: the reference app labels results
+   *  at least as often as inputs (§1.3). */
+  label?: string;
 }
 
 export interface NumberNode extends NodeBase {
@@ -354,7 +384,6 @@ export interface NumberNode extends NodeBase {
   /** Exactly what the user typed: "1221", "3.", "-0.5". Parsing is the engine's job,
    *  so partial input like "3." survives a save/load cycle intact. */
   raw: string;
-  label?: string;              // optional annotation, phase 7
 }
 
 export interface OperatorNode extends NodeBase {
@@ -639,6 +668,19 @@ schema version, and new snapping rules for unbalanced pairs. Cheaper to carry fr
 Negative numbers live inside a `NumberNode.raw` (`"-5"`), not as a unary operator node. This
 keeps the grammar small; the cost is that negating a *result* needs a reference (phase 6).
 
+**Extension path.** The mature reference app has `^`, `%`, `!`, `mod` and ~25 named functions
+applied as `sin( 2 × 30 )` (§1.3). Precedence climbing absorbs all of it without restructuring:
+
+```
+factor := number | reference | '(' expr ')' | function '(' expr ')' | prefix factor
+         ( postfix )*
+```
+
+- `^` is a right-associative level above `× ÷`; `!` and `²` `³` are postfix; `√` is prefix.
+- A `function` node kind holds the function name and renders as `name(` — the open paren is part of
+  the function cell, so paren balancing already covers it.
+- Nothing here changes the node model beyond adding one kind, which is why it can wait.
+
 ### 10.3 Numerics
 
 - All arithmetic in `decimal.js`, precision 34.
@@ -724,6 +766,11 @@ Rules that follow from this:
   until you swipe and the review calls that out as confusing; showing them costs a little visual
   noise and buys comprehension. If density becomes a problem, fade unselected connectors rather
   than hiding them.
+- **A source can have many consumers.** The reference app shows one value feeding four
+  consumers at once, with four curves fanning out of it (§1.3). So the renderer must handle 1→N:
+  curves leave the source at fanned-out angles rather than all from the same point, and a source
+  with more than ~4 consumers collapses to a count badge that expands on selection. Edges are
+  keyed `(sourceNodeId, referenceNodeId)`, never by source alone.
 
 ### 11.2 Broken links are explained, not marked with a punctuation glyph
 
@@ -998,9 +1045,13 @@ assignment, and cycle handling in P6.
 3. **Multi-document UX** — is there a document browser, or one canvas that grows forever? Tydlig
    has a documents button in its toolbar, implying a browser. §12 supports many documents either
    way, so this is a UI question, not a model one.
-4. **Graphing** — Tydlig plots linked numbers and puts a graph key on the keypad. Out of scope
-   here; the DAG in §11 is the prerequisite, so it stays cheap to add later.
-5. **Number labels/annotations** — modelled in `NumberNode.label`, unspecified in UI. Phase 7.
+4. **Graphing** — in Tydlig 1.6 a line-graph is a canvas object that references a formula, sweeps
+   one referenced input across a range, and plots one series per dependent result with axis ticks
+   colour-matched to each result's hue (§1.3). Out of scope for v1, but it is the clearest reason
+   the DAG must be a real graph: a graph node is just another consumer.
+5. **Labels** — modelled on the node base (§6) and observed to be a headline feature rather than a
+   nicety. Open question is only *when*: a labelled canvas is far more readable than an unlabelled
+   one, so this may deserve to land before P7.
 6. **Identity palette accessibility** — the hue set in §11.1 is a first guess and has not been
    checked for colour-blind distinguishability. Must be validated before P6 ships, since colour
    carries link identity.
