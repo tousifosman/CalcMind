@@ -231,7 +231,7 @@ Real rewrites, from this project's own material.
       finding, with the misleading symptom.
 - [ ] Did I tell the user something that turned out to be wrong? → a revision. Not optional.
 - [ ] Does an open thread from a previous entry need carrying forward, or did it close?
-- [ ] Did anything I did make `ARCHITECTURE.md` or `README.md` stale? Fix them in the same
-      commit.
+- [ ] Did anything I did make `ARCHITECTURE.md`, `README.md` or `AGENTS.md` stale? Fix them
+      in the same commit.
 - [ ] Is the index in `README.md` updated with today's entry?
 - [ ] Would a session that read only today's entry know what to do next?

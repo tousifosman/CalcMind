@@ -23,6 +23,12 @@ decision, and how to add to it.
 > Progress: P0 (foundations) and P1 (canvas pan/zoom) are done. `App.tsx` renders the canvas;
 > nodes and the keypad start in P2.
 
+## Working with AI tools
+
+**[AGENTS.md](AGENTS.md)** is the canonical instruction file, read by Cursor, Copilot, Codex and
+most other agents. `CLAUDE.md` imports it (Claude Code doesn't read `AGENTS.md` itself) and
+`.cursor/rules/calcmind.mdc` points at it. Edit `AGENTS.md`; the other two are pointers.
+
 ## Development
 
 ```bash
