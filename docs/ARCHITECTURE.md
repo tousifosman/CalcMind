@@ -4,12 +4,12 @@
 > React Native scaffold with a conventional keypad calculator in `App.tsx`; everything below
 > describes what replaces it.
 >
-> **Reference app:** [Tydlig](http://tydligapp.com/) (iOS). Its screenshots could not be
-> retrieved while writing this document — outbound access to `tydligapp.com` is blocked by the
-> network policy of the authoring environment. The interaction model below is therefore drawn
-> from the product brief plus published feature descriptions (free-form canvas, responsive
-> results, linked numbers, real-time graphing, annotations, undo). Anything inferred rather than
-> specified is marked **[assumption]** so it can be corrected cheaply.
+> **Reference app:** [Tydlig](http://tydligapp.com/) by Andreas Karlsson (iOS, 2013).
+> `tydligapp.com` itself is unreachable from the authoring environment — plain HTTP to that host
+> is refused by the egress policy (`x-deny-reason: host_not_allowed`) and it serves no working
+> TLS on 443 — so §1.3 is reconstructed from Tydlig's own release screenshots and a detailed
+> contemporaneous review, both of which *were* reachable. Sources are cited there. Anything still
+> inferred rather than observed is marked **[assumption]**.
 
 ---
 
@@ -43,6 +43,11 @@ Three things in that image drive the whole visual design:
 3. **The result node is visually "not yours to edit."** It has a different hue *and* a dot
    texture *and* its own lighter outline. Read-only-ness is communicated three times over.
 
+Note that this pill styling is **CalcMind's own choice**, taken from the supplied reference.
+Tydlig renders formulas as plain text and only switches to filled pills when a group is
+*selected* (§1.3). Always-on pills make structure permanently legible, at the cost of a busier
+canvas. Keeping it is a deliberate call, revisitable once there is real content on screen.
+
 ### 1.2 Design tokens derived from the reference
 
 The reference raster has a cell height of 256px. Tokens below are that geometry normalised to a
@@ -68,6 +73,62 @@ The reference raster has a cell height of 256px. Tokens below are that geometry 
 | numerals / glyphs | `#FFFFFF` | — |
 
 The result texture is a 4×4 unit tile with 1-unit dots at `(1,0)` and `(3,2)`.
+
+### 1.3 Reference app: what Tydlig actually does
+
+Reconstructed from Tydlig's 1.0/1.1 release screenshots (iPad and iPhone) and Federico Viticci's
+review. Everything in this subsection is **observed**, not guessed.
+
+**Rendering has two modes.** Normally a formula is plain dark text on white — `25 + 2 = 27` —
+with no cell backgrounds at all. Filled orange pills appear only when a group is *selected*. In
+selected mode every ordinary cell (numbers, operators, `=`) is orange and only identity-carrying
+results take another colour.
+
+**Colour is the linking mechanism, and it is per-result identity.** A result that something else
+references is drawn as a rounded outlined box in a hue unique to it — purple, green, pink, blue in
+the screenshots. The reference to it, on another line, is drawn in *that same hue*. So the user
+traces a dependency by colour alone. A **terminal result that nothing references gets no hue and no
+box** — it is plain text. Colour is spent only where it carries information.
+
+**Links are also drawn explicitly.** A curved bezier with an arrowhead runs from the parent result
+to the referencing cell, in the parent's hue. In the screenshots only the selected link's curve is
+visible, which the review flags as a problem: lines are "sometimes hiding … until you swipe".
+
+**Continuation is the primary way links get made.** With a result selected, pressing an operator
+spawns a *new line* seeded with a reference to that result, connected by a coloured curve. The
+iPhone screenshots catch this mid-gesture: `25 + 10 = 35` above, and below it `35 +` with `35` in
+the result's cyan and a freshly pressed orange `+`. This is much faster than dragging, and it is
+what makes the app feel like a calculator rather than a diagram editor.
+
+**Editing cascades in real time.** One screenshot pair shows `10` edited to `1.020` in the first
+of four linked lines; all three downstream results update in the same frame. The cell being edited
+renders as a filled orange pill.
+
+**Numbers are locale-formatted.** `13,5`, `262,5`, `1.020` — comma decimal separator, period
+thousands separator (Swedish). Display formatting is locale-driven; the stored value is not.
+
+**Keypad.** Not full-screen. iPhone: bottom half, digits `0-9`, `,`, `+/-`, backspace, and
+**parentheses `(` `)`**, with `÷ × − + =` in an orange column down the right and a strip of mode
+switches on the left (dismiss, keypad, documents, functions, graph). iPad: a right-hand sidebar,
+and tapping a number raises a compact floating keypad in the bottom-right. Swiping across
+backspace turns it red and clears the document.
+
+**Long-press menus are context-dependent.** On empty canvas: add a number or a graph. On a number:
+select the whole group, select all numbers on the canvas, or — for a linked number — unlink from
+its parent. A selected cell gets a small black `Copy | Delete` tooltip.
+
+**Two failure modes worth designing out.** The review names both: (1) there is **no snapping**, so
+large documents force constant panning to keep things tidy; (2) dragging a number onto an existing
+operation can orphan a result, and Tydlig then shows a bare **`?`** "without telling you why the
+error is there."
+
+CalcMind's answer to those two: snapping is the core mechanic rather than an absent one (§8), and
+a broken reference is a named, explained state rather than a question mark (§11).
+
+*Sources:* [MacStories review](https://www.macstories.net/reviews/tydlig-an-innovative-free-form-calculator-for-ios/)
+· [App Store listing](https://apps.apple.com/us/app/tydlig/id721606556)
+· release screenshots via `cdn.macstories.net/002/…tydlig-iPad Screenshot 1/2.png` and `…tydlig-iPhone_1/2.png`
+(referenced, not redistributed here — they are the developer's and the publication's).
 
 ---
 
@@ -200,7 +261,7 @@ src/
   ui/            tokens.ts, theme.ts, primitives
 docs/
   ARCHITECTURE.md  (this file)
-  assets/          formula-reference.svg, node-anatomy.svg
+  assets/          formula-reference.svg, node-anatomy.svg, linking-model.svg
 ```
 
 Platform splitting already works in both bundlers with no extra config: Metro resolves
@@ -244,6 +305,9 @@ classDiagram
     }
     class EqualsNode {
     }
+    class ParenNode {
+        +string side
+    }
     class ResultNode {
         +string sourceChainId
         +Derived derived
@@ -258,6 +322,7 @@ classDiagram
     Chain "1" --> "1..*" CalcNode : ordered members
     CalcNode <|-- NumberNode
     CalcNode <|-- OperatorNode
+    CalcNode <|-- ParenNode
     CalcNode <|-- EqualsNode
     CalcNode <|-- ResultNode
     CalcNode <|-- ReferenceNode
@@ -301,6 +366,13 @@ export interface EqualsNode extends NodeBase {
   kind: 'equals';
 }
 
+/** Grouping. Present in v1 because Tydlig's keypad has parens and retrofitting a
+ *  node kind means a schema migration (§10.2). */
+export interface ParenNode extends NodeBase {
+  kind: 'paren';
+  side: 'open' | 'close';
+}
+
 export interface ResultNode extends NodeBase {
   kind: 'result';
   sourceChainId: ChainId;
@@ -316,7 +388,7 @@ export interface ReferenceNode extends NodeBase {
 }
 
 export type CalcNode =
-  | NumberNode | OperatorNode | EqualsNode | ResultNode | ReferenceNode;
+  | NumberNode | OperatorNode | ParenNode | EqualsNode | ResultNode | ReferenceNode;
 
 export interface Chain {
   id: ChainId;
@@ -365,7 +437,7 @@ world  = screen / zoom + pan
 
 ---
 
-## 8. Chains, layout and snapping
+## 8. Interaction: chains, snapping and input
 
 ### 8.1 Layout
 
@@ -438,6 +510,53 @@ An O(n) scan per drag frame is fine to a few hundred nodes and is what we ship. 
 past that, insert a uniform spatial hash (bucket size `2 × nodeHeight`) behind the same
 `snapping.ts` interface — the call sites do not change.
 
+### 8.5 Keypad
+
+Modelled on Tydlig's (§1.3), which is worth copying: it is not full-screen, it is dismissible, and
+operators are visually separated from digits.
+
+| Region | Keys |
+|---|---|
+| Digits | `7 8 9 / 4 5 6 / 1 2 3 / 0` |
+| Number editing | decimal separator (locale glyph, inserts canonical `.`), `+/-`, backspace |
+| Grouping | `(` `)` |
+| Operators (accent column) | `÷ × − + =` |
+| Mode strip | dismiss keypad, documents, functions *(later)*, graph *(later)* |
+
+- Keys act on the **selected node** if there is one, otherwise they create a new node at the
+  caret/last-tap point.
+- **Continuation shortcut (§8.7).** With a result selected, pressing an operator does *not* edit
+  the result — it starts a new chain that references it.
+- Tapping empty canvas toggles the keypad.
+- Hardware and web keyboards map to the same commands: digits, `+ - * /` → `+ − × ÷`,
+  `Enter` → `=`, `Backspace`, `Escape` deselects, arrows move selection along a chain.
+- **Swipe across backspace clears the document** (Tydlig's gesture). Ours requires a confirm —
+  wiping a canvas on a stray swipe is not recoverable enough to be worth the speed, even with undo.
+
+### 8.6 Selection and context menus
+
+- Tap selects a node; the selected node is the target for keypad input.
+- Long-press on a node → `Copy`, `Delete`, `Select group`, and for a reference `Unlink from parent`.
+- Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`.
+- `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
+
+### 8.7 Continuation: how links are normally made
+
+Dragging is not the fast path. Observed in Tydlig and adopted here:
+
+```
+given: chain C ending in result R, and R is selected
+when:  the user presses an operator ⊕
+then:  create chain C' below-right of C, containing
+         [ reference→R , ⊕ ]
+       select C' so the next digits land in a fresh number node
+       draw a connector from R to the reference, in R's identity hue
+```
+
+This is the single most important interaction in the app: it turns "I have an answer" into "…and
+now I keep working with it" in one keystroke, and it is what produces the linked trees that make
+the canvas worth having.
+
 ---
 
 ## 9. Chain validity
@@ -500,14 +619,22 @@ flowchart LR
 ```
 expr   := term (addop term)*
 term   := factor (mulop factor)*
-factor := number | reference
+factor := number | reference | '(' expr ')'
 addop  := '+' | '-'
 mulop  := '×' | '÷'
 ```
 
-Left-associative; `× ÷` bind tighter than `+ -`. Parsing is precedence climbing — compact now,
-and the natural place to add unary minus, parentheses, `^`, and functions later without a
-rewrite. No parentheses in v1: there is no node kind for them yet.
+Left-associative; `× ÷` bind tighter than `+ -`. Parsing is precedence climbing — compact, and the
+natural place to add unary minus, `^`, and functions later without a rewrite.
+
+**Parentheses are in v1.** Tydlig puts `(` and `)` on the primary keypad (§1.3), which means users
+of this kind of calculator expect grouping, and retrofitting it would mean a new node kind, a new
+schema version, and new snapping rules for unbalanced pairs. Cheaper to carry from the start:
+
+- `paren` is a fifth structural node kind, `{ kind: 'paren', side: 'open' | 'close' }`.
+- Validation adds one rule: parens must balance. Unbalanced → `Incomplete`, not `Invalid` — an
+  open paren with nothing closing it yet is the normal state of a formula being typed.
+- Depth is rendered as a subtle tint step on the paren cells so nesting is readable.
 
 Negative numbers live inside a `NumberNode.raw` (`"-5"`), not as a unary operator node. This
 keeps the grammar small; the cost is that negating a *result* needs a reference (phase 6).
@@ -517,9 +644,19 @@ keeps the grammar small; the cost is that negating a *result* needs a reference 
 - All arithmetic in `decimal.js`, precision 34.
 - Division by zero → `DivideByZero` error state, never `Infinity`.
 - Display: up to 12 significant digits, trailing zeros stripped; scientific notation when
-  `|x| ≥ 1e12` or `0 < |x| < 1e-6`; locale thousands separators are a display concern only and
-  never touch `raw`.
+  `|x| ≥ 1e12` or `0 < |x| < 1e-6`.
 - `raw` is preserved verbatim through save/load. `"3."` mid-typing stays `"3."`.
+
+**Locale formatting is not optional.** Tydlig's own screenshots show `13,5` and `1.020` — comma
+decimal separator, period thousands separator. So:
+
+- A **display layer** formats values per `Intl.NumberFormat` for the active locale. It is the only
+  place separators exist.
+- The **stored** `raw` and all computation use a canonical `.` decimal point and no grouping, so a
+  document written in one locale opens correctly in another. Serialising locale-formatted strings
+  would make `1.020` ambiguous between one thousand and twenty, and roughly one.
+- The **decimal key** on the keypad shows the locale's separator and inserts a canonical `.`.
+- Parsing user input accepts the locale separator and normalises immediately.
 
 ### 10.4 Errors
 
@@ -558,7 +695,49 @@ flowchart TD
 - Deleting a node that references are pointing at leaves those references in a
   `DanglingReference` state rather than cascading deletes into the user's other work.
 
-### 11.1 Rendering approach
+### 11.1 Identity hues: the visual language of a link
+
+Tydlig's cleverest idea (§1.3) and worth taking wholesale: **a link is communicated by colour
+identity, not just by a line.**
+
+![CalcMind linking model](assets/linking-model.svg)
+
+- A result that **nothing references** carries no hue — it is a plain result node. Colour is spent
+  only where it means something.
+- The moment a result is referenced it is assigned an **identity hue** from a rotating palette,
+  drawn as a ring on the result cell.
+- Every **reference** to that result is filled with the same hue. Two cells sharing a hue are the
+  same value, wherever they sit on the canvas.
+- The **connector** between them is drawn in that hue too, as a bezier with an arrowhead.
+
+Rules that follow from this:
+
+- Hues are assigned from a fixed palette (`#2F6BFF`, `#22A75B`, `#E0479E`, `#00B8D9`, `#8E6E53`,
+  `#5B4CC4`, …), chosen to stay distinguishable from the structural teal/amber/purple/salmon and
+  from each other. The palette must be checked for deuteranopia/protanopia before it ships —
+  colour is load-bearing here, so it cannot be the *only* channel: the connector line and the
+  long-press `Unlink from parent` affordance carry the same information non-chromatically.
+- Hue is a **render-time property derived from the graph**, never persisted. Reopening a document
+  reassigns hues deterministically by traversal order, so they are stable across loads without
+  being stored.
+- Connectors are drawn for **all** links by default, not only the selected one. Tydlig hides them
+  until you swipe and the review calls that out as confusing; showing them costs a little visual
+  noise and buys comprehension. If density becomes a problem, fade unselected connectors rather
+  than hiding them.
+
+### 11.2 Broken links are explained, not marked with a punctuation glyph
+
+The review's sharpest criticism of Tydlig is that orphaning a result leaves a bare `?` "without
+telling you why the error is there." So:
+
+- `DanglingReference` renders the reference cell in a neutral struck-through style with the last
+  known value dimmed — not a bare glyph.
+- Tapping it explains what happened and offers the two useful actions: *re-point at another value*
+  or *convert to a plain number* freezing the last known value.
+- The same applies to `CircularReference`: name the cycle and offer to unlink the edge that closed
+  it.
+
+### 11.3 Rendering approach
 
 Nodes are plain RN `View`s with `borderRadius` — no SVG or Skia needed for the common case, which
 keeps web and native identical. Only the result node's dot texture needs more, hence:
@@ -568,7 +747,11 @@ keeps web and native identical. Only the result node's dot texture needs more, h
 - **v1.1:** add the pattern with `react-native-svg` (works on native and web), or a 4×4 tiled
   `Image` with `resizeMode: 'repeat'` for zero new dependencies.
 
-### 11.2 Performance budget
+Connector curves (§11.1) *do* need `react-native-svg` — they are beziers in an overlay layer above
+the nodes, sharing the canvas transform. That makes the dependency load-bearing from phase 6, so
+the result texture may as well use it too.
+
+### 11.4 Performance budget
 
 | Concern | Approach |
 |---|---|
@@ -768,16 +951,21 @@ flowchart LR
 |---|---|---|
 | **P0** | Foundations | Deps installed; `ui/tokens.ts` matches §1.2; empty store + commands compile; `tsc`, `eslint`, `jest` green; `npm run build:web` still produces `dist/`. |
 | **P1** | Canvas | Pan and pinch-zoom at 60fps on device and web; `worldToScreen`/`screenToWorld` are inverses under unit test; zoom clamps at 0.25/4. |
-| **P2** | Nodes | Tap empty canvas → number node in edit mode; keypad and hardware keyboard both enter digits; operator and `=` nodes can be placed; delete works; `raw` round-trips `"3."`. |
+| **P2** | Nodes + keypad | Tap empty canvas → number node in edit mode; keypad per §8.5 with digits, operators, parens, locale decimal key; hardware keyboard mapped; delete works; `raw` round-trips `"3."`; `13,5` displays per locale while storing `13.5`. |
 | **P3** | Snapping | Two free nodes snap into a chain; insertion between members works with a visible caret; dragging out past `DETACH_DISTANCE` detaches without re-snapping; single-member chains dissolve; chains lay out flush with no gaps. |
-| **P4** | Engine | `1221 + 3 - 20 =` produces a read-only `1204`; precedence correct; editing an input updates the result; every error state in §10.4 renders; result node rejects edits. |
+| **P4** | Engine | `1221 + 3 - 20 =` produces a read-only `1204`; precedence correct; `2 × (3 + 4) = 14` with balanced parens, unbalanced reads `Incomplete`; editing an input updates the result; every error state in §10.4 renders; result node rejects edits. |
 | **P5** | Persistence | Autosave debounces and force-flushes on background; kill the app mid-edit and lose at most the debounce window; corrupt the primary file and `.bak` recovers it; a `schemaVersion: 99` file is refused with a clear message; round-trip test passes. |
-| **P6** | Linking | Dragging a result into another chain creates a reference; edits cascade in topological order; a deliberate cycle marks only the cycle as `CircularReference`; deleting a target leaves `DanglingReference`. |
-| **P7** | Polish | Undo/redo across all commands with edit coalescing; full keyboard support; result dot texture; light/dark theme; screen-reader labels announce node kind and value. |
+| **P6** | Linking | **Continuation (§8.7): result selected + operator → new chain seeded with a reference, connector drawn.** Dragging a result into another chain also creates a reference; identity hues assigned deterministically and stable across reload; edits cascade in topological order; a deliberate cycle marks only the cycle as `CircularReference`; deleting a target leaves an *explained* `DanglingReference` with both recovery actions. |
+| **P7** | Polish | Undo/redo across all commands with edit coalescing; full keyboard support; result dot texture; light/dark theme; identity palette checked for deuteranopia/protanopia; screen-reader labels announce node kind, value, and link parent. |
 
 Sequencing notes: P5 and P6 both depend only on P4 and can proceed in parallel. P4 is the
 critical path — it is what turns a drawing app into a calculator, so it should not be deferred
 behind polish.
+
+One caveat on P6: continuation (§8.7) is the *primary* way users create links, so it is not
+really "phase 6 polish" — if P6 slips, the app ships as a canvas of unrelated sums and loses the
+point. Consider pulling continuation forward into P4 and leaving only the general DAG, hue
+assignment, and cycle handling in P6.
 
 ---
 
@@ -794,14 +982,25 @@ behind polish.
 | 7 | Newer-schema files refused, not migrated | Guessing an unknown shape corrupts work | Never |
 | 8 | Zustand over Redux | Selector subscriptions matter during drag; less ceremony | State grows to need middleware ecosystem |
 | 9 | Result texture deferred to v1.1 | Decorative; hue + border already carry the meaning | It tests as load-bearing for comprehension |
+| 10 | Parentheses in v1, not deferred | Tydlig puts them on the primary keypad, so users expect grouping; retrofitting costs a node kind + schema version + snapping rules (§10.2) | Never |
+| 11 | Locale display, canonical storage | `1.020` is ambiguous between two numbers across locales; storing formatted strings corrupts documents on travel (§10.3) | Never |
+| 12 | Identity hues derived, never persisted | Deterministic from traversal order, so stable across loads without occupying the schema (§11.1) | Users want to pin a specific colour to a value |
+| 13 | All connectors shown, not just selected | Tydlig hides them and the review names that as confusing (§11.1) | Density testing shows it is too noisy — then fade, don't hide |
+| 14 | Always-on pills | Taken from the supplied reference; makes structure permanently legible | The canvas reads as too busy with real content |
+| 15 | Swipe-to-clear requires confirmation | Tydlig's bare swipe wipes a document; too destructive for one stray gesture even with undo (§8.5) | Never |
 
 ## 17. Open questions
 
-1. **Chain move vs member detach gesture** (§8.3) — needs validation with real use.
-2. **Keypad model** — a fixed bottom keypad like Tydlig, or a radial/contextual input at the tap
-   point? Affects P2. Tydlig's non-fullscreen keypad is the safer default.
-3. **Multi-document UX** — is there a document browser, or one canvas that grows forever?
-   §12 supports many documents either way.
-4. **Graphing** — Tydlig plots linked numbers. Out of scope here; the DAG in §11 is the
-   prerequisite, so this stays cheap to add later.
+1. **Chain move vs member detach gesture** (§8.3) — still needs validation with real use. The one
+   genuinely unresolved interaction.
+2. ~~**Keypad model**~~ — **resolved** (§8.5). Tydlig's dismissible, non-fullscreen keypad with a
+   separated operator column, observed directly from its screenshots.
+3. **Multi-document UX** — is there a document browser, or one canvas that grows forever? Tydlig
+   has a documents button in its toolbar, implying a browser. §12 supports many documents either
+   way, so this is a UI question, not a model one.
+4. **Graphing** — Tydlig plots linked numbers and puts a graph key on the keypad. Out of scope
+   here; the DAG in §11 is the prerequisite, so it stays cheap to add later.
 5. **Number labels/annotations** — modelled in `NumberNode.label`, unspecified in UI. Phase 7.
+6. **Identity palette accessibility** — the hue set in §11.1 is a first guess and has not been
+   checked for colour-blind distinguishability. Must be validated before P6 ships, since colour
+   carries link identity.
