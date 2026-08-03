@@ -121,18 +121,20 @@ a number. This goes first because it is the one thing in P2 that corrupts docume
 **Architecture.** §10.3 (numerics and locale), decision #11.
 **Touches.** `src/engine/format.ts`, `src/engine/numeric.ts`.
 
-- [ ] `formatForDisplay(raw, locale)` renders through `Intl.NumberFormat`. This is the **only**
+- [x] `formatForDisplay(raw, locale)` renders through `Intl.NumberFormat`. This is the **only**
       place separators exist anywhere in the codebase.
-- [ ] `parseUserInput(text, locale)` accepts the locale separator and normalises to a canonical
+- [x] `parseUserInput(text, locale)` accepts the locale separator and normalises to a canonical
       `.` immediately, at the input edge.
-- [ ] Stored `raw` keeps a canonical `.` and no grouping. Under `de-DE`, `13.5` displays as `13,5`;
+- [x] Stored `raw` keeps a canonical `.` and no grouping. Under `de-DE`, `13.5` displays as `13,5`;
       typing `13,5` stores `13.5`.
-- [ ] `decimalSeparatorFor(locale)` returns the glyph the keypad key will display (P2.7 consumes
+- [x] `decimalSeparatorFor(locale)` returns the glyph the keypad key will display (P2.7 consumes
       this).
-- [ ] Partial input survives verbatim: `"3."`, `"-0.5"`, `"-"`, `""` all round-trip unchanged.
+- [x] Partial input survives verbatim: `"3."`, `"-0.5"`, `"-"`, `""` all round-trip unchanged.
       `"3."` must not normalise to `"3"` — §6 requires it to survive a save/load cycle intact.
-- [ ] Property test (`fast-check`): parse ∘ format is identity over generated decimals, and the
+- [x] Property test (`fast-check`): parse ∘ format is identity over generated decimals, and the
       formatter never emits a string it cannot re-parse (§14).
+- Grouping for integers beyond `Number.MAX_SAFE_INTEGER` degrades to ungrouped digits rather than
+  risk float64 altering what's on screen. See `docs/journal/2026-08-03.md` for why.
 
 ### P2.2 — Text measurement and node width
 
