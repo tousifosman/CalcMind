@@ -108,6 +108,13 @@ describe('setNodeRaw', () => {
     expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '12' });
   });
 
+  test('throws rather than silently no-opping on a node that is not a number', () => {
+    const id = addOperatorNode({ x: 0, y: 0 }, '+');
+    const before = useDocumentStore.getState().undoStack.length;
+    expect(() => setNodeRaw(id, '5')).toThrow(/read-only/);
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+  });
+
   test('a no-op edit (raw unchanged) records no history entry', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '1');
     const before = useDocumentStore.getState().undoStack.length;
