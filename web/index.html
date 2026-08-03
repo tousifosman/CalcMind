@@ -15,6 +15,13 @@
         background: #000;
         overflow: hidden;
       }
+      /* #root is the top-level flex container every RN View's flex:1 resolves
+         against - without this, flex:1 has no effect (flex properties only
+         apply inside a flex container) and the whole tree collapses to 0
+         height. */
+      #root {
+        display: flex;
+      }
     </style>
   </head>
   <body>

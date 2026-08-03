@@ -46,7 +46,15 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       draft.updatedAt = new Date().toISOString();
     });
 
-    if (patches.length === 0) return; // no-op recipe, nothing to record
+    // A no-op recipe still produces an `updatedAt` patch (it's stamped
+    // unconditionally above) - ignore that one when deciding whether the
+    // recipe actually changed anything, so it stays a true no-op detector
+    // rather than one that depends on two Date.now() calls landing in the
+    // same millisecond.
+    const meaningfulPatches = patches.filter(
+      (patch) => !(patch.path.length === 1 && patch.path[0] === 'updatedAt'),
+    );
+    if (meaningfulPatches.length === 0) return; // no-op recipe, nothing to record
 
     set((state) => ({
       document: nextDocument,

@@ -4,9 +4,13 @@ module.exports = {
   // build, but RN's jest preset adds a "react-native" export condition (for
   // parity with Metro), which immer's package.json maps to its ESM bundle -
   // so it needs transforming here too even though it's not ESM-only upstream.
-  // Everything else stays ignored so the preset keeps skipping transform of
-  // ordinary CJS packages.
+  // react-native-reanimated and react-native-svg are manually mocked (see
+  // __mocks__/) rather than transformed - neither has a jest-environment
+  // fallback for the native runtime they normally drive. Whitelisted here too
+  // as a safety net in case a mock is ever removed. Everything else stays
+  // ignored so the preset keeps skipping transform of ordinary CJS packages.
   transformIgnorePatterns: [
-    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|nanoid|fast-check|immer)/)',
+    'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-native-gesture-handler|react-native-reanimated|react-native-svg|nanoid|fast-check|immer)/)',
   ],
+  setupFiles: ['./node_modules/react-native-gesture-handler/jestSetup.js'],
 };
