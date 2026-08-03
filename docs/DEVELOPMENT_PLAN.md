@@ -63,7 +63,7 @@ flowchart LR
 |---|---|---|---|
 | ~~**P0**~~ | ~~Foundations~~ | — | **Done** — `08620f9` |
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
-| **P2** | Nodes + keypad | 10 | In progress — 4/10 |
+| **P2** | Nodes + keypad | 10 | In progress — 5/10 |
 | **P3** | Snapping | 7 | Blocked on P2 |
 | **P4** | Engine | 9 | Blocked on P3 — **critical path** |
 | **P5** | Persistence | 8 | Blocked on P4 |
@@ -242,14 +242,14 @@ from digits.
 **Touches.** `src/keypad/Keypad.tsx`, `src/app/AppShell.tsx`.
 **Depends on.** P2.1 (decimal glyph).
 
-- [ ] Regions exactly as tabulated in §8.5: digits `7 8 9 / 4 5 6 / 1 2 3 / 0`; number editing
+- [x] Regions exactly as tabulated in §8.5: digits `7 8 9 / 4 5 6 / 1 2 3 / 0`; number editing
       (locale decimal separator, `+/-`, backspace); grouping `(` `)`; operators `÷ × − + =` in a
       separated accent column; mode strip.
-- [ ] Not full-screen, and dismissible. Tapping empty canvas toggles it (§8.5).
-- [ ] The decimal key **shows the locale glyph** (P2.1) and inserts a canonical `.`.
-- [ ] `functions` and `graph` in the mode strip render visibly **disabled** — they are later work
+- [x] Not full-screen, and dismissible. Tapping empty canvas toggles it (§8.5).
+- [x] The decimal key **shows the locale glyph** (P2.1) and inserts a canonical `.`.
+- [x] `functions` and `graph` in the mode strip render visibly **disabled** — they are later work
       (§10.2 extension path, §17.2), so they must read as not-yet rather than silently missing.
-- [ ] Keypad visibility is ephemeral state, outside undo history.
+- [x] Keypad visibility is ephemeral state, outside undo history.
 
 ### P2.8 — Input dispatch: keypad and hardware keyboard
 
