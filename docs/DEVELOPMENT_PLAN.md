@@ -63,7 +63,7 @@ flowchart LR
 |---|---|---|---|
 | ~~**P0**~~ | ~~Foundations~~ | — | **Done** — `08620f9` |
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
-| **P2** | Nodes + keypad | 10 | In progress — 6/10 (P2.1–P2.4, P2.7, P2.10) |
+| **P2** | Nodes + keypad | 10 | In progress — 8/10 (P2.1–P2.7, P2.10) |
 | **P3** | Snapping | 7 | Blocked on P2 |
 | **P4** | Engine | 9 | Blocked on P3 — **critical path** |
 | **P5** | Persistence | 8 | Blocked on P4 |
@@ -205,31 +205,32 @@ rendering read), §11.4 (re-render scope).
 **Touches.** `src/canvas/NodeLayer.tsx`, `src/canvas/Canvas.tsx`.
 **Depends on.** P2.4.
 
-- [ ] Nodes are positioned with plain `left`/`top` equal to their **world** coordinates, as
+- [x] Nodes are positioned with plain `left`/`top` equal to their **world** coordinates, as
       children of `Canvas`. The existing translate-wrapping-scale nesting already maps them to
       `worldToScreen` with no per-node arithmetic — read the comment at the top of `Canvas.tsx`
       before touching this.
-- [ ] A node stays under the pointer that drags the canvas at every zoom level from 0.25 to 4.
-- [ ] The layer subscribes to node **ids**, not to the node map, so adding one node does not
+- [x] A node stays under the pointer that drags the canvas at every zoom level from 0.25 to 4.
+- [x] The layer subscribes to node **ids**, not to the node map, so adding one node does not
       re-render the others (§11.4).
-- [ ] Verified in a browser at minimum, middle and maximum zoom — not type-checked only.
+- [x] Verified in a browser at minimum, middle and maximum zoom — not type-checked only.
 
 ### P2.6 — Selection and in-place number editing
 
 **Objective.** Tap empty canvas → a number node already in edit mode. Tap a node → select it.
 **Architecture.** §8.6 (selection), §8.5 (keys act on the selected node), §13 (selection is not
 undoable).
-**Touches.** `src/store/documentStore.ts` (ephemeral slice), `src/nodes/NumberNode.tsx`,
-`src/canvas/Canvas.tsx`.
+**Touches.** `src/store/uiStore.ts` (ephemeral slice — not `documentStore.ts`; see the P2.6
+journal addendum for why), `src/store/commands.ts`, `src/nodes/NumberNode.tsx`,
+`src/canvas/hitTest.ts`, `src/app/AppShell.tsx`.
 **Depends on.** P2.3, P2.5.
 
-- [ ] `selectedNodeId` and `editingNodeId` live outside undo history (§13).
-- [ ] Tap empty canvas creates a number node at that **world** point, in edit mode, `raw: ""`.
-- [ ] Tap a node selects it. `Escape` deselects.
-- [ ] An editing number node shows a caret and takes digits, the decimal key and backspace.
-- [ ] Backspace on empty `raw` deletes the node; committing an empty `raw` removes it rather than
+- [x] `selectedNodeId` and `editingNodeId` live outside undo history (§13).
+- [x] Tap empty canvas creates a number node at that **world** point, in edit mode, `raw: ""`.
+- [x] Tap a node selects it. `Escape` deselects.
+- [x] An editing number node shows a caret and takes digits, the decimal key and backspace.
+- [x] Backspace on empty `raw` deletes the node; committing an empty `raw` removes it rather than
       leaving a blank cell on the canvas.
-- [ ] Tap is distinguished from pan: a press that travels beyond a small threshold pans the canvas
+- [x] Tap is distinguished from pan: a press that travels beyond a small threshold pans the canvas
       and creates nothing. Verify by dragging the canvas from empty space and confirming no node
       appears.
 

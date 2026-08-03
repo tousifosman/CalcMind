@@ -20,7 +20,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { useDocumentStore } from '../store/documentStore';
-import { ZOOM_MIN, ZOOM_MAX } from '../model/types';
+import { Vec2, ZOOM_MIN, ZOOM_MAX } from '../model/types';
 
 const WHEEL_COMMIT_DEBOUNCE_MS = 200;
 /** Wheel deltaY-per-notch that reads as one "ctrl+wheel" zoom step. */
@@ -33,11 +33,11 @@ function clampZoom(zoom: number): number {
 interface CanvasProps {
   children?: ReactNode;
   style?: ViewStyle;
-  /** Fired on a tap that doesn't turn into a pan (§8.5: tapping empty canvas toggles the
-   *  keypad). Hit-testing against nodes to distinguish an empty-canvas tap from a tap on
-   *  a node lands with P2.5/P2.6 - until then every tap is a canvas tap, since nothing is
-   *  rendered on it yet. */
-  onTap?: () => void;
+  /** Fired on a tap that doesn't turn into a pan, with the tapped point in **world**
+   *  coordinates (§7). Canvas only reports where the tap landed; deciding whether that point
+   *  hit a node or empty space is the caller's job (§8.6, P2.6) - Canvas has no node data to
+   *  hit-test against, and shouldn't need any to stay a plain transform container. */
+  onTap?: (worldPoint: Vec2) => void;
 }
 
 export function Canvas({ children, style, onTap }: CanvasProps) {
@@ -100,10 +100,13 @@ export function Canvas({ children, style, onTap }: CanvasProps) {
 
   const tap = Gesture.Tap()
     .maxDuration(250)
-    .onEnd((_e, success) => {
+    .onEnd((e, success) => {
       'worklet';
       if (success && onTap) {
-        runOnJS(onTap)();
+        // Inlined rather than calling coords.ts's screenToWorld: e.x/e.y are read on the UI
+        // thread inside this worklet, and a plain imported function isn't workletized just by
+        // being called from one (same reason the pinch/wheel handlers above inline this math).
+        runOnJS(onTap)({ x: e.x / zoom.value + panX.value, y: e.y / zoom.value + panY.value });
       }
     });
 
