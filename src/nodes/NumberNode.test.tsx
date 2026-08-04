@@ -127,4 +127,32 @@ describe('NumberNode editing', () => {
     expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '7' });
     expect(useUiStore.getState().editingNodeId).toBeNull();
   });
+
+  test('a hardware operator key while editing continues the chain (P2.8, §8.5)', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '12');
+    act(() => editNumberNode(id));
+    const renderer = renderNode(<NumberNode id={id} />);
+
+    act(() => renderer.root.findByType(TextInput).props.onKeyPress({ nativeEvent: { key: '+' } }));
+
+    const chainId = useDocumentStore.getState().document.nodes[id]!.chainId!;
+    const chain = useDocumentStore.getState().document.chains[chainId];
+    expect(chain.members).toHaveLength(3);
+    expect(useDocumentStore.getState().document.nodes[chain.members[1]]).toMatchObject({
+      kind: 'operator',
+      op: '+',
+    });
+    // Dispatch moves the edit target to the fresh operand, so it's no longer this node.
+    expect(useUiStore.getState().editingNodeId).toBe(chain.members[2]);
+  });
+
+  test('a digit typed via a real keystroke is left to onChangeText, not double-applied', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    act(() => editNumberNode(id));
+    const renderer = renderNode(<NumberNode id={id} />);
+
+    act(() => renderer.root.findByType(TextInput).props.onKeyPress({ nativeEvent: { key: '2' } }));
+
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '1' });
+  });
 });

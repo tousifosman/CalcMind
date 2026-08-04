@@ -5,6 +5,10 @@ import {
   addOperatorNode,
   addParenNode,
   addEqualsNode,
+  appendNumberNode,
+  appendParenNode,
+  appendEqualsNode,
+  appendOperatorAndNumber,
   setNodeRaw,
   deleteNode,
   clearDocument,
@@ -13,6 +17,9 @@ import {
   deselectNode,
 } from './commands';
 import { createEmptyDocument } from '../model/factories';
+import { tokens } from '../ui/tokens';
+
+jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
 
 function resetStore() {
   useDocumentStore.setState({
@@ -103,6 +110,97 @@ describe('addEqualsNode', () => {
     expect(useDocumentStore.getState().document.nodes[id]).toBeUndefined();
     useDocumentStore.getState().redo();
     expect(useDocumentStore.getState().document.nodes[id]).toBeDefined();
+  });
+});
+
+describe('appendNumberNode / appendParenNode / appendEqualsNode (P2.8 chain building)', () => {
+  test('appending to a free node creates a one-member chain first, then a two-member one', () => {
+    const first = addNumberNode({ x: 100, y: 50 }, '1');
+
+    const second = appendParenNode(first, 'open');
+
+    const chainId = useDocumentStore.getState().document.nodes[first]!.chainId;
+    expect(chainId).not.toBeNull();
+    const chain = useDocumentStore.getState().document.chains[chainId!];
+    expect(chain).toMatchObject({ anchor: { x: 100, y: 50 }, members: [first, second] });
+    expect(useDocumentStore.getState().document.nodes[second]).toMatchObject({
+      kind: 'paren',
+      side: 'open',
+      chainId,
+      position: { x: 100 + tokens.nodeHeight, y: 50 }, // number width floors at nodeHeight for '1'
+    });
+  });
+
+  test('a third append lands after both existing members, in the same chain', () => {
+    const first = addNumberNode({ x: 0, y: 0 }, '1');
+    const second = appendParenNode(first, 'open');
+
+    const third = appendEqualsNode(second);
+
+    const chainId = useDocumentStore.getState().document.nodes[first]!.chainId;
+    expect(useDocumentStore.getState().document.chains[chainId!].members).toEqual([first, second, third]);
+    expect(useDocumentStore.getState().document.nodes[third]).toMatchObject({
+      kind: 'equals',
+      position: { x: tokens.nodeHeight + tokens.operatorWidth, y: 0 },
+    });
+  });
+
+  test('appendNumberNode inserts the given raw directly', () => {
+    const first = addNumberNode({ x: 0, y: 0 }, '1');
+    const second = appendNumberNode(first, '-');
+    expect(useDocumentStore.getState().document.nodes[second]).toMatchObject({ kind: 'number', raw: '-' });
+  });
+
+  test('appending to a node already in a chain reuses that chain and its anchor', () => {
+    const first = addNumberNode({ x: 0, y: 0 }, '1');
+    const second = appendParenNode(first, 'open');
+    const firstChainId = useDocumentStore.getState().document.nodes[first]!.chainId;
+
+    const third = appendEqualsNode(second);
+
+    expect(useDocumentStore.getState().document.nodes[third]!.chainId).toBe(firstChainId);
+    expect(useDocumentStore.getState().document.chains[firstChainId!].anchor).toEqual({ x: 0, y: 0 });
+  });
+
+  test('appending to a node that no longer exists is a no-op', () => {
+    const before = useDocumentStore.getState().undoStack.length;
+    appendParenNode('does-not-exist', 'open');
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+  });
+
+  test('undo removes the appended node and dissolves the chain it created', () => {
+    const first = addNumberNode({ x: 0, y: 0 }, '1');
+    appendParenNode(first, 'open');
+
+    useDocumentStore.getState().undo();
+
+    expect(useDocumentStore.getState().document.nodes[first]).toMatchObject({ chainId: null });
+    expect(useDocumentStore.getState().document.chains).toEqual({});
+  });
+});
+
+describe('appendOperatorAndNumber', () => {
+  test('appends an operator and a fresh empty number in one undo entry', () => {
+    const first = addNumberNode({ x: 0, y: 0 }, '12');
+    const stackBefore = useDocumentStore.getState().undoStack.length;
+
+    const { operatorId, numberId } = appendOperatorAndNumber(first, '+');
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(stackBefore + 1);
+    const chainId = useDocumentStore.getState().document.nodes[first]!.chainId;
+    expect(useDocumentStore.getState().document.chains[chainId!].members).toEqual([first, operatorId, numberId]);
+    expect(useDocumentStore.getState().document.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '+' });
+    expect(useDocumentStore.getState().document.nodes[numberId]).toMatchObject({ kind: 'number', raw: '' });
+  });
+
+  test('undo removes both the operator and the number together', () => {
+    const first = addNumberNode({ x: 0, y: 0 }, '12');
+    appendOperatorAndNumber(first, '+');
+
+    useDocumentStore.getState().undo();
+
+    expect(useDocumentStore.getState().document.nodes[first]).toMatchObject({ chainId: null });
+    expect(Object.keys(useDocumentStore.getState().document.nodes)).toEqual([first]);
   });
 });
 

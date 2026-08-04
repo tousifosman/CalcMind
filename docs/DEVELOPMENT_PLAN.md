@@ -63,7 +63,7 @@ flowchart LR
 |---|---|---|---|
 | ~~**P0**~~ | ~~Foundations~~ | — | **Done** — `08620f9` |
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
-| **P2** | Nodes + keypad | 10 | In progress — 8/10 (P2.1–P2.7, P2.10) |
+| **P2** | Nodes + keypad | 10 | In progress — 9/10 (P2.1–P2.8, P2.10) |
 | **P3** | Snapping | 7 | Blocked on P2 |
 | **P4** | Engine | 9 | Blocked on P3 — **critical path** |
 | **P5** | Persistence | 8 | Blocked on P4 |
@@ -257,19 +257,20 @@ from digits.
 **Objective.** Make keys do things, from the on-screen keypad and a real keyboard, through one
 code path.
 **Architecture.** §8.5 (targeting rules and the full key map).
-**Touches.** `src/keypad/keymap.ts`, `src/keypad/Keypad.tsx`, `src/app/AppShell.tsx`.
+**Touches.** `src/keypad/keymap.ts`, `src/keypad/Keypad.tsx`, `src/app/AppShell.tsx`,
+`src/nodes/NumberNode.tsx`, `src/store/commands.ts`, `src/store/uiStore.ts`.
 **Depends on.** P2.3, P2.6, P2.7.
 
-- [ ] A key acts on the **selected node** if there is one, otherwise creates a new node at the
+- [x] A key acts on the **selected node** if there is one, otherwise creates a new node at the
       caret/last-tap point (§8.5).
-- [ ] Hardware and web keyboards map to the same commands: digits; `+ - * /` → `+ − × ÷`;
+- [x] Hardware and web keyboards map to the same commands: digits; `+ - * /` → `+ − × ÷`;
       `Enter` → `=`; `Backspace`; `Escape` deselects; arrows move selection along a chain.
-- [ ] On-screen and hardware input go through **one** dispatch function. Two parallel
+- [x] On-screen and hardware input go through **one** dispatch function. Two parallel
       implementations will diverge.
-- [ ] Pressing an operator with a **result** selected is reserved for continuation (§8.7). Until
+- [x] Pressing an operator with a **result** selected is reserved for continuation (§8.7). Until
       P4.9 lands, make it an explicit no-op with a `TODO` citing §8.7 — do **not** ship a
       placeholder behaviour that users would have to unlearn.
-- [ ] Verified with a real keyboard in a browser, completing a full chain by typing.
+- [x] Verified with a real keyboard in a browser, completing a full chain by typing.
 
 ### P2.9 — Long-press context menus
 

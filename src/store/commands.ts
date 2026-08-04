@@ -11,8 +11,11 @@ import {
   createOperatorNode,
   createParenNode,
   createEqualsNode,
+  createChainId,
 } from '../model/factories';
-import { NodeId, OperatorSymbol, ParenSide, Vec2 } from '../model/types';
+import { CalcNode, Chain, NodeId, OperatorSymbol, ParenSide, Vec2 } from '../model/types';
+import { widthOf } from '../chains/measure';
+import { getDeviceLocale } from '../ui/locale';
 
 export function renameDocument(name: string): void {
   useDocumentStore.getState().applyCommand((draft) => {
@@ -50,6 +53,80 @@ export function addEqualsNode(position: Vec2): NodeId {
     draft.nodes[node.id] = node;
   });
   return node.id;
+}
+
+// Chain building via typing (P2.8, §8.5). This is deliberately not P3's job: P3's chain
+// mutations (snap, drag, detach) resolve which of several nearby candidates a dragged node
+// means to join (§8.2-8.4), which needs geometry this doesn't. Typing always knows exactly
+// which chain to extend - whichever one the selected node already belongs to - so it can
+// append directly, with none of that candidate search.
+
+/** Appends already-constructed nodes to the chain the node at `anchorNodeId` belongs to,
+ *  creating a new one-member chain first if it doesn't have one yet. Positions each
+ *  appended node with §8.1's flush layout formula so it reads correctly immediately, rather
+ *  than waiting on a chain layout pass to catch up (there isn't one yet - P3 territory).
+ *  One call is one undo entry, however many nodes it appends - which is what lets
+ *  `appendOperatorAndNumber` below insert its operator and its fresh operand atomically. */
+function appendMembersToChain(anchorNodeId: NodeId, newNodes: CalcNode[]): void {
+  useDocumentStore.getState().applyCommand((draft) => {
+    const anchorNode = draft.nodes[anchorNodeId];
+    if (!anchorNode) return;
+
+    const existingChain = anchorNode.chainId ? draft.chains[anchorNode.chainId] : undefined;
+    const chain: Chain =
+      existingChain ?? { id: createChainId(), anchor: { ...anchorNode.position }, members: [anchorNodeId] };
+    if (!existingChain) {
+      draft.chains[chain.id] = chain;
+      anchorNode.chainId = chain.id;
+    }
+
+    const locale = getDeviceLocale();
+    for (const node of newNodes) {
+      let x = chain.anchor.x;
+      for (const memberId of chain.members) {
+        const member = draft.nodes[memberId];
+        if (member) x += widthOf(member, locale);
+      }
+      node.chainId = chain.id;
+      node.position = { x, y: chain.anchor.y };
+      draft.nodes[node.id] = node;
+      chain.members.push(node.id);
+    }
+  });
+}
+
+/** Appends a number node to the chain after `afterNodeId` (§8.5's "acts on the selected
+ *  node" targeting rule). */
+export function appendNumberNode(afterNodeId: NodeId, raw: string): NodeId {
+  const node = createNumberNode({ x: 0, y: 0 }, raw);
+  appendMembersToChain(afterNodeId, [node]);
+  return node.id;
+}
+
+export function appendParenNode(afterNodeId: NodeId, side: ParenSide): NodeId {
+  const node = createParenNode({ x: 0, y: 0 }, side);
+  appendMembersToChain(afterNodeId, [node]);
+  return node.id;
+}
+
+export function appendEqualsNode(afterNodeId: NodeId): NodeId {
+  const node = createEqualsNode({ x: 0, y: 0 });
+  appendMembersToChain(afterNodeId, [node]);
+  return node.id;
+}
+
+/** Pressing an operator doesn't just append the operator (§8.5) - the next keystroke should
+ *  land in a fresh operand, so this appends the operator and an empty number node together.
+ *  Doing that as two separate `appendMembersToChain` calls would let undo strand the
+ *  operator without the operand it was appended for. */
+export function appendOperatorAndNumber(
+  afterNodeId: NodeId,
+  op: OperatorSymbol,
+): { operatorId: NodeId; numberId: NodeId } {
+  const operatorNode = createOperatorNode({ x: 0, y: 0 }, op);
+  const numberNode = createNumberNode({ x: 0, y: 0 }, '');
+  appendMembersToChain(afterNodeId, [operatorNode, numberNode]);
+  return { operatorId: operatorNode.id, numberId: numberNode.id };
 }
 
 /** setNodeRaw coalescing window (§13): keystrokes to the same node within this
@@ -157,8 +234,8 @@ function discardIfAbandoned(keepId: NodeId | null): void {
   }
 }
 
-/** Selects any node kind without entering edit mode - the target for keypad input once
- *  P2.8 wires that up, but not itself a text field (§8.6). */
+/** Selects any node kind without entering edit mode - the target for keypad/hardware-keyboard
+ *  input (P2.8, §8.5), but not itself a text field (§8.6). */
 export function selectNode(nodeId: NodeId): void {
   discardIfAbandoned(nodeId);
   useUiStore.getState().setEditingNode(null);

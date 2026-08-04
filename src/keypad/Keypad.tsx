@@ -2,9 +2,9 @@
 // §1.3 (Tydlig's keypad, which this is modelled on), §1.2 (tokens) and decision #15.
 //
 // This component only renders keys and reports which one was pressed via `onKeyPress` —
-// it does not itself create or edit nodes. That wiring, plus the hardware-keyboard side
-// of the same dispatch, is P2.8's job once node commands (P2.3) and selection (P2.6)
-// exist to give key presses something to act on.
+// it does not itself create or edit nodes. `onKeyPress` is wired to `keymap.ts`'s
+// `dispatchEditorCommand` (P2.8), the same function the hardware-keyboard listener in
+// `AppShell.tsx` calls, so on-screen and hardware input can't diverge.
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
@@ -12,17 +12,9 @@ import { decimalSeparatorFor } from '../engine/format';
 import { glyphColor, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
 import { clearDocument } from '../store/commands';
+import { Digit, KeypadKey } from './keymap';
 
-export type Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
-
-export type KeypadKey =
-  | { region: 'digit'; value: Digit }
-  | { region: 'decimal' }
-  | { region: 'sign' }
-  | { region: 'backspace' }
-  | { region: 'paren'; side: 'open' | 'close' }
-  | { region: 'operator'; op: '+' | '-' | '×' | '÷' }
-  | { region: 'equals' };
+export type { Digit, KeypadKey } from './keymap';
 
 interface KeypadProps {
   /** BCP-47 locale, used only to show the decimal key's glyph (§10.3); the key still
@@ -169,9 +161,20 @@ interface KeyProps {
   testID?: string;
 }
 
+// Web only: a plain TouchableOpacity press starts with a mousedown, which blurs whatever
+// TextInput currently has focus *before* onPress fires - for a data-entry key that's the
+// number node this press is meant to act on (P2.8, §8.5's "acts on the selected node"). A
+// blur runs NumberNode's onBlur (deselectNode), so by the time onPress ran, dispatch was
+// already seeing "nothing selected" - verified in a real browser: every key after the first
+// landed as its own free node instead of continuing the one being edited. `preventDefault` on
+// mousedown is the standard fix for an on-screen keyboard's keys not stealing focus from the
+// field they edit; unrecognised on native, where TouchableOpacity has no mouse events to steal
+// focus with.
+const preventFocusSteal = { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() };
+
 function Key({ label, onPress, testID }: KeyProps) {
   return (
-    <TouchableOpacity style={styles.key} onPress={onPress} testID={testID}>
+    <TouchableOpacity style={styles.key} onPress={onPress} testID={testID} {...preventFocusSteal}>
       <Text style={styles.neutralKeyLabel}>{label}</Text>
     </TouchableOpacity>
   );
@@ -179,7 +182,12 @@ function Key({ label, onPress, testID }: KeyProps) {
 
 function DigitKey({ value, onPress }: { value: string; onPress: () => void }) {
   return (
-    <TouchableOpacity style={styles.digitKey} onPress={onPress} testID={`keypad-digit-${value}`}>
+    <TouchableOpacity
+      style={styles.digitKey}
+      onPress={onPress}
+      testID={`keypad-digit-${value}`}
+      {...preventFocusSteal}
+    >
       <Text style={styles.keyLabel}>{value}</Text>
     </TouchableOpacity>
   );
@@ -187,7 +195,7 @@ function DigitKey({ value, onPress }: { value: string; onPress: () => void }) {
 
 function OperatorKey({ label, onPress, testID }: KeyProps) {
   return (
-    <TouchableOpacity style={[styles.key, styles.accentKey]} onPress={onPress} testID={testID}>
+    <TouchableOpacity style={[styles.key, styles.accentKey]} onPress={onPress} testID={testID} {...preventFocusSteal}>
       <Text style={styles.accentKeyLabel}>{label}</Text>
     </TouchableOpacity>
   );
@@ -195,7 +203,7 @@ function OperatorKey({ label, onPress, testID }: KeyProps) {
 
 function EqualsKey({ onPress, testID }: { onPress: () => void; testID?: string }) {
   return (
-    <TouchableOpacity style={[styles.key, styles.equalsKey]} onPress={onPress} testID={testID}>
+    <TouchableOpacity style={[styles.key, styles.equalsKey]} onPress={onPress} testID={testID} {...preventFocusSteal}>
       <Text style={styles.accentKeyLabel}>=</Text>
     </TouchableOpacity>
   );
