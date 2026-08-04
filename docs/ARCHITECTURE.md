@@ -73,6 +73,19 @@ The reference raster has a cell height of 256px. Tokens below are that geometry 
 | result | `#FF7E79` + dot texture `#FFD1CF` | `#FFA3A0` |
 | numerals / glyphs | `#FFFFFF` | — |
 
+| Identity (link) | Swatch | Notes |
+|---|---|---|
+| 1 | `#2F6BFF` | blue — first-guess kept |
+| 2 | `#0D8A4A` | green — deepened vs `#22A75B` (deutan vs result) |
+| 3 | `#880E4F` | magenta — deepened vs `#E0479E` (deutan vs number) |
+| 4 | `#00B8D9` | cyan — first-guess kept |
+| 5 | `#B8860B` | gold — replaces `#8E6E53` (protan vs result) |
+| 6 | `#560BAD` | violet — replaces `#5B4CC4` (protan vs equals) |
+
+Identity hues are render-time only (decision #12, §11.1). Validated under Machado et al.
+(2009) protanopia/deuteranopia simulation to ΔE₇₆ ≥ 15 against every other identity swatch
+and the structural fills above (P6.8); method locked in `src/ui/paletteAccessibility.ts`.
+
 The result texture is a 4×4 unit tile with 1-unit dots at `(1,0)` and `(3,2)`.
 
 ### 1.3 Reference app: what Tydlig actually does
@@ -677,6 +690,11 @@ This is the single most important interaction in the app: it turns "I have an an
 now I keep working with it" in one keystroke, and it is what produces the linked trees that make
 the canvas worth having.
 
+**The other path is drag-to-link (§11).** Dragging result `R` onto another chain (or onto a free
+node to form a new chain) uses the same §8.3 snap outcomes — no special case in `snapping.ts` —
+but the commit inserts a fresh **reference** to `R` rather than moving `R`. The source chain keeps
+its result; a miss (no candidate) cancels so `R` never becomes a free node.
+
 ### 8.8 Value slider
 
 Selecting a number raises a slider in a popover anchored beneath its cell, with the range endpoints
@@ -852,13 +870,18 @@ flowchart TD
   `CircularReference`; the rest of the document keeps working.
 - Deleting a node that references are pointing at leaves those references in a
   `DanglingReference` state rather than cascading deletes into the user's other work.
+- References are created two ways: continuation (§8.7) and **dragging a result** into another
+  chain (same §8.3 snap outcomes; the commit inserts a reference and leaves the result in place).
 
 `src/engine/graph.ts` owns the cascade: `buildDependencyGraph` / `topologicalOrder`
 (vertices are chains; edges keyed `(sourceNodeId, referenceNodeId)`, §11.1), and
 `dirtyClosure(seed)` returns the seed ∪ its transitive dependents in topo order.
-`recomputeFromSeeds` marks that set stale then evaluates it in one turn via
-`documentStore.applyCommand`'s `recomputeSeeds` option (or directly from chain
-finalisation). Callers and the store API were kept stable through P4.8 → P6.2.
+P6.3 colours cycles at build time (`DependencyGraph.cycles` via DFS) and
+`recomputeFromSeeds` paints every cycle member `CircularReference` with named-cycle
+metadata while leaving unrelated chains alone. Evaluation marks the dirty set stale
+then runs it in one turn via `documentStore.applyCommand`'s `recomputeSeeds` option
+(or directly from chain finalisation). Callers and the store API were kept stable
+through P4.8 → P6.3.
 
 ### 11.1 Identity hues: the visual language of a link
 
@@ -883,14 +906,17 @@ identity, not just by a line.**
 
 Rules that follow from this:
 
-- Hues are assigned from a fixed palette (`#2F6BFF`, `#22A75B`, `#E0479E`, `#00B8D9`, `#8E6E53`,
-  `#5B4CC4`, …), chosen to stay distinguishable from the structural teal/amber/purple/salmon and
-  from each other. The palette must be checked for deuteranopia/protanopia before it ships —
-  colour is load-bearing here, so it cannot be the *only* channel: the connector line and the
-  long-press `Unlink from parent` affordance carry the same information non-chromatically.
+- Hues are assigned from a fixed palette (`#2F6BFF`, `#0D8A4A`, `#880E4F`, `#00B8D9`, `#B8860B`,
+  `#560BAD`), chosen to stay distinguishable from the structural teal/amber/purple/salmon and
+  from each other. Validated for deuteranopia/protanopia (P6.8) — colour is load-bearing here,
+  so it is still not the *only* channel: the connector line and the long-press `Unlink from
+  parent` affordance carry the same information non-chromatically.
 - Hue is a **render-time property derived from the graph**, never persisted. Reopening a document
   reassigns hues deterministically by traversal order, so they are stable across loads without
-  being stored.
+  being stored. Implemented in `src/engine/identity.ts`: identity-bearing node ids (referenced
+  or labelled) are sorted lexicographically and coloured from `identityHues` in `ui/tokens.ts`.
+  Sorting, not `Object.keys` insertion order, is what keeps save→reload assignment identical
+  (serialize writes nodes sorted by id).
 - Connectors are drawn for **all** links by default, not only the selected one. Tydlig hides them
   until you swipe and the review calls that out as confusing; showing them costs a little visual
   noise and buys comprehension. If density becomes a problem, fade unselected connectors rather
@@ -934,7 +960,7 @@ the result texture may as well use it too.
 | 60fps drag | Reanimated worklets; store commit only on release |
 | Re-render scope | Per-node Zustand selectors + `React.memo`; a node re-renders only when its own slice changes |
 | Snap search | O(n) to ~500 nodes; spatial hash beyond (§8.4) |
-| Evaluation | Dirty-set only; never a full document sweep |
+| Evaluation | Dirty-set only; never a full *evaluation* sweep. Cycle bookkeeping (P6.3) builds the reference graph and, only when the dirty set touches a cycle or is clearing a `CircularReference`, scans result outcomes to recover/refresh circular paints — it does not re-evaluate untouched chains. |
 | Text measurement | Memoised per `(raw, fontSize)` |
 
 ---
@@ -997,6 +1023,8 @@ export interface StorageAdapter {
   read(id: string): Promise<string>;
   write(id: string, json: string): Promise<void>;   // must be atomic
   remove(id: string): Promise<void>;
+  /** Optional: one-generation `.bak` (native). Load falls back here when primary is missing or not valid JSON. */
+  readBackup?(id: string): Promise<string>;
   /** Optional: OS share sheet (native) or file download (web). */
   exportDocument?(id: string): Promise<void>;
   /** Optional: file picker → raw JSON string. */
@@ -1068,6 +1096,7 @@ Key safety properties:
 ### 12.4 Migrations
 
 ```ts
+// persistence/migrations/index.ts
 type Migration = { from: number; to: number; migrate: (doc: unknown) => unknown };
 export const CURRENT_SCHEMA_VERSION = 1;
 export const migrations: Migration[] = []; // v1 is the origin
@@ -1075,7 +1104,10 @@ export const migrations: Migration[] = []; // v1 is the origin
 
 Applied in ascending order until `doc.schemaVersion === CURRENT_SCHEMA_VERSION`. Every migration
 gets a fixture pair (`before.json` / `after.json`) committed as a test — migrations are the code
-most likely to silently eat data and the least likely to be exercised by hand.
+most likely to silently eat data and the least likely to be exercised by hand. The harness lives
+in `src/persistence/migrations/`; the fixture rule is restated at the top of that module so the
+next author cannot miss it. A synthetic v0→v1 fixture pair proves the runner before any real
+migration ships (production `migrations` stays empty while v1 is current).
 
 ---
 
@@ -1089,6 +1121,9 @@ document snapshots.
   back one keystroke at a time.
 - Viewport changes are excluded (§7).
 - Autosave and undo are independent: undo mutates the store, which marks it dirty, which saves.
+- Autosave is suppressible (`setSuppressed`) so a continuous gesture such as value scrubbing
+  (§8.8) does not enqueue a write per frame; force-flush (background / explicit save / document
+  switch) still writes once if dirty — kill-safety outranks suppress.
 
 ---
 
@@ -1173,6 +1208,9 @@ fits long-press. `Select group` remains the dwell-free alternative (§8.6). Cont
 5. **Labels** — modelled on the node base (§6) and observed to be a headline feature rather than a
    nicety. Open question is only *when*: a labelled canvas is far more readable than an unlabelled
    one, so this may deserve to land before P7.
-6. **Identity palette accessibility** — the hue set in §11.1 is a first guess and has not been
-   checked for colour-blind distinguishability. Must be validated before P6 ships, since colour
-   carries link identity.
+6. ~~**Identity palette accessibility**~~ — **resolved (P6.8).** Machado et al. (2009)
+   protanopia/deuteranopia simulation; ΔE₇₆ ≥ 15 for every identity×identity pair and every
+   identity×structural pair. Four of the six first-guess swatches failed and were replaced
+   (§1.2). Method locked in `src/ui/paletteAccessibility.ts`; results in the journal.
+   Non-chromatic channels (connector line, `Unlink from parent`) remain required — hue is
+   never the only carrier (§11.1).

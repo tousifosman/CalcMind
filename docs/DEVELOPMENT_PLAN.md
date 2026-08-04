@@ -71,8 +71,8 @@ flowchart LR
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
-| **P5** | Persistence | 8 | In progress — P5.1, P5.3, P5.4, P5.8 done; parallel with P6 |
-| **P6** | Linking | 8 | In progress — P6.1–P6.2 done; parallel with P5 |
+| **P5** | Persistence | 8 | In progress — P5.1–P5.8 tasks done; phase exit check remains |
+| **P6** | Linking | 8 | In progress — P6.1–P6.3, P6.5, P6.7, P6.8 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -641,7 +641,7 @@ punctuated).
 **Depends on.** P4.5, P2.4.
 
 - [x] `Incomplete`, `InvalidSequence`, `DivideByZero`, `Overflow`, `NotANumber` each render
-      distinguishably. `CircularReference` needs the graph and lands with P6.3.
+      distinguishably. `CircularReference` cycle naming and Unlink landed with P6.3.
 - [x] A `Stale` result keeps showing its previous value **dimmed** rather than flashing empty (§9).
 - [x] No error is rendered as a bare glyph — §11.2 is the design's sharpest criticism of the
       reference app and applies to engine errors, not just broken links.
@@ -759,12 +759,12 @@ flowchart LR
     style P31 fill:#22A75B,color:#fff
     style P48 fill:#22A75B,color:#fff
     style P51 fill:#22A75B,color:#fff
-    style P52 fill:#8892A0,color:#fff
+    style P52 fill:#22A75B,color:#fff
     style P53 fill:#22A75B,color:#fff
     style P54 fill:#22A75B,color:#fff
-    style P55 fill:#8892A0,color:#fff
-    style P56 fill:#8892A0,color:#fff
-    style P57 fill:#8892A0,color:#fff
+    style P55 fill:#22A75B,color:#fff
+    style P56 fill:#22A75B,color:#fff
+    style P57 fill:#22A75B,color:#fff
     style P58 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
@@ -773,11 +773,10 @@ Green = done, amber = ready to start, grey = blocked on a dependency, purple = t
 gate. Neither `P5.1` nor `P5.3` carries a task-level dependency of its own — the phase text above
 just says "depends only on P4" — but the plan sequences both behind P4's own phase-exit check
 rather than jumping the queue the moment either task's box would otherwise look open, shown here
-as a gate from P4's tracking issue rather than an individual P4 subtask. `P5.5` is the one task
-that reaches outside the phase for real, task-level dependencies: `P3.1` (chain layout, already
-done) and `P4.8` (recompute on edit, already done). Kept current by hand alongside the
-acceptance-criteria boxes below — if a task's status here disagrees with its boxes, the boxes win
-and this diagram is stale.
+as a gate from P4's tracking issue rather than an individual P4 subtask. `P5.2` / `P5.5` /
+`P5.6` / `P5.7` / `P5.4` / `P5.8` done — every task node green; phase exit check still open.
+Kept current by hand alongside the acceptance-criteria boxes below — if a task's status here
+disagrees with its boxes, the boxes win and this diagram is stale.
 
 ### P5.1 — Serialiser
 
@@ -802,13 +801,13 @@ decision #7.
 **Touches.** `src/model/schema.ts`, `src/persistence/load.ts`.
 **Depends on.** P5.1.
 
-- [ ] zod validates every loaded document. Failures name the offending field, and **nothing
+- [x] zod validates every loaded document. Failures name the offending field, and **nothing
       partial** reaches the store.
-- [ ] `schemaVersion` greater than `CURRENT_SCHEMA_VERSION` → **refused with a clear message**, and
+- [x] `schemaVersion` greater than `CURRENT_SCHEMA_VERSION` → **refused with a clear message**, and
       the file is left untouched. Guessing at an unknown shape corrupts the user's work
       (decision #7).
-- [ ] Malformed JSON is a handled outcome, not a crash.
-- [ ] Tests for malformed, newer-schema, and structurally-invalid-but-parseable files.
+- [x] Malformed JSON is a handled outcome, not a crash.
+- [x] Tests for malformed, newer-schema, and structurally-invalid-but-parseable files.
 
 ### P5.3 — Storage adapter and native implementation
 
@@ -826,6 +825,8 @@ decision #7.
 `@dr.pogodin/react-native-fs` exposes no `fsync`; `writeFile`'s resolved promise is the flush
 barrier before rename (Android closes/flushes the stream; see journal). Shared behavioural
 contract tests live in `adapter.sharedTests.ts` for P5.4 to reuse against the web adapter.
+`readBackup` is optional on the adapter; the native implementation exposes it so P5.5 can
+recover when the primary is missing or corrupt without extending `read()` beyond §12.2.
 
 ### P5.4 — Web adapter
 
@@ -850,14 +851,14 @@ for IndexedDB under Jest.
 **Touches.** `src/persistence/load.ts`.
 **Depends on.** P5.2, P5.3, P3.1, P4.8.
 
-- [ ] Exactly the §12.3 order: read → JSON check (`.bak` fallback) → version check → migrate → zod
+- [x] Exactly the §12.3 order: read → JSON check (`.bak` fallback) → version check → migrate → zod
       validate → normalise arrays to maps → run chain layout → evaluate all chains topologically →
       ready.
-- [ ] A corrupt primary recovers from `.bak`. If **both** fail, report unreadable and **do not
+- [x] A corrupt primary recovers from `.bak`. If **both** fail, report unreadable and **do not
       overwrite either** (§12.3).
-- [ ] `derived` from the file paints immediately, then the engine recomputes and overwrites it; on
+- [x] `derived` from the file paints immediately, then the engine recomputes and overwrites it; on
       disagreement the engine wins, silently (§12.1, decision #6).
-- [ ] Test: corrupt the primary file, assert `.bak` recovery.
+- [x] Test: corrupt the primary file, assert `.bak` recovery.
 
 ### P5.6 — Autosave
 
@@ -867,13 +868,13 @@ too).
 **Touches.** `src/persistence/autosave.ts`, `src/store/documentStore.ts`.
 **Depends on.** P5.1, P5.3.
 
-- [ ] Mutations mark dirty; writes debounce **600ms**.
-- [ ] Force-flush on app background, web `visibilitychange` / `pagehide`, explicit save, and
+- [x] Mutations mark dirty; writes debounce **600ms**.
+- [x] Force-flush on app background, web `visibilitychange` / `pagehide`, explicit save, and
       document switch (§12.3).
-- [ ] Killing the app mid-edit loses **at most the debounce window**.
-- [ ] `lastSavedAt` is surfaced to the store.
-- [ ] Undo marks dirty and therefore saves — autosave and undo stay independent (§13).
-- [ ] Autosave is **suppressible**, because P6b.4's slider must suspend it mid-scrub (§8.8).
+- [x] Killing the app mid-edit loses **at most the debounce window**.
+- [x] `lastSavedAt` is surfaced to the store.
+- [x] Undo marks dirty and therefore saves — autosave and undo stay independent (§13).
+- [x] Autosave is **suppressible**, because P6b.4's slider must suspend it mid-scrub (§8.8).
       Build the hook now; one scrub otherwise writes hundreds of documents.
 
 ### P5.7 — Migration harness
@@ -883,11 +884,11 @@ too).
 **Touches.** `src/persistence/migrations/`.
 **Depends on.** P5.2.
 
-- [ ] `Migration` type and an ascending runner per §12.4. `migrations` stays **empty** — v1 is the
+- [x] `Migration` type and an ascending runner per §12.4. `migrations` stays **empty** — v1 is the
       origin.
-- [ ] The harness is proven with a synthetic v0→v1 fixture pair, so the machinery is exercised
+- [x] The harness is proven with a synthetic v0→v1 fixture pair, so the machinery is exercised
       before real user data depends on it.
-- [ ] The rule that every future migration ships a `before.json` / `after.json` fixture pair is
+- [x] The rule that every future migration ships a `before.json` / `after.json` fixture pair is
       documented where the next author will see it (§12.4: migrations are the code most likely to
       silently eat data and least likely to be exercised by hand).
 
@@ -905,10 +906,10 @@ too).
       format — an exported file is still untrusted on the way back in.
 
 `importDocument` on both platforms returns the raw file text only (including deliberately
-invalid / newer-schema fixtures in tests). P5.5's load pipeline is the sole trust boundary —
-wiring the picker result into that pipeline is P5.5's job once it lands. Native also exposes
-`importDocument` via RNFS `pickFile` (same raw-string contract) even though the task text
-only required native export.
+invalid / newer-schema fixtures in tests). P5.5's load pipeline (`openDocument`) is the sole
+trust boundary — callers must feed picker results through it, with no shortcut for "our own"
+format. Native also exposes `importDocument` via RNFS `pickFile` (same raw-string contract)
+even though the task text only required native export.
 
 ### Phase exit check — P5
 
@@ -963,12 +964,13 @@ flowchart LR
     style P35 fill:#22A75B,color:#fff
     style P61 fill:#22A75B,color:#fff
     style P62 fill:#22A75B,color:#fff
-    style P63 fill:#E8A838,color:#fff
+    style P63 fill:#22A75B,color:#fff
+
     style P64 fill:#E8A838,color:#fff
-    style P65 fill:#E8A838,color:#fff
-    style P66 fill:#8892A0,color:#fff
-    style P67 fill:#E8A838,color:#fff
-    style P68 fill:#8892A0,color:#fff
+    style P65 fill:#22A75B,color:#fff
+    style P66 fill:#E8A838,color:#fff
+    style P67 fill:#22A75B,color:#fff
+    style P68 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
@@ -976,7 +978,9 @@ Green = done, amber = ready to start, grey = blocked on a dependency, purple = t
 gate. `P4.8` (recompute on edit) is done, so `P6.1` is no longer gated on a cross-phase
 dependency — everything else here is downstream of it. `P2.9` and `P3.5` are already-done
 prerequisites for `P6.4` and `P6.7` respectively, shown as separate external nodes rather than
-folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. Kept
+folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. `P6.2`,
+`P6.3`, `P6.5`, `P6.7`, and `P6.8` are done; `P6.6` remains open for connector drawing and
+`P6.4` for dangling-reference UI. Kept
 current by hand alongside the acceptance-criteria boxes below — if a task's status here disagrees
 with its boxes, the boxes win and this diagram is stale.
 
@@ -1013,11 +1017,11 @@ with its boxes, the boxes win and this diagram is stale.
 **Touches.** `src/engine/graph.ts`, `src/nodes/ResultNode.tsx`.
 **Depends on.** P6.1.
 
-- [ ] DFS colouring at build time. **Every chain in the cycle** enters `CircularReference`.
-- [ ] The rest of the document keeps working.
-- [ ] Rendered per §11.2: **name the cycle** and offer to unlink the edge that closed it. Not a
+- [x] DFS colouring at build time. **Every chain in the cycle** enters `CircularReference`.
+- [x] The rest of the document keeps working.
+- [x] Rendered per §11.2: **name the cycle** and offer to unlink the edge that closed it. Not a
       bare glyph.
-- [ ] Test with a deliberate cycle, asserting only the cycle is affected.
+- [x] Test with a deliberate cycle, asserting only the cycle is affected.
 
 ### P6.4 — Dangling references
 
@@ -1044,14 +1048,14 @@ punctuate — the review's sharpest criticism of the reference app).
 **Touches.** `src/engine/identity.ts`, node components.
 **Depends on.** P6.1.
 
-- [ ] A value acquires an identity when it is **referenced OR labelled** — either alone is enough.
+- [x] A value acquires an identity when it is **referenced OR labelled** — either alone is enough.
       The reference-only rule was wrong; see §11.1 and `2026-08-03` revision 1.
-- [ ] No identity → **no hue**. Colour is spent only where it carries information (§11.1).
-- [ ] Every reference to a value is filled with that value's hue, so two cells sharing a hue are
+- [x] No identity → **no hue**. Colour is spent only where it carries information (§11.1).
+- [x] Every reference to a value is filled with that value's hue, so two cells sharing a hue are
       the same value wherever they sit.
-- [ ] Hue is **derived at render time from traversal order and never persisted** (decision #12), so
+- [x] Hue is **derived at render time from traversal order and never persisted** (decision #12), so
       it is stable across loads without occupying the schema.
-- [ ] Test: save, reload, assert identical hue assignment.
+- [x] Test: save, reload, assert identical hue assignment.
 
 ### P6.6 — Connector rendering
 
@@ -1075,14 +1079,14 @@ sharing the canvas transform), decision #13.
 ### P6.7 — Drag a result into a chain
 
 **Objective.** The second way to create a reference.
-**Architecture.** §11 (dragging a result into another chain creates a reference), §8.3.
+**Architecture.** §11 (dragging a result into another chain creates a reference), §8.3, §8.7.
 **Touches.** `src/nodes/useNodeDrag.ts`, `src/store/commands.ts`.
 **Depends on.** P6.1, P3.5.
 
-- [ ] Dragging a result node into another chain inserts a **reference** to it — not a copy of its
+- [x] Dragging a result node into another chain inserts a **reference** to it — not a copy of its
       value, and not the result node itself.
-- [ ] The source chain keeps its own result.
-- [ ] Snapping behaves exactly as for any other node (§8.3) — no special case in `snapping.ts`.
+- [x] The source chain keeps its own result.
+- [x] Snapping behaves exactly as for any other node (§8.3) — no special case in `snapping.ts`.
 
 ### P6.8 — Palette accessibility validation
 
@@ -1094,11 +1098,11 @@ sharing the canvas transform), decision #13.
 > **This blocks P6 shipping.** §11.1 states the hue set is a first guess and must be checked for
 > deuteranopia/protanopia before release, because colour carries link identity.
 
-- [ ] The identity palette is simulated for deuteranopia and protanopia. Adjacent-hue pairs are
+- [x] The identity palette is simulated for deuteranopia and protanopia. Adjacent-hue pairs are
       checked against each other **and** against the structural teal/amber/purple/salmon (§1.2).
-- [ ] Failing hues are replaced, with `ui/tokens.ts` and §1.2 updated together.
-- [ ] Confirmed that a link is still identifiable with hue ignored entirely (§11.1).
-- [ ] Method and result recorded in the journal, so the check is repeatable rather than
+- [x] Failing hues are replaced, with `ui/tokens.ts` and §1.2 updated together.
+- [x] Confirmed that a link is still identifiable with hue ignored entirely (§11.1).
+- [x] Method and result recorded in the journal, so the check is repeatable rather than
       re-litigated. If the first-guess palette turns out fine, that is still a `Now known:` line.
 
 ### Phase exit check — P6

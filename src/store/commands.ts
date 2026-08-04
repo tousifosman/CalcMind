@@ -364,6 +364,18 @@ export function deleteNode(nodeId: NodeId): void {
   });
 }
 
+/**
+ * Break a reference link by deleting the reference node (§11.2). Used by the
+ * CircularReference Unlink affordance (P6.3) on the DFS closing edge; P6.4's
+ * long-press `Unlink from parent` will share this path. One undo entry via
+ * {@link deleteNode}.
+ */
+export function unlinkReference(referenceNodeId: NodeId): void {
+  const node = useDocumentStore.getState().document.nodes[referenceNodeId];
+  if (!node || node.kind !== 'reference') return;
+  deleteNode(referenceNodeId);
+}
+
 // --- P3.4: snap / detach commits (§8.3 bookkeeping) ---------------------------------
 
 /** Prepend `nodeId` as the new leftmost member of `chainId`. One undo entry.
@@ -482,15 +494,137 @@ export function detachNode(nodeId: NodeId, position: Vec2): void {
   });
 }
 
+/**
+ * P6.7 / §11: insert a fresh reference to `resultId` into `chainId` at `index`.
+ * Does not touch the result or its source chain. Anchor shifts left on index 0 the
+ * same way `prependToChain` / `insertIntoChain` do for ordinary nodes.
+ */
+function placeReferenceInChain(
+  draft: CalcDocument,
+  resultId: NodeId,
+  chainId: ChainId,
+  index: number,
+): void {
+  const result = draft.nodes[resultId];
+  const chain = draft.chains[chainId];
+  if (!result || result.kind !== 'result' || !chain) return;
+  // Defence in depth: probe keeps the result's chainId so own-chain is excluded,
+  // but refuse here too if a stale outcome somehow targets it.
+  if (result.chainId === chainId) return;
+
+  const reference = createReferenceNode({ x: 0, y: 0 }, resultId);
+  draft.nodes[reference.id] = reference;
+  reference.chainId = chainId;
+
+  const clamped = Math.max(0, Math.min(index, chain.members.length));
+  if (clamped === 0) {
+    const locale = getDeviceLocale();
+    chain.anchor = {
+      x: chain.anchor.x - widthOf(reference, locale, tokens.numeralFontSize, draft.nodes),
+      y: chain.anchor.y,
+    };
+  }
+  chain.members.splice(clamped, 0, reference.id);
+  finalizeChain(draft, chainId);
+}
+
+/**
+ * P6.7: NEW_CHAIN where one side is the dragged result — partner joins a fresh chain
+ * with a reference to R; R itself stays put. Anchor follows the same P3.5 rule as
+ * `formNewChain`: release point when the result (now the reference) is the left member.
+ */
+function placeReferenceInNewChain(
+  draft: CalcDocument,
+  resultId: NodeId,
+  outcome: Extract<SnapOutcome, { kind: 'newChain' }>,
+  position?: Vec2,
+): void {
+  const result = draft.nodes[resultId];
+  if (!result || result.kind !== 'result') return;
+  if (outcome.leftId !== resultId && outcome.rightId !== resultId) return;
+
+  const partnerId = outcome.leftId === resultId ? outcome.rightId : outcome.leftId;
+  const partner = draft.nodes[partnerId];
+  if (!partner || partnerId === resultId) return;
+
+  removeFromCurrentChain(draft, partnerId);
+  if (!draft.nodes[partnerId]) return;
+
+  const resultIsLeft = outcome.leftId === resultId;
+  const anchor = resultIsLeft
+    ? { x: (position ?? result.position).x, y: (position ?? result.position).y }
+    : { x: partner.position.x, y: partner.position.y };
+
+  const reference = createReferenceNode(
+    resultIsLeft ? { ...anchor } : { x: 0, y: 0 },
+    resultId,
+  );
+  draft.nodes[reference.id] = reference;
+
+  const leftId = resultIsLeft ? reference.id : partnerId;
+  const rightId = resultIsLeft ? partnerId : reference.id;
+
+  const chainId = createChainId();
+  draft.chains[chainId] = {
+    id: chainId,
+    anchor: { ...anchor },
+    members: [leftId, rightId],
+  };
+  draft.nodes[leftId]!.chainId = chainId;
+  draft.nodes[rightId]!.chainId = chainId;
+  finalizeChain(draft, chainId);
+}
+
+/** P6.7 / §11 drag-to-link: snap-commit a dragged result as a reference to it.
+ *  One undo entry. `snapping.ts` is untouched — only the commit substitutes a
+ *  reference for the result node. */
+function commitResultDragAsReference(
+  resultId: NodeId,
+  outcome: SnapOutcome,
+  position?: Vec2,
+): void {
+  useDocumentStore.getState().applyCommand((draft) => {
+    const result = draft.nodes[resultId];
+    if (!result || result.kind !== 'result') return;
+
+    switch (outcome.kind) {
+      case 'prepend':
+        placeReferenceInChain(draft, resultId, outcome.chainId, 0);
+        break;
+      case 'append': {
+        const chain = draft.chains[outcome.chainId];
+        if (!chain) return;
+        placeReferenceInChain(draft, resultId, outcome.chainId, chain.members.length);
+        break;
+      }
+      case 'insert':
+        placeReferenceInChain(draft, resultId, outcome.chainId, outcome.index);
+        break;
+      case 'newChain':
+        placeReferenceInNewChain(draft, resultId, outcome, position);
+        break;
+    }
+  });
+}
+
 /** Dispatch a P3.3 `SnapOutcome` onto the matching mutation command. One undo entry —
  *  each branch calls a single `applyCommand`. `position` is the drag release point in
  *  world units; required for NEW_CHAIN when the dragged node is the left member so the
- *  anchor is not taken from a stale store position (P3.5). */
+ *  anchor is not taken from a stale store position (P3.5).
+ *
+ *  P6.7: when the dragged node is a result, insert a reference to it instead of moving
+ *  the result (§11). Snapping itself is unchanged. */
 export function commitSnapOutcome(
   nodeId: NodeId,
   outcome: SnapOutcome,
   position?: Vec2,
 ): void {
+  const node = useDocumentStore.getState().document.nodes[nodeId];
+  if (node?.kind === 'result') {
+    commitResultDragAsReference(nodeId, outcome, position);
+    return;
+  }
+
   switch (outcome.kind) {
     case 'prepend':
       prependToChain(nodeId, outcome.chainId);

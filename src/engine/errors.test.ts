@@ -1,5 +1,7 @@
 import {
   explainEngineError,
+  explainCircularReference,
+  CIRCULAR_UNLINK_LABEL,
   resultCellContent,
   type EngineErrorKind,
 } from './errors';
@@ -30,6 +32,18 @@ describe('explainEngineError', () => {
     ];
     const texts = kinds.map(explainEngineError);
     expect(new Set(texts).size).toBe(kinds.length);
+  });
+});
+
+describe('explainCircularReference', () => {
+  test('names the cycle as A → B → A', () => {
+    expect(explainCircularReference(['Deposit', 'Interest'])).toBe(
+      'Circular: Deposit → Interest → Deposit',
+    );
+  });
+
+  test('empty labels fall back to the stub explanation', () => {
+    expect(explainCircularReference([])).toBe(explainEngineError('CircularReference'));
   });
 });
 
@@ -67,5 +81,26 @@ describe('resultCellContent', () => {
       dimmed: false,
       error: 'DivideByZero',
     });
+  });
+
+  test('CircularReference with cycle metadata names the cycle and reserves Unlink width', () => {
+    const cycle = {
+      chainIds: ['a', 'b'],
+      chainLabels: ['Alpha', 'Beta'],
+      closingReferenceNodeId: 'refB',
+    };
+    const content = resultCellContent({
+      display: '1',
+      computedAt: '2026-08-04T00:00:00.000Z',
+      outcome: { status: 'error', error: 'CircularReference', cycle },
+    });
+    expect(content).toEqual({
+      mode: 'error',
+      text: `${explainCircularReference(['Alpha', 'Beta'])} ${CIRCULAR_UNLINK_LABEL}`,
+      dimmed: false,
+      error: 'CircularReference',
+      cycle,
+    });
+    expect(content.mode === 'error' && content.text).not.toBe('?');
   });
 });

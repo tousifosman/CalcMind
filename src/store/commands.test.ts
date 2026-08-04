@@ -1166,6 +1166,166 @@ describe('continueFromResult (P4.9, §8.7)', () => {
   });
 });
 
+describe('P6.7 drag result into chain (§11)', () => {
+  /** Evaluated source chain ending in result R, plus a second chain to snap into. */
+  function seedSourceAndTarget(): {
+    sourceChainId: string;
+    resultId: string;
+    targetChainId: string;
+    targetLeft: string;
+    targetRight: string;
+  } {
+    const a = addNumberNode({ x: 0, y: 0 }, '5');
+    appendEqualsNode(a);
+    const sourceChainId = useDocumentStore.getState().document.nodes[a]!.chainId!;
+    const resultId = useDocumentStore
+      .getState()
+      .document.chains[sourceChainId]!.members.find(
+        (id) => useDocumentStore.getState().document.nodes[id]!.kind === 'result',
+      )!;
+
+    const targetLeft = addNumberNode({ x: 400, y: 0 }, '2');
+    const targetRight = addOperatorNode({ x: 440, y: 0 }, '+');
+    formNewChain(targetLeft, targetRight);
+    const targetChainId = useDocumentStore.getState().document.nodes[targetLeft]!.chainId!;
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    return { sourceChainId, resultId, targetChainId, targetLeft, targetRight };
+  }
+
+  test('append inserts a reference to R — not R itself, and not a value copy', () => {
+    const { sourceChainId, resultId, targetChainId, targetLeft, targetRight } =
+      seedSourceAndTarget();
+    const sourceMembersBefore = [
+      ...useDocumentStore.getState().document.chains[sourceChainId]!.members,
+    ];
+
+    commitSnapOutcome(resultId, { kind: 'append', chainId: targetChainId });
+
+    const doc = useDocumentStore.getState().document;
+    const target = doc.chains[targetChainId]!;
+    expect(target.members.slice(0, 2)).toEqual([targetLeft, targetRight]);
+    const insertedId = target.members[2]!;
+    expect(insertedId).not.toBe(resultId);
+    expect(doc.nodes[insertedId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: resultId,
+      chainId: targetChainId,
+    });
+    // Source keeps its own result at the same membership.
+    expect(doc.chains[sourceChainId]!.members).toEqual(sourceMembersBefore);
+    expect(doc.nodes[resultId]).toMatchObject({
+      kind: 'result',
+      chainId: sourceChainId,
+      sourceChainId,
+    });
+  });
+
+  test('prepend and insert also place a reference; source result unchanged', () => {
+    const { sourceChainId, resultId, targetChainId, targetLeft, targetRight } =
+      seedSourceAndTarget();
+
+    commitSnapOutcome(resultId, { kind: 'prepend', chainId: targetChainId });
+    let doc = useDocumentStore.getState().document;
+    const prepended = doc.chains[targetChainId]!.members[0]!;
+    expect(doc.nodes[prepended]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: resultId,
+    });
+    expect(doc.chains[targetChainId]!.members.slice(1)).toEqual([targetLeft, targetRight]);
+    expect(doc.nodes[resultId]!.chainId).toBe(sourceChainId);
+
+    // Undo back to the two-member target, then insert between them.
+    useDocumentStore.getState().undo();
+    commitSnapOutcome(resultId, { kind: 'insert', chainId: targetChainId, index: 1 });
+    doc = useDocumentStore.getState().document;
+    expect(doc.chains[targetChainId]!.members).toEqual([
+      targetLeft,
+      expect.any(String),
+      targetRight,
+    ]);
+    const mid = doc.chains[targetChainId]!.members[1]!;
+    expect(doc.nodes[mid]).toMatchObject({ kind: 'reference', targetNodeId: resultId });
+    expect(doc.nodes[resultId]!.chainId).toBe(sourceChainId);
+  });
+
+  test('newChain with a free node seeds [ref→R, free] or [free, ref→R]; R stays home', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '9');
+    appendEqualsNode(a);
+    const sourceChainId = useDocumentStore.getState().document.nodes[a]!.chainId!;
+    const resultId = useDocumentStore
+      .getState()
+      .document.chains[sourceChainId]!.members.find(
+        (id) => useDocumentStore.getState().document.nodes[id]!.kind === 'result',
+      )!;
+    const free = addNumberNode({ x: 300, y: 40 }, '3');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    // Dragged result on the right of the free node.
+    commitSnapOutcome(resultId, {
+      kind: 'newChain',
+      leftId: free,
+      rightId: resultId,
+    });
+
+    let doc = useDocumentStore.getState().document;
+    const chainRight = Object.values(doc.chains).find(
+      (c) => c.id !== sourceChainId && c.members.includes(free),
+    )!;
+    expect(chainRight.members).toHaveLength(2);
+    expect(chainRight.members[0]).toBe(free);
+    expect(doc.nodes[chainRight.members[1]!]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: resultId,
+    });
+    expect(doc.nodes[resultId]!.chainId).toBe(sourceChainId);
+    expect(doc.nodes[resultId]!.kind).toBe('result');
+
+    useDocumentStore.getState().undo();
+    const free2 = addNumberNode({ x: 500, y: 40 }, '4');
+    const release = { x: 450, y: 40 };
+    commitSnapOutcome(
+      resultId,
+      { kind: 'newChain', leftId: resultId, rightId: free2 },
+      release,
+    );
+
+    doc = useDocumentStore.getState().document;
+    const chainLeft = Object.values(doc.chains).find(
+      (c) => c.id !== sourceChainId && c.members.includes(free2),
+    )!;
+    expect(doc.nodes[chainLeft.members[0]!]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: resultId,
+    });
+    expect(chainLeft.members[1]).toBe(free2);
+    expect(chainLeft.anchor).toEqual(release);
+    expect(doc.nodes[resultId]!.chainId).toBe(sourceChainId);
+  });
+
+  test('one undo entry; undo removes the reference and leaves the source result', () => {
+    const { sourceChainId, resultId, targetChainId } = seedSourceAndTarget();
+    const sourceMembers = [
+      ...useDocumentStore.getState().document.chains[sourceChainId]!.members,
+    ];
+
+    commitSnapOutcome(resultId, { kind: 'append', chainId: targetChainId });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+    const refId = useDocumentStore
+      .getState()
+      .document.chains[targetChainId]!.members.find(
+        (id) => useDocumentStore.getState().document.nodes[id]!.kind === 'reference',
+      )!;
+
+    useDocumentStore.getState().undo();
+    const doc = useDocumentStore.getState().document;
+    expect(doc.nodes[refId]).toBeUndefined();
+    expect(doc.chains[targetChainId]!.members).not.toContain(refId);
+    expect(doc.chains[sourceChainId]!.members).toEqual(sourceMembers);
+    expect(doc.nodes[resultId]).toMatchObject({ kind: 'result', chainId: sourceChainId });
+  });
+});
+
 
 describe('P4.8 recompute on edit', () => {
   test('editing an input updates the result in the same commit (section 14)', () => {

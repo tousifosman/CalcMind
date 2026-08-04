@@ -41,6 +41,7 @@ import {
   crossedDetachDistance,
   decideDragRelease,
   resolveNodeDragMode,
+  snapProbeChainId,
   type NodeDragMode,
 } from './dragLifecycle';
 
@@ -166,12 +167,16 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       const current = document.nodes[nodeId];
       if (!current) return;
 
-      // Once past DETACH_DISTANCE, probe as free so the vacated chain can become a
-      // candidate again — hysteresis (DETACH > SNAP) stops an immediate re-snap (§8.2).
+      // Probe chainId: null once detached for ordinary members (§8.2 hysteresis);
+      // results keep theirs (P6.7 — see snapProbeChainId).
       const probe = {
         ...current,
         position,
-        chainId: sess.detached ? null : current.chainId,
+        chainId: snapProbeChainId({
+          storeChainId: current.chainId,
+          detached: sess.detached,
+          kind: current.kind,
+        }),
       };
       const locale = getDeviceLocale();
       const neighbours = makeSnappingNeighbours(document.chains, document.nodes, locale);
@@ -208,15 +213,18 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
 
       if (!sess) return;
 
+      const dragged = useDocumentStore.getState().document.nodes[nodeId];
       const decision = decideDragRelease({
         wasChained: sess.wasChained,
         detached: sess.detached,
         candidate,
         position,
+        isResult: dragged?.kind === 'result',
       });
 
       switch (decision.kind) {
         case 'snap':
+          // Result → reference substitution lives in commitSnapOutcome (P6.7 / §11).
           commitSnapOutcome(nodeId, decision.outcome, position);
           break;
         case 'detach':

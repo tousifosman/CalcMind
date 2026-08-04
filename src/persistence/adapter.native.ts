@@ -145,6 +145,10 @@ async function readDocument(id: string): Promise<string> {
   return readFile(primaryPath(id), 'utf8');
 }
 
+async function readBackupDocument(id: string): Promise<string> {
+  return readFile(bakPath(id), 'utf8');
+}
+
 async function removeDocument(id: string): Promise<void> {
   await unlinkIfExists(primaryPath(id));
   await unlinkIfExists(bakPath(id));
@@ -213,6 +217,7 @@ export function createNativeStorageAdapter(): StorageAdapter {
     read: readDocument,
     write: atomicWrite,
     remove: removeDocument,
+    readBackup: readBackupDocument,
     exportDocument,
     importDocument,
   };

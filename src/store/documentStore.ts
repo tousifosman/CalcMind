@@ -6,6 +6,11 @@
 // edit and the cascaded results in one entry, and no committed frame shows a
 // stale-but-undimmed result. The dirty set (seed ∪ transitive dependents) lives in
 // `engine/graph.ts`'s `dirtyClosure`; this store API stayed stable through P6.2.
+//
+// Persistence dirty signalling (P5.6, §12.3): mutations notify an optional listener
+// rather than importing autosave — §5 forbids store → persistence. The app shell
+// wires the listener to the autosave controller. Undo/redo notify too so autosave
+// and undo stay independent (§13).
 import { create } from 'zustand';
 import { produceWithPatches, applyPatches, enablePatches, type Patch } from 'immer';
 import { CalcDocument, ChainId, Vec2, ZOOM_MIN, ZOOM_MAX } from '../model/types';
@@ -29,10 +34,28 @@ export interface ApplyCommandOptions {
   locale?: string;
 }
 
+type DirtyHandler = () => void;
+
+let dirtyHandler: DirtyHandler | null = null;
+
+/**
+ * Register the persistence dirty listener (autosave). Pass `null` to detach.
+ * Lives outside the zustand state so wiring it does not re-render subscribers.
+ */
+export function setDocumentDirtyHandler(handler: DirtyHandler | null): void {
+  dirtyHandler = handler;
+}
+
+function notifyDocumentDirty(): void {
+  dirtyHandler?.();
+}
+
 export interface DocumentState {
   document: CalcDocument;
   undoStack: HistoryEntry[];
   redoStack: HistoryEntry[];
+  /** ISO timestamp of the last successful autosave write; null until one lands. */
+  lastSavedAt: string | null;
 
   /** Apply a mutating recipe to the document as a single undoable command.
    *  This is the only way command implementations (store/commands.ts) should
@@ -44,6 +67,15 @@ export interface DocumentState {
    *  should not also move the camera). Zoom is clamped to [ZOOM_MIN, ZOOM_MAX]. */
   setViewport: (partial: Partial<{ pan: Vec2; zoom: number }>) => void;
 
+  /** Surfaced by autosave after a successful write (§12.3). */
+  setLastSavedAt: (savedAt: string | null) => void;
+
+  /**
+   * Replace the in-memory document without marking dirty (load / new-document).
+   * Caller must `prepareDocumentSwitch` on autosave first so the previous doc is flushed.
+   */
+  replaceDocument: (document: CalcDocument) => void;
+
   undo: () => void;
   redo: () => void;
   canUndo: () => boolean;
@@ -54,6 +86,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   document: createEmptyDocument(),
   undoStack: [],
   redoStack: [],
+  lastSavedAt: null,
 
   applyCommand: (recipe, options) => {
     const { document } = get();
@@ -85,21 +118,45 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       undoStack: [...state.undoStack, { patches, inversePatches }].slice(-MAX_HISTORY),
       redoStack: [],
     }));
+    notifyDocumentDirty();
   },
 
   setViewport: (partial) => {
-    set((state) => ({
+    const { document } = get();
+    const nextZoom =
+      partial.zoom === undefined
+        ? document.viewport.zoom
+        : Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, partial.zoom));
+    const nextPan = partial.pan ?? document.viewport.pan;
+    if (
+      nextPan.x === document.viewport.pan.x &&
+      nextPan.y === document.viewport.pan.y &&
+      nextZoom === document.viewport.zoom
+    ) {
+      return;
+    }
+    set({
       document: {
-        ...state.document,
-        viewport: {
-          pan: partial.pan ?? state.document.viewport.pan,
-          zoom:
-            partial.zoom === undefined
-              ? state.document.viewport.zoom
-              : Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, partial.zoom)),
-        },
+        ...document,
+        viewport: { pan: nextPan, zoom: nextZoom },
       },
-    }));
+    });
+    // Viewport is persisted with the document (§12.1) even though it is outside
+    // undo (§7) — a reopen should restore the camera.
+    notifyDocumentDirty();
+  },
+
+  setLastSavedAt: (savedAt) => {
+    set({ lastSavedAt: savedAt });
+  },
+
+  replaceDocument: (document) => {
+    set({
+      document,
+      undoStack: [],
+      redoStack: [],
+      lastSavedAt: null,
+    });
   },
 
   undo: () => {
@@ -111,6 +168,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       undoStack: state.undoStack.slice(0, -1),
       redoStack: [...state.redoStack, entry],
     }));
+    notifyDocumentDirty();
   },
 
   redo: () => {
@@ -122,6 +180,7 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
       redoStack: state.redoStack.slice(0, -1),
       undoStack: [...state.undoStack, entry],
     }));
+    notifyDocumentDirty();
   },
 
   canUndo: () => get().undoStack.length > 0,
