@@ -997,6 +997,8 @@ export interface StorageAdapter {
   read(id: string): Promise<string>;
   write(id: string, json: string): Promise<void>;   // must be atomic
   remove(id: string): Promise<void>;
+  /** Optional: one-generation `.bak` (native). Load falls back here when primary is missing or not valid JSON. */
+  readBackup?(id: string): Promise<string>;
   /** Optional: OS share sheet (native) or file download (web). */
   exportDocument?(id: string): Promise<void>;
   /** Optional: file picker → raw JSON string. */
@@ -1068,6 +1070,7 @@ Key safety properties:
 ### 12.4 Migrations
 
 ```ts
+// persistence/migrations/index.ts
 type Migration = { from: number; to: number; migrate: (doc: unknown) => unknown };
 export const CURRENT_SCHEMA_VERSION = 1;
 export const migrations: Migration[] = []; // v1 is the origin
@@ -1075,7 +1078,10 @@ export const migrations: Migration[] = []; // v1 is the origin
 
 Applied in ascending order until `doc.schemaVersion === CURRENT_SCHEMA_VERSION`. Every migration
 gets a fixture pair (`before.json` / `after.json`) committed as a test — migrations are the code
-most likely to silently eat data and the least likely to be exercised by hand.
+most likely to silently eat data and the least likely to be exercised by hand. The harness lives
+in `src/persistence/migrations/`; the fixture rule is restated at the top of that module so the
+next author cannot miss it. A synthetic v0→v1 fixture pair proves the runner before any real
+migration ships (production `migrations` stays empty while v1 is current).
 
 ---
 

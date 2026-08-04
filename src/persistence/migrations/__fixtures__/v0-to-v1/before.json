@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 0,
+  "id": "doc_synth_v0",
+  "title": "Synthetic origin",
+  "createdAt": "2026-08-02T10:00:00.000Z",
+  "updatedAt": "2026-08-02T10:00:00.000Z",
+  "viewport": { "pan": { "x": 10, "y": 20 }, "zoom": 1 },
+  "nodes": {
+    "n1": {
+      "id": "n1",
+      "kind": "number",
+      "raw": "42",
+      "position": { "x": 0, "y": 0 },
+      "chainId": null,
+      "createdAt": 1
+    }
+  },
+  "chains": {}
+}

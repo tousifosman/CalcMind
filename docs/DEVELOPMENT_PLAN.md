@@ -71,7 +71,7 @@ flowchart LR
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
-| **P5** | Persistence | 8 | In progress — P5.1 and P5.3 done; parallel with P6 |
+| **P5** | Persistence | 8 | In progress — P5.1–P5.3, P5.5, P5.7 done; P5.4 / P5.6 / P5.8 remain |
 | **P6** | Linking | 8 | In progress — P6.1 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
@@ -759,12 +759,12 @@ flowchart LR
     style P31 fill:#22A75B,color:#fff
     style P48 fill:#22A75B,color:#fff
     style P51 fill:#22A75B,color:#fff
-    style P52 fill:#8892A0,color:#fff
+    style P52 fill:#22A75B,color:#fff
     style P53 fill:#22A75B,color:#fff
-    style P54 fill:#8892A0,color:#fff
-    style P55 fill:#8892A0,color:#fff
-    style P56 fill:#8892A0,color:#fff
-    style P57 fill:#8892A0,color:#fff
+    style P54 fill:#E8A838,color:#fff
+    style P55 fill:#22A75B,color:#fff
+    style P56 fill:#E8A838,color:#fff
+    style P57 fill:#22A75B,color:#fff
     style P58 fill:#8892A0,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
@@ -773,11 +773,10 @@ Green = done, amber = ready to start, grey = blocked on a dependency, purple = t
 gate. Neither `P5.1` nor `P5.3` carries a task-level dependency of its own — the phase text above
 just says "depends only on P4" — but the plan sequences both behind P4's own phase-exit check
 rather than jumping the queue the moment either task's box would otherwise look open, shown here
-as a gate from P4's tracking issue rather than an individual P4 subtask. `P5.5` is the one task
-that reaches outside the phase for real, task-level dependencies: `P3.1` (chain layout, already
-done) and `P4.8` (recompute on edit, already done). Kept current by hand alongside the
-acceptance-criteria boxes below — if a task's status here disagrees with its boxes, the boxes win
-and this diagram is stale.
+as a gate from P4's tracking issue rather than an individual P4 subtask. `P5.2` / `P5.5` /
+`P5.7` done; `P5.4` and `P5.6` remain independently ready; `P5.8` still waits on `P5.4`. Kept
+current by hand alongside the acceptance-criteria boxes below — if a task's status here
+disagrees with its boxes, the boxes win and this diagram is stale.
 
 ### P5.1 — Serialiser
 
@@ -802,13 +801,13 @@ decision #7.
 **Touches.** `src/model/schema.ts`, `src/persistence/load.ts`.
 **Depends on.** P5.1.
 
-- [ ] zod validates every loaded document. Failures name the offending field, and **nothing
+- [x] zod validates every loaded document. Failures name the offending field, and **nothing
       partial** reaches the store.
-- [ ] `schemaVersion` greater than `CURRENT_SCHEMA_VERSION` → **refused with a clear message**, and
+- [x] `schemaVersion` greater than `CURRENT_SCHEMA_VERSION` → **refused with a clear message**, and
       the file is left untouched. Guessing at an unknown shape corrupts the user's work
       (decision #7).
-- [ ] Malformed JSON is a handled outcome, not a crash.
-- [ ] Tests for malformed, newer-schema, and structurally-invalid-but-parseable files.
+- [x] Malformed JSON is a handled outcome, not a crash.
+- [x] Tests for malformed, newer-schema, and structurally-invalid-but-parseable files.
 
 ### P5.3 — Storage adapter and native implementation
 
@@ -826,6 +825,8 @@ decision #7.
 `@dr.pogodin/react-native-fs` exposes no `fsync`; `writeFile`'s resolved promise is the flush
 barrier before rename (Android closes/flushes the stream; see journal). Shared behavioural
 contract tests live in `adapter.sharedTests.ts` for P5.4 to reuse against the web adapter.
+`readBackup` is optional on the adapter; the native implementation exposes it so P5.5 can
+recover when the primary is missing or corrupt without extending `read()` beyond §12.2.
 
 ### P5.4 — Web adapter
 
@@ -846,14 +847,14 @@ contract tests live in `adapter.sharedTests.ts` for P5.4 to reuse against the we
 **Touches.** `src/persistence/load.ts`.
 **Depends on.** P5.2, P5.3, P3.1, P4.8.
 
-- [ ] Exactly the §12.3 order: read → JSON check (`.bak` fallback) → version check → migrate → zod
+- [x] Exactly the §12.3 order: read → JSON check (`.bak` fallback) → version check → migrate → zod
       validate → normalise arrays to maps → run chain layout → evaluate all chains topologically →
       ready.
-- [ ] A corrupt primary recovers from `.bak`. If **both** fail, report unreadable and **do not
+- [x] A corrupt primary recovers from `.bak`. If **both** fail, report unreadable and **do not
       overwrite either** (§12.3).
-- [ ] `derived` from the file paints immediately, then the engine recomputes and overwrites it; on
+- [x] `derived` from the file paints immediately, then the engine recomputes and overwrites it; on
       disagreement the engine wins, silently (§12.1, decision #6).
-- [ ] Test: corrupt the primary file, assert `.bak` recovery.
+- [x] Test: corrupt the primary file, assert `.bak` recovery.
 
 ### P5.6 — Autosave
 
@@ -879,11 +880,11 @@ too).
 **Touches.** `src/persistence/migrations/`.
 **Depends on.** P5.2.
 
-- [ ] `Migration` type and an ascending runner per §12.4. `migrations` stays **empty** — v1 is the
+- [x] `Migration` type and an ascending runner per §12.4. `migrations` stays **empty** — v1 is the
       origin.
-- [ ] The harness is proven with a synthetic v0→v1 fixture pair, so the machinery is exercised
+- [x] The harness is proven with a synthetic v0→v1 fixture pair, so the machinery is exercised
       before real user data depends on it.
-- [ ] The rule that every future migration ships a `before.json` / `after.json` fixture pair is
+- [x] The rule that every future migration ships a `before.json` / `after.json` fixture pair is
       documented where the next author will see it (§12.4: migrations are the code most likely to
       silently eat data and least likely to be exercised by hand).
 

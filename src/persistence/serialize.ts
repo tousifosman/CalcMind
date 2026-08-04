@@ -84,12 +84,24 @@ export function serializeDocument(doc: CalcDocument): string {
 }
 
 /**
- * Structural inverse of `serializeDocument`: arrays → Records, drop `$schema`.
- * Does **not** validate (P5.2) and does **not** re-run layout (P5.5) — positions come
- * back as written, which is what the round-trip equality test needs.
+ * Structural inverse of `toSerializedDocument`: arrays → Records, drop `$schema`.
+ * Does **not** validate (call {@link validateWireDocument} first) and does **not**
+ * re-run layout — positions come back as written until the load pipeline (P5.5)
+ * replaces member positions via `layoutChain`.
  */
-export function deserializeDocument(json: string): CalcDocument {
-  const raw = JSON.parse(json) as SerializedDocument;
+export function fromSerializedDocument(
+  raw: Pick<
+    SerializedDocument,
+    | 'schemaVersion'
+    | 'id'
+    | 'name'
+    | 'createdAt'
+    | 'updatedAt'
+    | 'viewport'
+    | 'nodes'
+    | 'chains'
+  >,
+): CalcDocument {
   const nodes: Record<NodeId, CalcNode> = {};
   for (const node of raw.nodes) {
     nodes[node.id] = node;
@@ -108,4 +120,14 @@ export function deserializeDocument(json: string): CalcDocument {
     nodes,
     chains,
   };
+}
+
+/**
+ * Structural inverse of `serializeDocument`: parse JSON, arrays → Records, drop `$schema`.
+ * Does **not** validate (P5.2) and does **not** re-run layout (P5.5) — positions come
+ * back as written, which is what the round-trip equality test needs.
+ */
+export function deserializeDocument(json: string): CalcDocument {
+  const raw = JSON.parse(json) as SerializedDocument;
+  return fromSerializedDocument(raw);
 }
