@@ -82,3 +82,7 @@ yarn-error.log
 
 # typescript
 *.tsbuildinfo
+
+# Accidental nested clones / agent worktrees under the repo root
+/CalcMind/
+/copilot-worktrees/

@@ -69,7 +69,7 @@ flowchart LR
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
-| **P4** | Engine | 9 | **6/9** — P4.1–P4.6 done; P4.7–P4.9 next |
+| **P4** | Engine | 9 | **7/9** — P4.1–P4.7 done; P4.8–P4.9 next |
 | **P5** | Persistence | 8 | Blocked on P4 |
 | **P6** | Linking | 8 | Blocked on P4, parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
@@ -513,7 +513,7 @@ flowchart LR
     P44["~~P4.4~~<br/>~~Evaluator~~<br/>#52"]
     P45["~~P4.5~~<br/>~~Display formatter~~<br/>#53"]
     P46["~~P4.6~~<br/>~~Error rendering~~<br/>#54"]
-    P47["P4.7<br/>Result lifecycle<br/>#55"]
+    P47["~~P4.7~~<br/>~~Result lifecycle~~<br/>#55"]
     P48["P4.8<br/>Recompute on edit<br/>#56"]
     P49["P4.9<br/>Continuation<br/>#57"]
     EXIT(["Phase exit check<br/>#58"])
@@ -546,7 +546,7 @@ flowchart LR
     style P44 fill:#22A75B,color:#fff
     style P45 fill:#22A75B,color:#fff
     style P46 fill:#22A75B,color:#fff
-    style P47 fill:#F0A020,color:#fff
+    style P47 fill:#22A75B,color:#fff
     style P48 fill:#8892A0,color:#fff
     style P49 fill:#8892A0,color:#fff
     style EXIT fill:#7030A0,color:#fff
@@ -648,7 +648,7 @@ punctuated).
       reference app and applies to engine errors, not just broken links.
 - [x] A component test per state.
 
-### P4.7 — Result node lifecycle
+### ~~P4.7 — Result node lifecycle~~
 
 **Objective.** `=` creates a result; removing `=` removes it.
 **Architecture.** §9 (`Valid → Evaluated → Valid`), §8.3 (a chain losing `=` loses its result), §6
@@ -656,12 +656,12 @@ punctuated).
 **Touches.** `src/store/commands.ts`.
 **Depends on.** P4.5, P3.4.
 
-- [ ] Appending `=` to a `Valid` chain creates a `ResultNode` with `sourceChainId` set.
-- [ ] Removing `=` deletes the result node (§8.3).
-- [ ] The result is read-only; edit attempts are rejected, not silently swallowed.
-- [ ] `derived` is written as a cache and **never trusted on read** — the engine always wins,
+- [x] Appending `=` to a `Valid` chain creates a `ResultNode` with `sourceChainId` set.
+- [x] Removing `=` deletes the result node (§8.3).
+- [x] The result is read-only; edit attempts are rejected, not silently swallowed.
+- [x] `derived` is written as a cache and **never trusted on read** — the engine always wins,
       silently (§6, §12.1).
-- [ ] Integration test: create → snap → `=` → result (§14).
+- [x] Integration test: create → snap → `=` → result (§14).
 
 ### P4.8 — Recompute on edit
 
