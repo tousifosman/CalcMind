@@ -16,6 +16,7 @@ import { rolePalette, glyphColor } from '../ui/tokens';
 import { getDeviceLocale } from '../ui/locale';
 import { commandFromHardwareKey, dispatchEditorCommand } from '../keypad/keymap';
 import { Cell, glyphTextStyle } from './Cell';
+import { useSourceIdentityHue } from './useIdentityHue';
 
 interface NumberNodeProps {
   id: NodeId;
@@ -24,6 +25,7 @@ interface NumberNodeProps {
 function NumberNodeComponent({ id }: NumberNodeProps) {
   const node = useNode(id);
   const isEditing = useUiStore((state) => state.editingNodeId === id);
+  const identityHue = useSourceIdentityHue(id);
   const inputRef = useRef<TextInput>(null);
 
   // Web only, same trade as Canvas.tsx's onWheel and AppShell's keydown listener (no DOM lib
@@ -126,6 +128,7 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
       fill={palette.fill}
       border={palette.border}
       label={node.label}
+      identityHue={identityHue}
     >
       {isEditing ? (
         <TextInput

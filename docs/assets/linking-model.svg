@@ -13,7 +13,7 @@
       <path d="M0 1 L9 5 L0 9 z" fill="#2F6BFF"/>
     </marker>
     <marker id="arrow_g" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-      <path d="M0 1 L9 5 L0 9 z" fill="#22A75B"/>
+      <path d="M0 1 L9 5 L0 9 z" fill="#0D8A4A"/>
     </marker>
     <clipPath id="clipOut_a"><rect x="0" y="0" width="416" height="108" rx="12"/></clipPath>
     <clipPath id="clipIn_a"><rect x="4" y="4" width="408" height="100" rx="7"/></clipPath>
@@ -24,7 +24,7 @@
   </defs>
 
     <path d="M402.0 154 C402.0 196.0, 204.0 196.0, 204.0 238" fill="none" stroke="#2F6BFF" stroke-width="5" marker-end="url(#arrow_b)"/>
-    <path d="M512.0 358 C512.0 400.0, 314.0 400.0, 314.0 442" fill="none" stroke="#22A75B" stroke-width="5" marker-end="url(#arrow_g)"/>
+    <path d="M512.0 358 C512.0 400.0, 314.0 400.0, 314.0 442" fill="none" stroke="#0D8A4A" stroke-width="5" marker-end="url(#arrow_g)"/>
 
     <g transform="translate(40 46)">
       <g clip-path="url(#clipOut_a)">
@@ -68,7 +68,7 @@
       <rect x="157" y="4" width="100" height="100" fill="#44BDAD"/>
       <rect x="257" y="4" width="55" height="100" fill="#7030A0"/>
       <rect x="312" y="4" width="100" height="100" fill="url(#dots)"/>
-      <rect x="315" y="7" width="94" height="94" fill="none" stroke="#22A75B" stroke-width="6"/>
+      <rect x="315" y="7" width="94" height="94" fill="none" stroke="#0D8A4A" stroke-width="6"/>
       </g>
       <g fill="#FFFFFF" font-family="Montserrat, 'Trebuchet MS', 'Helvetica Neue', Arial, sans-serif" font-weight="800" font-size="50" text-anchor="middle">
       <text x="54.0" y="79">35</text>
@@ -84,14 +84,14 @@
     </g>
     <g transform="translate(260 454)">
       <g clip-path="url(#clipOut_c)">
-      <rect x="0" y="0" width="104" height="108" fill="#22A75B"/>
+      <rect x="0" y="0" width="104" height="108" fill="#0D8A4A"/>
       <rect x="104" y="0" width="53" height="108" fill="#FFD78E"/>
       <rect x="157" y="0" width="100" height="108" fill="#8CE0D2"/>
       <rect x="257" y="0" width="55" height="108" fill="#AA557F"/>
       <rect x="312" y="0" width="104" height="108" fill="#FFA3A0"/>
       </g>
       <g clip-path="url(#clipIn_c)">
-      <rect x="4" y="4" width="100" height="100" fill="#22A75B"/>
+      <rect x="4" y="4" width="100" height="100" fill="#0D8A4A"/>
       <rect x="104" y="4" width="53" height="100" fill="#FFBF28"/>
       <rect x="157" y="4" width="100" height="100" fill="#44BDAD"/>
       <rect x="257" y="4" width="55" height="100" fill="#7030A0"/>

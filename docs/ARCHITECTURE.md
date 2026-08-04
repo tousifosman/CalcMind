@@ -73,6 +73,19 @@ The reference raster has a cell height of 256px. Tokens below are that geometry 
 | result | `#FF7E79` + dot texture `#FFD1CF` | `#FFA3A0` |
 | numerals / glyphs | `#FFFFFF` | — |
 
+| Identity (link) | Swatch | Notes |
+|---|---|---|
+| 1 | `#2F6BFF` | blue — first-guess kept |
+| 2 | `#0D8A4A` | green — deepened vs `#22A75B` (deutan vs result) |
+| 3 | `#880E4F` | magenta — deepened vs `#E0479E` (deutan vs number) |
+| 4 | `#00B8D9` | cyan — first-guess kept |
+| 5 | `#B8860B` | gold — replaces `#8E6E53` (protan vs result) |
+| 6 | `#560BAD` | violet — replaces `#5B4CC4` (protan vs equals) |
+
+Identity hues are render-time only (decision #12, §11.1). Validated under Machado et al.
+(2009) protanopia/deuteranopia simulation to ΔE₇₆ ≥ 15 against every other identity swatch
+and the structural fills above (P6.8); method locked in `src/ui/paletteAccessibility.ts`.
+
 The result texture is a 4×4 unit tile with 1-unit dots at `(1,0)` and `(3,2)`.
 
 ### 1.3 Reference app: what Tydlig actually does
@@ -886,14 +899,17 @@ identity, not just by a line.**
 
 Rules that follow from this:
 
-- Hues are assigned from a fixed palette (`#2F6BFF`, `#22A75B`, `#E0479E`, `#00B8D9`, `#8E6E53`,
-  `#5B4CC4`, …), chosen to stay distinguishable from the structural teal/amber/purple/salmon and
-  from each other. The palette must be checked for deuteranopia/protanopia before it ships —
-  colour is load-bearing here, so it cannot be the *only* channel: the connector line and the
-  long-press `Unlink from parent` affordance carry the same information non-chromatically.
+- Hues are assigned from a fixed palette (`#2F6BFF`, `#0D8A4A`, `#880E4F`, `#00B8D9`, `#B8860B`,
+  `#560BAD`), chosen to stay distinguishable from the structural teal/amber/purple/salmon and
+  from each other. Validated for deuteranopia/protanopia (P6.8) — colour is load-bearing here,
+  so it is still not the *only* channel: the connector line and the long-press `Unlink from
+  parent` affordance carry the same information non-chromatically.
 - Hue is a **render-time property derived from the graph**, never persisted. Reopening a document
   reassigns hues deterministically by traversal order, so they are stable across loads without
-  being stored.
+  being stored. Implemented in `src/engine/identity.ts`: identity-bearing node ids (referenced
+  or labelled) are sorted lexicographically and coloured from `identityHues` in `ui/tokens.ts`.
+  Sorting, not `Object.keys` insertion order, is what keeps save→reload assignment identical
+  (serialize writes nodes sorted by id).
 - Connectors are drawn for **all** links by default, not only the selected one. Tydlig hides them
   until you swipe and the review calls that out as confusing; showing them costs a little visual
   noise and buys comprehension. If density becomes a problem, fade unselected connectors rather
@@ -1182,6 +1198,9 @@ fits long-press. `Select group` remains the dwell-free alternative (§8.6). Cont
 5. **Labels** — modelled on the node base (§6) and observed to be a headline feature rather than a
    nicety. Open question is only *when*: a labelled canvas is far more readable than an unlabelled
    one, so this may deserve to land before P7.
-6. **Identity palette accessibility** — the hue set in §11.1 is a first guess and has not been
-   checked for colour-blind distinguishability. Must be validated before P6 ships, since colour
-   carries link identity.
+6. ~~**Identity palette accessibility**~~ — **resolved (P6.8).** Machado et al. (2009)
+   protanopia/deuteranopia simulation; ΔE₇₆ ≥ 15 for every identity×identity pair and every
+   identity×structural pair. Four of the six first-guess swatches failed and were replaced
+   (§1.2). Method locked in `src/ui/paletteAccessibility.ts`; results in the journal.
+   Non-chromatic channels (connector line, `Unlink from parent`) remain required — hue is
+   never the only carrier (§11.1).

@@ -1,7 +1,6 @@
 // Shared display string for a reference cell (P4.9). Layout (`widthOf`) and the
 // ReferenceNode view must agree on what text is shown so hit-test boxes match glyphs.
-// Identity hue is P6.5 — until then a reference is uncoloured but still shows the
-// target's live display (§8.7 / P4.9 acceptance: "no hue yet is correct").
+// Identity hue is assigned by `engine/identity.ts` (P6.5) and applied in ReferenceNode.
 import { formatForDisplay } from '../engine/format';
 import { resultCellContent } from '../engine/errors';
 import type { CalcNode, NodeId, ReferenceNode } from '../model/types';

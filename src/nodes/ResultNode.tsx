@@ -23,6 +23,7 @@ import {
   RESULT_ERROR_FONT_SIZE,
 } from '../engine/errors';
 import { Cell, glyphTextStyle } from './Cell';
+import { useSourceIdentityHue } from './useIdentityHue';
 
 /** Opacity for a §9 Stale result — previous value stays readable but clearly not current. */
 export const STALE_RESULT_OPACITY = 0.45;
@@ -33,6 +34,7 @@ interface ResultNodeProps {
 
 function ResultNodeComponent({ id }: ResultNodeProps) {
   const node = useNode(id);
+  const identityHue = useSourceIdentityHue(id);
   if (!node || node.kind !== 'result') return null;
 
   const locale = getDeviceLocale();
@@ -59,6 +61,7 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
       fill={palette.fill}
       border={palette.border}
       label={node.label}
+      identityHue={identityHue}
     >
       {isCircular && content.cycle ? (
         <View style={styles.circularRow} testID={`result-node-${id}-circular`}>

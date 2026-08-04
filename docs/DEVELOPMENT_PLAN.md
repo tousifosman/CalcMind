@@ -72,7 +72,7 @@ flowchart LR
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | **P5** | Persistence | 8 | In progress — P5.1–P5.3, P5.5, P5.7 done; P5.4 / P5.6 / P5.8 remain |
-| **P6** | Linking | 8 | In progress — P6.1–P6.3 done; parallel with P5 |
+| **P6** | Linking | 8 | In progress — P6.1–P6.3, P6.5, P6.8 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -957,10 +957,10 @@ flowchart LR
     style P63 fill:#22A75B,color:#fff
 
     style P64 fill:#E8A838,color:#fff
-    style P65 fill:#E8A838,color:#fff
-    style P66 fill:#8892A0,color:#fff
+    style P65 fill:#22A75B,color:#fff
+    style P66 fill:#E8A838,color:#fff
     style P67 fill:#E8A838,color:#fff
-    style P68 fill:#8892A0,color:#fff
+    style P68 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
@@ -968,7 +968,9 @@ Green = done, amber = ready to start, grey = blocked on a dependency, purple = t
 gate. `P4.8` (recompute on edit) is done, so `P6.1` is no longer gated on a cross-phase
 dependency — everything else here is downstream of it. `P2.9` and `P3.5` are already-done
 prerequisites for `P6.4` and `P6.7` respectively, shown as separate external nodes rather than
-folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. Kept
+folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. `P6.2`
+and `P6.3` are done on `main`; `P6.5` unblocked `P6.6` and `P6.8` and both hue tasks are now
+done (`P6.6` still open for connector drawing). Kept
 current by hand alongside the acceptance-criteria boxes below — if a task's status here disagrees
 with its boxes, the boxes win and this diagram is stale.
 
@@ -1036,14 +1038,14 @@ punctuate — the review's sharpest criticism of the reference app).
 **Touches.** `src/engine/identity.ts`, node components.
 **Depends on.** P6.1.
 
-- [ ] A value acquires an identity when it is **referenced OR labelled** — either alone is enough.
+- [x] A value acquires an identity when it is **referenced OR labelled** — either alone is enough.
       The reference-only rule was wrong; see §11.1 and `2026-08-03` revision 1.
-- [ ] No identity → **no hue**. Colour is spent only where it carries information (§11.1).
-- [ ] Every reference to a value is filled with that value's hue, so two cells sharing a hue are
+- [x] No identity → **no hue**. Colour is spent only where it carries information (§11.1).
+- [x] Every reference to a value is filled with that value's hue, so two cells sharing a hue are
       the same value wherever they sit.
-- [ ] Hue is **derived at render time from traversal order and never persisted** (decision #12), so
+- [x] Hue is **derived at render time from traversal order and never persisted** (decision #12), so
       it is stable across loads without occupying the schema.
-- [ ] Test: save, reload, assert identical hue assignment.
+- [x] Test: save, reload, assert identical hue assignment.
 
 ### P6.6 — Connector rendering
 
@@ -1086,11 +1088,11 @@ sharing the canvas transform), decision #13.
 > **This blocks P6 shipping.** §11.1 states the hue set is a first guess and must be checked for
 > deuteranopia/protanopia before release, because colour carries link identity.
 
-- [ ] The identity palette is simulated for deuteranopia and protanopia. Adjacent-hue pairs are
+- [x] The identity palette is simulated for deuteranopia and protanopia. Adjacent-hue pairs are
       checked against each other **and** against the structural teal/amber/purple/salmon (§1.2).
-- [ ] Failing hues are replaced, with `ui/tokens.ts` and §1.2 updated together.
-- [ ] Confirmed that a link is still identifiable with hue ignored entirely (§11.1).
-- [ ] Method and result recorded in the journal, so the check is repeatable rather than
+- [x] Failing hues are replaced, with `ui/tokens.ts` and §1.2 updated together.
+- [x] Confirmed that a link is still identifiable with hue ignored entirely (§11.1).
+- [x] Method and result recorded in the journal, so the check is repeatable rather than
       re-litigated. If the first-guess palette turns out fine, that is still a `Now known:` line.
 
 ### Phase exit check — P6
