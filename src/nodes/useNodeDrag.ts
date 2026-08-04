@@ -1,7 +1,9 @@
 // Node drag gesture (§8.2, P3.5 / P3.7). Position lives in Reanimated shared values every
 // frame; the document store is written only on release via P3.4 / P3.7 commands (§11.4).
 // Snap candidates are recomputed on the JS thread each update and published to
-// `uiStore.dragSnap` for the insertion caret (P3.6) — ephemeral, outside undo.
+// `uiStore.dragSnap` — ephemeral, outside undo. NodeLayer reads that feed for the
+// §8.3 insertion gap + caret (P3.6); this hook never writes document positions
+// mid-drag, so the preview can open and close without touching undo history.
 //
 // MovingChain (P3.7): hold then drag (heldMs from onBegin→onStart ≥ CHAIN_MOVE_HOLD_MS)
 // lifts the whole chain (anchor update); a plain drag detaches the member.
