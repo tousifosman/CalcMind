@@ -3,18 +3,27 @@
 // own, per the comment at the top of Canvas.tsx), §8.1 (`position` is the field to read) and
 // §11.4 (re-render scope). Drag (P3.5) wraps each node in its own Pan gesture; mid-drag
 // position is a Reanimated transform, store writes happen only on release.
-import React from 'react';
+//
+// P3.6: while a snap candidate is live, members of the target open a gap via a temporary
+// `left` offset (not a document write) and an insertion caret is drawn at the slot. Both
+// clear when `dragSnap` is null, so dropping out of range closes the gap without a jump.
+import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
+import { insertionFeedback, type InsertionCaret } from '../chains/layout';
 import { NodeId, NodeKind } from '../model/types';
 import { useNode, useNodeIds } from '../store/selectors';
+import { useDocumentStore } from '../store/documentStore';
+import { useUiStore } from '../store/uiStore';
 import { NumberNode } from '../nodes/NumberNode';
 import { OperatorNode } from '../nodes/OperatorNode';
 import { ParenNode } from '../nodes/ParenNode';
 import { EqualsNode } from '../nodes/EqualsNode';
 import { ResultNode } from '../nodes/ResultNode';
 import { useNodeDrag } from '../nodes/useNodeDrag';
+import { getDeviceLocale } from '../ui/locale';
+import { insertionCaretColor } from '../ui/tokens';
 
 function renderByKind(id: NodeId, kind: NodeKind): React.ReactElement | null {
   switch (kind) {
@@ -34,7 +43,14 @@ function renderByKind(id: NodeId, kind: NodeKind): React.ReactElement | null {
   }
 }
 
-function PositionedNodeComponent({ id }: { id: NodeId }) {
+function PositionedNodeComponent({
+  id,
+  gapOffset,
+}: {
+  id: NodeId;
+  /** Temporary world-space shift while a snap candidate holds (§8.3). 0 when idle. */
+  gapOffset: number;
+}) {
   const node = useNode(id);
   const { gesture, animatedStyle } = useNodeDrag(id);
   if (!node) return null;
@@ -42,7 +58,11 @@ function PositionedNodeComponent({ id }: { id: NodeId }) {
   return (
     <GestureDetector gesture={gesture}>
       <Animated.View
-        style={[styles.positioned, { left: node.position.x, top: node.position.y }, animatedStyle]}
+        style={[
+          styles.positioned,
+          { left: node.position.x + gapOffset, top: node.position.y },
+          animatedStyle,
+        ]}
         testID={`positioned-node-${id}`}
       >
         {renderByKind(id, node.kind)}
@@ -54,18 +74,65 @@ function PositionedNodeComponent({ id }: { id: NodeId }) {
 // Each node subscribes to its own slice via useNode above, so this only guards against
 // re-rendering when the *list* of ids changes (a sibling being added/removed) - the actual
 // content update for one node is already scoped by the store subscription, not by this memo.
+// `gapOffset` is part of the props comparison so an insertion preview re-renders only the
+// members that actually shift (and those whose offset returns to 0 when the gap closes).
 const PositionedNode = React.memo(PositionedNodeComponent);
+
+function InsertionCaretView({ caret }: { caret: InsertionCaret }) {
+  return (
+    <View
+      pointerEvents="none"
+      testID="insertion-caret"
+      style={[
+        styles.caret,
+        {
+          left: caret.x,
+          top: caret.y,
+          width: caret.width,
+          height: caret.height,
+          backgroundColor: insertionCaretColor,
+        },
+      ]}
+    />
+  );
+}
 
 export function NodeLayer() {
   // Subscribes to the id list only, not to the node map (§11.4) - see useNodeIds' own comment
   // for why that needs useShallow to hold.
   const nodeIds = useNodeIds();
+  // Ephemeral drag feed from P3.5. Document is read via getState inside the memo so a
+  // mid-drag candidate update does not subscribe this layer to every node mutation —
+  // the document is frozen for the duration of a drag (commits only on release).
+  const dragSnap = useUiStore((state) => state.dragSnap);
+
+  const feedback = useMemo(() => {
+    if (!dragSnap) {
+      return { caret: null as InsertionCaret | null, offsets: {} as Record<NodeId, number> };
+    }
+    const { document } = useDocumentStore.getState();
+    const dragged = document.nodes[dragSnap.nodeId];
+    if (!dragged) {
+      return { caret: null as InsertionCaret | null, offsets: {} as Record<NodeId, number> };
+    }
+    return insertionFeedback(
+      dragSnap.candidate,
+      dragged,
+      document.chains,
+      document.nodes,
+      getDeviceLocale(),
+    );
+  }, [dragSnap]);
 
   return (
     <View style={styles.fill} pointerEvents="box-none">
-      {nodeIds.map((id) => (
-        <PositionedNode key={id} id={id} />
-      ))}
+      {nodeIds.map((id) => {
+        // Never shift the node under the finger — its motion is the drag transform alone.
+        const gapOffset =
+          dragSnap && id === dragSnap.nodeId ? 0 : (feedback.offsets[id] ?? 0);
+        return <PositionedNode key={id} id={id} gapOffset={gapOffset} />;
+      })}
+      {feedback.caret ? <InsertionCaretView caret={feedback.caret} /> : null}
     </View>
   );
 }
@@ -80,5 +147,10 @@ const styles = StyleSheet.create({
   },
   positioned: {
     position: 'absolute',
+  },
+  caret: {
+    position: 'absolute',
+    borderRadius: 1,
+    zIndex: 900,
   },
 });

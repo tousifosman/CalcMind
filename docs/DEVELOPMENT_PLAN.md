@@ -355,11 +355,11 @@ flowchart LR
     style P29 fill:#22A75B,color:#fff
     style P31 fill:#22A75B,color:#fff
     style P32 fill:#22A75B,color:#fff
-    style P33 fill:#FFBF28,color:#fff
-    style P34 fill:#8892A0,color:#fff
-    style P35 fill:#8892A0,color:#fff
-    style P36 fill:#8892A0,color:#fff
-    style P37 fill:#8892A0,color:#fff
+    style P33 fill:#22A75B,color:#fff
+    style P34 fill:#22A75B,color:#fff
+    style P35 fill:#22A75B,color:#fff
+    style P36 fill:#22A75B,color:#fff
+    style P37 fill:#FFBF28,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
@@ -450,10 +450,10 @@ order is the truth and is never re-derived from `x`).
 **Touches.** `src/chains/layout.ts`, `src/nodes/useNodeDrag.ts`, `src/canvas/NodeLayer.tsx`.
 **Depends on.** P3.5.
 
-- [ ] The chain opens a gap at the pending insertion point during the drag.
-- [ ] An insertion caret is drawn at that point.
-- [ ] Both disappear when no candidate is in range, and the gap closes without a visual jump.
-- [ ] Runs on the UI thread — no store write per frame.
+- [x] The chain opens a gap at the pending insertion point during the drag.
+- [x] An insertion caret is drawn at that point.
+- [x] Both disappear when no candidate is in range, and the gap closes without a visual jump.
+- [x] Runs on the UI thread — no store write per frame.
 
 ### P3.7 — Chain move vs member detach
 

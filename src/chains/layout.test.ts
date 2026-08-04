@@ -1,6 +1,8 @@
-import { layoutChain } from './layout';
+import { insertionFeedback, layoutChain } from './layout';
 import { widthOf } from './measure';
+import type { SnapOutcome } from './snapping';
 import type { CalcNode, Chain, NumberNode, OperatorNode } from '../model/types';
+import { tokens } from '../ui/tokens';
 
 function numberNode(id: string, raw: string): NumberNode {
   return { id, kind: 'number', raw, position: { x: -1, y: -1 }, chainId: 'c1', createdAt: 0 };
@@ -86,5 +88,157 @@ describe('layoutChain: position is a cache, not the source of truth', () => {
     a.position = { x: 9999, y: 9999 };
     const positions = layoutChain(chain(['a']), { a }, 'en-US');
     expect(positions.a).toEqual({ x: 100, y: 200 });
+  });
+});
+
+describe('insertionFeedback: mid-drag gap + caret (§8.3)', () => {
+  const locale = 'en-US';
+
+  function freeNumber(id: string, raw: string, x: number, y = 40): NumberNode {
+    return { id, kind: 'number', raw, position: { x, y }, chainId: null, createdAt: 0 };
+  }
+
+  function chained(id: string, raw: string, x: number, y = 40): NumberNode {
+    return { id, kind: 'number', raw, position: { x, y }, chainId: 'c1', createdAt: 0 };
+  }
+
+  function seededChain(): {
+    nodes: Record<string, CalcNode>;
+    chains: Record<string, Chain>;
+    dragged: NumberNode;
+  } {
+    const a = chained('a', '12', 100);
+    const op = operatorNode('op');
+    op.position = { x: 100 + widthOf(a, locale), y: 40 };
+    const b = chained('b', '3', op.position.x + widthOf(op, locale));
+    const dragged = freeNumber('d', '99', 0);
+    const c = chain(['a', 'op', 'b'], { x: 100, y: 40 });
+    return {
+      nodes: { a, op, b, d: dragged },
+      chains: { c1: c },
+      dragged,
+    };
+  }
+
+  test('null candidate clears caret and offsets — gap closes with no residual', () => {
+    const { nodes, chains, dragged } = seededChain();
+    expect(insertionFeedback(null, dragged, chains, nodes, locale)).toEqual({
+      caret: null,
+      offsets: {},
+    });
+  });
+
+  test('prepend: caret left of the chain by gap width; members stay put', () => {
+    const { nodes, chains, dragged } = seededChain();
+    const gap = widthOf(dragged, locale);
+    const feedback = insertionFeedback(
+      { kind: 'prepend', chainId: 'c1' },
+      dragged,
+      chains,
+      nodes,
+      locale,
+    );
+    expect(feedback.offsets).toEqual({});
+    expect(feedback.caret).toEqual({
+      x: 100 - gap,
+      y: 40,
+      width: tokens.borderBand,
+      height: tokens.nodeHeight,
+    });
+  });
+
+  test('append: caret at the chain right edge; members stay put', () => {
+    const { nodes, chains, dragged } = seededChain();
+    const right =
+      100 +
+      widthOf(nodes.a, locale) +
+      widthOf(nodes.op, locale) +
+      widthOf(nodes.b, locale);
+    const feedback = insertionFeedback(
+      { kind: 'append', chainId: 'c1' },
+      dragged,
+      chains,
+      nodes,
+      locale,
+    );
+    expect(feedback.offsets).toEqual({});
+    expect(feedback.caret?.x).toBe(right);
+    expect(feedback.caret?.y).toBe(40);
+  });
+
+  test('insert: members at index and after shift right by gap; caret at old boundary', () => {
+    const { nodes, chains, dragged } = seededChain();
+    const gap = widthOf(dragged, locale);
+    const boundary = 100 + widthOf(nodes.a, locale); // between a and op
+    const feedback = insertionFeedback(
+      { kind: 'insert', chainId: 'c1', index: 1 },
+      dragged,
+      chains,
+      nodes,
+      locale,
+    );
+    expect(feedback.offsets).toEqual({ op: gap, b: gap });
+    expect(feedback.offsets.a).toBeUndefined();
+    expect(feedback.caret).toEqual({
+      x: boundary,
+      y: 40,
+      width: tokens.borderBand,
+      height: tokens.nodeHeight,
+    });
+  });
+
+  test('insert at index 0 matches prepend geometry (gap on the left)', () => {
+    const { nodes, chains, dragged } = seededChain();
+    const gap = widthOf(dragged, locale);
+    const feedback = insertionFeedback(
+      { kind: 'insert', chainId: 'c1', index: 0 },
+      dragged,
+      chains,
+      nodes,
+      locale,
+    );
+    expect(feedback.offsets).toEqual({});
+    expect(feedback.caret?.x).toBe(100 - gap);
+  });
+
+  test('newChain with dragged on the right: partner stays, caret at its right edge', () => {
+    const partner = freeNumber('p', '5', 200);
+    const dragged = freeNumber('d', '7', 280);
+    const nodes = { p: partner, d: dragged };
+    const feedback = insertionFeedback(
+      { kind: 'newChain', leftId: 'p', rightId: 'd' },
+      dragged,
+      {},
+      nodes,
+      locale,
+    );
+    expect(feedback.offsets).toEqual({});
+    expect(feedback.caret?.x).toBe(200 + widthOf(partner, locale));
+    expect(feedback.caret?.y).toBe(40);
+  });
+
+  test('newChain with dragged on the left: partner shifts right, caret at partner home', () => {
+    const partner = freeNumber('p', '5', 200);
+    const dragged = freeNumber('d', '7', 120);
+    const nodes = { p: partner, d: dragged };
+    const gap = widthOf(dragged, locale);
+    const feedback = insertionFeedback(
+      { kind: 'newChain', leftId: 'd', rightId: 'p' },
+      dragged,
+      {},
+      nodes,
+      locale,
+    );
+    expect(feedback.offsets).toEqual({ p: gap });
+    expect(feedback.caret?.x).toBe(200);
+  });
+
+  test('unknown chain id yields empty feedback rather than throwing', () => {
+    const dragged = freeNumber('d', '1', 0);
+    const outcome: SnapOutcome = { kind: 'append', chainId: 'missing' };
+    expect(insertionFeedback(outcome, dragged, {}, { d: dragged }, locale)).toEqual({
+      caret: null,
+      offsets: {},
+    });
   });
 });

@@ -37,6 +37,10 @@ export const glyphColor = '#FFFFFF';
  *  callouts, not a colour invented for this purpose. */
 export const labelColor = '#3B4252';
 
+/** Mid-drag insertion caret (§8.3 / P3.6). Neutral ink — not an identity hue and not a
+ *  role colour, so it never reads as "this slot is a number/operator". Same ink as labels. */
+export const insertionCaretColor = labelColor;
+
 /** Result cells get a dot texture on top of their fill: a 4x4 unit tile with
  *  1-unit dots at (1,0) and (3,2), coloured resultDotColor. See §1.2 and §11.3. */
 export const resultDotColor = '#FFD1CF';
