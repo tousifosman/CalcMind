@@ -1,9 +1,16 @@
 // Document store. See docs/ARCHITECTURE.md §5 (architecture), §7 (viewport is
 // excluded from undo history), §13 (undo/redo via immer patches).
+//
+// Dirty-set recompute (P4.8, §11 / §11.4) runs inside the same `produceWithPatches`
+// turn as the mutation when `recomputeSeeds` is passed — so undo restores both the
+// edit and the result in one entry, and no committed frame shows a stale-but-undimmed
+// result. The expansion from "these chains" to "transitive dependents" lives entirely
+// in `engine/graph.ts`'s `dirtyClosure`; this store API stays stable through P6.2.
 import { create } from 'zustand';
 import { produceWithPatches, applyPatches, enablePatches, type Patch } from 'immer';
-import { CalcDocument, Vec2, ZOOM_MIN, ZOOM_MAX } from '../model/types';
+import { CalcDocument, ChainId, Vec2, ZOOM_MIN, ZOOM_MAX } from '../model/types';
 import { createEmptyDocument } from '../model/factories';
+import { recomputeFromSeeds } from '../engine/graph';
 
 enablePatches();
 
@@ -14,6 +21,14 @@ interface HistoryEntry {
 
 const MAX_HISTORY = 100;
 
+/** Optional dirty-set recompute for the same undo entry as the recipe (§11). */
+export interface ApplyCommandOptions {
+  /** Chains whose mutation should seed `dirtyClosure`. Untouched chains stay out. */
+  recomputeSeeds?: readonly ChainId[];
+  /** Required when `recomputeSeeds` is non-empty — display formatting is locale-sensitive. */
+  locale?: string;
+}
+
 export interface DocumentState {
   document: CalcDocument;
   undoStack: HistoryEntry[];
@@ -21,8 +36,9 @@ export interface DocumentState {
 
   /** Apply a mutating recipe to the document as a single undoable command.
    *  This is the only way command implementations (store/commands.ts) should
-   *  touch `document` — it's what keeps undo/redo correct as the command set grows. */
-  applyCommand: (recipe: (draft: CalcDocument) => void) => void;
+   *  touch `document` — it's what keeps undo/redo correct as the command set grows.
+   *  Pass `recomputeSeeds` to mark→recompute the dirty closure in this same turn (P4.8). */
+  applyCommand: (recipe: (draft: CalcDocument) => void, options?: ApplyCommandOptions) => void;
 
   /** Set pan/zoom directly, bypassing undo history (§7: undoing a calculation
    *  should not also move the camera). Zoom is clamped to [ZOOM_MIN, ZOOM_MAX]. */
@@ -39,10 +55,18 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
   undoStack: [],
   redoStack: [],
 
-  applyCommand: (recipe) => {
+  applyCommand: (recipe, options) => {
     const { document } = get();
+    const seeds = options?.recomputeSeeds;
+    const locale = options?.locale;
     const [nextDocument, patches, inversePatches] = produceWithPatches(document, (draft) => {
       recipe(draft);
+      if (seeds !== undefined && seeds.length > 0) {
+        if (locale === undefined) {
+          throw new Error('applyCommand: locale is required when recomputeSeeds is set');
+        }
+        recomputeFromSeeds(draft, seeds, locale);
+      }
       draft.updatedAt = new Date().toISOString();
     });
 
