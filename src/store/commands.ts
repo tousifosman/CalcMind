@@ -22,7 +22,7 @@ import { widthOf } from '../chains/measure';
 import type { SnapOutcome } from '../chains/snapping';
 import { getDeviceLocale } from '../ui/locale';
 import { tokens } from '../ui/tokens';
-import { recomputeFromSeeds, removeResultNodesForChain } from '../engine/graph';
+import { dirtyClosure, recomputeFromSeeds, removeResultNodesForChain } from '../engine/graph';
 
 export function renameDocument(name: string): void {
   useDocumentStore.getState().applyCommand((draft) => {
@@ -97,13 +97,17 @@ function finalizeChain(draft: CalcDocument, chainId: ChainId): void {
   if (!chain) return;
 
   const hasEquals = chain.members.some((id) => draft.nodes[id]?.kind === 'equals');
-  if (!hasEquals) {
-    removeResultNodesForChain(draft, chainId);
-  } else {
+  // Capture the dirty set while the seed still exists and (for the equals path)
+  // before dissolve bookkeeping — dependents are reflowed only when we cascaded.
+  let dirtyAfterCompute: readonly ChainId[] = [chainId];
+  if (hasEquals) {
     // Nested inside an existing applyCommand recipe, so call the graph directly
     // rather than via applyCommand's recomputeSeeds option (that option is for
     // top-level recipes that don't already own the draft — e.g. setNodeRaw).
     recomputeFromSeeds(draft, [chainId], getDeviceLocale());
+    dirtyAfterCompute = dirtyClosure(draft, [chainId]);
+  } else {
+    removeResultNodesForChain(draft, chainId);
   }
 
   // Recompute may have added/removed a result member — re-read after it.
@@ -123,7 +127,10 @@ function finalizeChain(draft: CalcDocument, chainId: ChainId): void {
     return;
   }
 
-  reflowChain(draft, chainId);
+  // Reflow every still-present chain the cascade touched (seed ∪ dependents).
+  for (const id of dirtyAfterCompute) {
+    if (draft.chains[id]) reflowChain(draft, id);
+  }
 }
 
 /** Pulls `nodeId` out of whatever chain it currently belongs to, without deleting the
@@ -298,8 +305,12 @@ export function setNodeRaw(nodeId: NodeId, raw: string): void {
     if (!node || node.kind !== 'number') return;
     node.raw = raw;
     if (node.chainId !== null) {
-      recomputeFromSeeds(draft, [node.chainId], locale);
-      if (draft.chains[node.chainId]) reflowChain(draft, node.chainId);
+      const seed = [node.chainId] as const;
+      recomputeFromSeeds(draft, seed, locale);
+      // P6.2: cascade may change dependent result widths — reflow the whole dirty set.
+      for (const id of dirtyClosure(draft, seed)) {
+        if (draft.chains[id]) reflowChain(draft, id);
+      }
     }
   });
 
@@ -351,6 +362,18 @@ export function deleteNode(nodeId: NodeId): void {
       }
     }
   });
+}
+
+/**
+ * Break a reference link by deleting the reference node (§11.2). Used by the
+ * CircularReference Unlink affordance (P6.3) on the DFS closing edge; P6.4's
+ * long-press `Unlink from parent` will share this path. One undo entry via
+ * {@link deleteNode}.
+ */
+export function unlinkReference(referenceNodeId: NodeId): void {
+  const node = useDocumentStore.getState().document.nodes[referenceNodeId];
+  if (!node || node.kind !== 'reference') return;
+  deleteNode(referenceNodeId);
 }
 
 // --- P3.4: snap / detach commits (§8.3 bookkeeping) ---------------------------------

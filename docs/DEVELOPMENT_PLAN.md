@@ -71,8 +71,8 @@ flowchart LR
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
-| **P5** | Persistence | 8 | In progress — P5.1 and P5.3 done; parallel with P6 |
-| **P6** | Linking | 8 | In progress — P6.1, P6.5, P6.8 done; parallel with P5 |
+| **P5** | Persistence | 8 | In progress — P5.1–P5.3, P5.5, P5.7 done; P5.4 / P5.6 / P5.8 remain |
+| **P6** | Linking | 8 | In progress — P6.1–P6.3, P6.5, P6.8 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -641,7 +641,7 @@ punctuated).
 **Depends on.** P4.5, P2.4.
 
 - [x] `Incomplete`, `InvalidSequence`, `DivideByZero`, `Overflow`, `NotANumber` each render
-      distinguishably. `CircularReference` needs the graph and lands with P6.3.
+      distinguishably. `CircularReference` cycle naming and Unlink landed with P6.3.
 - [x] A `Stale` result keeps showing its previous value **dimmed** rather than flashing empty (§9).
 - [x] No error is rendered as a bare glyph — §11.2 is the design's sharpest criticism of the
       reference app and applies to engine errors, not just broken links.
@@ -759,12 +759,12 @@ flowchart LR
     style P31 fill:#22A75B,color:#fff
     style P48 fill:#22A75B,color:#fff
     style P51 fill:#22A75B,color:#fff
-    style P52 fill:#8892A0,color:#fff
+    style P52 fill:#22A75B,color:#fff
     style P53 fill:#22A75B,color:#fff
-    style P54 fill:#8892A0,color:#fff
-    style P55 fill:#8892A0,color:#fff
-    style P56 fill:#8892A0,color:#fff
-    style P57 fill:#8892A0,color:#fff
+    style P54 fill:#E8A838,color:#fff
+    style P55 fill:#22A75B,color:#fff
+    style P56 fill:#E8A838,color:#fff
+    style P57 fill:#22A75B,color:#fff
     style P58 fill:#8892A0,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
@@ -773,11 +773,10 @@ Green = done, amber = ready to start, grey = blocked on a dependency, purple = t
 gate. Neither `P5.1` nor `P5.3` carries a task-level dependency of its own — the phase text above
 just says "depends only on P4" — but the plan sequences both behind P4's own phase-exit check
 rather than jumping the queue the moment either task's box would otherwise look open, shown here
-as a gate from P4's tracking issue rather than an individual P4 subtask. `P5.5` is the one task
-that reaches outside the phase for real, task-level dependencies: `P3.1` (chain layout, already
-done) and `P4.8` (recompute on edit, already done). Kept current by hand alongside the
-acceptance-criteria boxes below — if a task's status here disagrees with its boxes, the boxes win
-and this diagram is stale.
+as a gate from P4's tracking issue rather than an individual P4 subtask. `P5.2` / `P5.5` /
+`P5.7` done; `P5.4` and `P5.6` remain independently ready; `P5.8` still waits on `P5.4`. Kept
+current by hand alongside the acceptance-criteria boxes below — if a task's status here
+disagrees with its boxes, the boxes win and this diagram is stale.
 
 ### P5.1 — Serialiser
 
@@ -802,13 +801,13 @@ decision #7.
 **Touches.** `src/model/schema.ts`, `src/persistence/load.ts`.
 **Depends on.** P5.1.
 
-- [ ] zod validates every loaded document. Failures name the offending field, and **nothing
+- [x] zod validates every loaded document. Failures name the offending field, and **nothing
       partial** reaches the store.
-- [ ] `schemaVersion` greater than `CURRENT_SCHEMA_VERSION` → **refused with a clear message**, and
+- [x] `schemaVersion` greater than `CURRENT_SCHEMA_VERSION` → **refused with a clear message**, and
       the file is left untouched. Guessing at an unknown shape corrupts the user's work
       (decision #7).
-- [ ] Malformed JSON is a handled outcome, not a crash.
-- [ ] Tests for malformed, newer-schema, and structurally-invalid-but-parseable files.
+- [x] Malformed JSON is a handled outcome, not a crash.
+- [x] Tests for malformed, newer-schema, and structurally-invalid-but-parseable files.
 
 ### P5.3 — Storage adapter and native implementation
 
@@ -826,6 +825,8 @@ decision #7.
 `@dr.pogodin/react-native-fs` exposes no `fsync`; `writeFile`'s resolved promise is the flush
 barrier before rename (Android closes/flushes the stream; see journal). Shared behavioural
 contract tests live in `adapter.sharedTests.ts` for P5.4 to reuse against the web adapter.
+`readBackup` is optional on the adapter; the native implementation exposes it so P5.5 can
+recover when the primary is missing or corrupt without extending `read()` beyond §12.2.
 
 ### P5.4 — Web adapter
 
@@ -846,14 +847,14 @@ contract tests live in `adapter.sharedTests.ts` for P5.4 to reuse against the we
 **Touches.** `src/persistence/load.ts`.
 **Depends on.** P5.2, P5.3, P3.1, P4.8.
 
-- [ ] Exactly the §12.3 order: read → JSON check (`.bak` fallback) → version check → migrate → zod
+- [x] Exactly the §12.3 order: read → JSON check (`.bak` fallback) → version check → migrate → zod
       validate → normalise arrays to maps → run chain layout → evaluate all chains topologically →
       ready.
-- [ ] A corrupt primary recovers from `.bak`. If **both** fail, report unreadable and **do not
+- [x] A corrupt primary recovers from `.bak`. If **both** fail, report unreadable and **do not
       overwrite either** (§12.3).
-- [ ] `derived` from the file paints immediately, then the engine recomputes and overwrites it; on
+- [x] `derived` from the file paints immediately, then the engine recomputes and overwrites it; on
       disagreement the engine wins, silently (§12.1, decision #6).
-- [ ] Test: corrupt the primary file, assert `.bak` recovery.
+- [x] Test: corrupt the primary file, assert `.bak` recovery.
 
 ### P5.6 — Autosave
 
@@ -879,11 +880,11 @@ too).
 **Touches.** `src/persistence/migrations/`.
 **Depends on.** P5.2.
 
-- [ ] `Migration` type and an ascending runner per §12.4. `migrations` stays **empty** — v1 is the
+- [x] `Migration` type and an ascending runner per §12.4. `migrations` stays **empty** — v1 is the
       origin.
-- [ ] The harness is proven with a synthetic v0→v1 fixture pair, so the machinery is exercised
+- [x] The harness is proven with a synthetic v0→v1 fixture pair, so the machinery is exercised
       before real user data depends on it.
-- [ ] The rule that every future migration ships a `before.json` / `after.json` fixture pair is
+- [x] The rule that every future migration ships a `before.json` / `after.json` fixture pair is
       documented where the next author will see it (§12.4: migrations are the code most likely to
       silently eat data and least likely to be exercised by hand).
 
@@ -952,8 +953,9 @@ flowchart LR
     style P29 fill:#22A75B,color:#fff
     style P35 fill:#22A75B,color:#fff
     style P61 fill:#22A75B,color:#fff
-    style P62 fill:#E8A838,color:#fff
-    style P63 fill:#E8A838,color:#fff
+    style P62 fill:#22A75B,color:#fff
+    style P63 fill:#22A75B,color:#fff
+
     style P64 fill:#E8A838,color:#fff
     style P65 fill:#22A75B,color:#fff
     style P66 fill:#E8A838,color:#fff
@@ -966,9 +968,9 @@ Green = done, amber = ready to start, grey = blocked on a dependency, purple = t
 gate. `P4.8` (recompute on edit) is done, so `P6.1` is no longer gated on a cross-phase
 dependency — everything else here is downstream of it. `P2.9` and `P3.5` are already-done
 prerequisites for `P6.4` and `P6.7` respectively, shown as separate external nodes rather than
-folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. `P6.5`
-unblocked `P6.6` and `P6.8`; both hue tasks are now done (`P6.6` still open for connector
-drawing). Kept
+folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. `P6.2`
+and `P6.3` are done on `main`; `P6.5` unblocked `P6.6` and `P6.8` and both hue tasks are now
+done (`P6.6` still open for connector drawing). Kept
 current by hand alongside the acceptance-criteria boxes below — if a task's status here disagrees
 with its boxes, the boxes win and this diagram is stale.
 
@@ -993,10 +995,10 @@ with its boxes, the boxes win and this diagram is stale.
 **Touches.** `src/engine/graph.ts`, `src/store/documentStore.ts`.
 **Depends on.** P6.1.
 
-- [ ] Mutating a chain recomputes it and its transitive dependents in topological order.
-- [ ] Chains not downstream of the edit are **never** re-evaluated — assert it in a test.
-- [ ] Reproduces §11's worked example: editing `1221 → 1300` yields `1303`, then `2606`.
-- [ ] Tests for incremental dirty propagation (§14).
+- [x] Mutating a chain recomputes it and its transitive dependents in topological order.
+- [x] Chains not downstream of the edit are **never** re-evaluated — assert it in a test.
+- [x] Reproduces §11's worked example: editing `1221 → 1300` yields `1303`, then `2606`.
+- [x] Tests for incremental dirty propagation (§14).
 
 ### P6.3 — Cycle detection
 
@@ -1005,11 +1007,11 @@ with its boxes, the boxes win and this diagram is stale.
 **Touches.** `src/engine/graph.ts`, `src/nodes/ResultNode.tsx`.
 **Depends on.** P6.1.
 
-- [ ] DFS colouring at build time. **Every chain in the cycle** enters `CircularReference`.
-- [ ] The rest of the document keeps working.
-- [ ] Rendered per §11.2: **name the cycle** and offer to unlink the edge that closed it. Not a
+- [x] DFS colouring at build time. **Every chain in the cycle** enters `CircularReference`.
+- [x] The rest of the document keeps working.
+- [x] Rendered per §11.2: **name the cycle** and offer to unlink the edge that closed it. Not a
       bare glyph.
-- [ ] Test with a deliberate cycle, asserting only the cycle is affected.
+- [x] Test with a deliberate cycle, asserting only the cycle is affected.
 
 ### P6.4 — Dangling references
 
