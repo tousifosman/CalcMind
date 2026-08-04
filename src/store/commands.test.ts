@@ -1165,3 +1165,146 @@ describe('continueFromResult (P4.9, §8.7)', () => {
     expect(() => continueFromResult(a, '+')).toThrow(/not a result/);
   });
 });
+
+
+describe('P4.8 recompute on edit', () => {
+  test('editing an input updates the result in the same commit (section 14)', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1221');
+    const plus = addOperatorNode({ x: 40, y: 0 }, '+');
+    const b = addNumberNode({ x: 80, y: 0 }, '3');
+    formNewChain(a, plus);
+    const chainId = useDocumentStore.getState().document.nodes[a]!.chainId!;
+    appendToChain(b, chainId);
+    appendEqualsNode(b);
+
+    const resultId = useDocumentStore
+      .getState()
+      .document.chains[chainId]!.members.find(
+        (id) => useDocumentStore.getState().document.nodes[id]!.kind === 'result',
+      )!;
+    expect(useDocumentStore.getState().document.nodes[resultId]).toMatchObject({
+      derived: { display: '1,224' },
+    });
+
+    setNodeRaw(a, '1300');
+
+    const doc = useDocumentStore.getState().document;
+    const updated = doc.nodes[resultId]!;
+    expect(updated).toMatchObject({
+      id: resultId,
+      kind: 'result',
+      derived: { display: '1,303' },
+    });
+    if (updated.kind === 'result') {
+      expect(updated.derived?.outcome).toBeUndefined();
+    }
+  });
+
+  test('editing one chain does not re-evaluate an untouched Evaluated chain', () => {
+    const graphCompute = require('../engine/compute') as typeof import('../engine/compute');
+    const actualCompute = graphCompute.computeChain.bind(graphCompute);
+    const evaluated: string[] = [];
+    const spy = jest.spyOn(graphCompute, 'computeChain').mockImplementation((chain, nodes, locale, chains, stack) => {
+      evaluated.push(chain.id);
+      return actualCompute(chain, nodes, locale, chains, stack);
+    });
+
+    try {
+      const a1 = addNumberNode({ x: 0, y: 0 }, '1');
+      const p1 = addOperatorNode({ x: 40, y: 0 }, '+');
+      const b1 = addNumberNode({ x: 80, y: 0 }, '2');
+      formNewChain(a1, p1);
+      const c1 = useDocumentStore.getState().document.nodes[a1]!.chainId!;
+      appendToChain(b1, c1);
+      appendEqualsNode(b1);
+
+      const a2 = addNumberNode({ x: 0, y: 100 }, '10');
+      const p2 = addOperatorNode({ x: 40, y: 100 }, '+');
+      const b2 = addNumberNode({ x: 80, y: 100 }, '20');
+      formNewChain(a2, p2);
+      const c2 = useDocumentStore.getState().document.nodes[a2]!.chainId!;
+      appendToChain(b2, c2);
+      appendEqualsNode(b2);
+
+      const r2Before = Object.values(useDocumentStore.getState().document.nodes).find(
+        (n) => n.kind === 'result' && n.sourceChainId === c2,
+      );
+      expect(r2Before?.kind).toBe('result');
+      if (!r2Before || r2Before.kind !== 'result') {
+        throw new Error('expected result on c2');
+      }
+      const r2Derived = { ...r2Before.derived! };
+
+      evaluated.length = 0;
+      setNodeRaw(a1, '7');
+
+      expect(evaluated).toEqual([c1]);
+      expect(useDocumentStore.getState().document.nodes[r2Before.id]).toMatchObject({
+        derived: r2Derived,
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  test('applyCommand recomputeSeeds updates a result in the same undo entry', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '2');
+    const plus = addOperatorNode({ x: 40, y: 0 }, '+');
+    const b = addNumberNode({ x: 80, y: 0 }, '3');
+    formNewChain(a, plus);
+    const chainId = useDocumentStore.getState().document.nodes[a]!.chainId!;
+    appendToChain(b, chainId);
+    appendEqualsNode(b);
+    const resultId = useDocumentStore
+      .getState()
+      .document.chains[chainId]!.members.find(
+        (id) => useDocumentStore.getState().document.nodes[id]!.kind === 'result',
+      )!;
+
+    useDocumentStore.getState().applyCommand(
+      (draft) => {
+        const node = draft.nodes[a];
+        if (node && node.kind === 'number') node.raw = '9';
+      },
+      { recomputeSeeds: [chainId], locale: 'en-US' },
+    );
+
+    expect(useDocumentStore.getState().document.nodes[resultId]).toMatchObject({
+      derived: { display: '12' },
+    });
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[a]).toMatchObject({ raw: '2' });
+    expect(useDocumentStore.getState().document.nodes[resultId]).toMatchObject({
+      derived: { display: '5' },
+    });
+  });
+
+  test('clearing then retyping an operand drops and recreates the result (keypad path)', () => {
+    // Keypad backspace sets raw to "" (Incomplete → no result), then digits rebuild it.
+    const a = addNumberNode({ x: 0, y: 0 }, '5');
+    const div = addOperatorNode({ x: 40, y: 0 }, '÷');
+    const b = addNumberNode({ x: 80, y: 0 }, '3');
+    formNewChain(a, div);
+    const chainId = useDocumentStore.getState().document.nodes[a]!.chainId!;
+    appendToChain(b, chainId);
+    appendEqualsNode(b);
+    expect(
+      Object.values(useDocumentStore.getState().document.nodes).some((n) => n.kind === 'result'),
+    ).toBe(true);
+
+    setNodeRaw(a, '');
+    expect(
+      Object.values(useDocumentStore.getState().document.nodes).filter((n) => n.kind === 'result'),
+    ).toHaveLength(0);
+
+    setNodeRaw(a, '8');
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    );
+    expect(result).toMatchObject({
+      kind: 'result',
+      sourceChainId: chainId,
+      derived: { display: '2.66666666667' },
+    });
+  });
+});

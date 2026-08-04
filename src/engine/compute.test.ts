@@ -157,4 +157,59 @@ describe('computeChain: reference resolution (P4.9)', () => {
     const again = computeChain(chains.c_cont, nodes, 'en-US', chains);
     expect(again && again.ok && again.display).toBe('50');
   });
+  test('a cyclic reference reports CircularReference instead of overflowing', () => {
+    const resultA: ResultNode = {
+      id: 'r_a',
+      kind: 'result',
+      position: ORIGIN,
+      chainId: 'c_a',
+      createdAt: 0,
+      sourceChainId: 'c_a',
+      derived: { display: '1', computedAt: '2026-01-01T00:00:00.000Z' },
+    };
+    const resultB: ResultNode = {
+      id: 'r_b',
+      kind: 'result',
+      position: ORIGIN,
+      chainId: 'c_b',
+      createdAt: 0,
+      sourceChainId: 'c_b',
+      derived: { display: '1', computedAt: '2026-01-01T00:00:00.000Z' },
+    };
+    const refToB: ReferenceNode = {
+      id: 'ref_b',
+      kind: 'reference',
+      position: ORIGIN,
+      chainId: 'c_a',
+      createdAt: 0,
+      targetNodeId: 'r_b',
+    };
+    const refToA: ReferenceNode = {
+      id: 'ref_a',
+      kind: 'reference',
+      position: ORIGIN,
+      chainId: 'c_b',
+      createdAt: 0,
+      targetNodeId: 'r_a',
+    };
+    const aEq = equals('a_e');
+    aEq.chainId = 'c_a';
+    const bEq = equals('b_e');
+    bEq.chainId = 'c_b';
+    const nodes: Record<string, CalcNode> = {
+      ref_b: refToB,
+      a_e: aEq,
+      r_a: resultA,
+      ref_a: refToA,
+      b_e: bEq,
+      r_b: resultB,
+    };
+    const chains = {
+      c_a: { id: 'c_a', anchor: ORIGIN, members: ['ref_b', 'a_e', 'r_a'] },
+      c_b: { id: 'c_b', anchor: ORIGIN, members: ['ref_a', 'b_e', 'r_b'] },
+    };
+    const result = computeChain(chains.c_a, nodes, 'en-US', chains);
+    expect(result).toEqual({ ok: false, error: { kind: 'CircularReference' } });
+  });
 });
+

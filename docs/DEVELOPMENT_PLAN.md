@@ -69,7 +69,7 @@ flowchart LR
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
-| **P4** | Engine | 9 | **8/9** — P4.1–P4.7, P4.9 done; P4.8 next |
+| **P4** | Engine | 9 | **9/9** — P4.1–P4.9 done; phase exit check next |
 | **P5** | Persistence | 8 | Blocked on P4 |
 | **P6** | Linking | 8 | Blocked on P4, parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
@@ -546,7 +546,7 @@ flowchart LR
     style P45 fill:#22A75B,color:#fff
     style P46 fill:#22A75B,color:#fff
     style P47 fill:#22A75B,color:#fff
-    style P48 fill:#8892A0,color:#fff
+    style P48 fill:#22A75B,color:#fff
     style P49 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
@@ -669,12 +669,12 @@ punctuated).
 **Touches.** `src/engine/graph.ts`, `src/store/documentStore.ts`.
 **Depends on.** P4.7.
 
-- [ ] Mutating a chain marks **that chain** dirty and recomputes it. Untouched chains are never
+- [x] Mutating a chain marks **that chain** dirty and recomputes it. Untouched chains are never
       re-evaluated — assert this in a test rather than believing it.
-- [ ] Recompute runs in the same commit as the mutation, so no frame renders a stale-but-undimmed
+- [x] Recompute runs in the same commit as the mutation, so no frame renders a stale-but-undimmed
       result.
-- [ ] Integration test: edit an input, the result updates (§14).
-- [ ] `graph.ts` is structured so P6.2 can extend it from "this chain" to "transitive dependents in
+- [x] Integration test: edit an input, the result updates (§14).
+- [x] `graph.ts` is structured so P6.2 can extend it from "this chain" to "transitive dependents in
       topological order" **without a rewrite**.
 
 ### P4.9 — Continuation (pulled forward from P6)

@@ -5,7 +5,7 @@
 // and P4.8 / load-time recompute can reuse it without forking the steps.
 import Decimal from 'decimal.js';
 import { engineError, type EngineError } from './errors';
-import { evaluate, isEngineError, type EvalResult, type ReferenceResolver } from './evaluate';
+import { evaluate, isEngineError, normaliseDecimal, type EvalResult, type ReferenceResolver } from './evaluate';
 import { formatComputedValue } from './format';
 import { ParseError, parse } from './parse';
 import { tokenize } from './tokenize';
@@ -52,10 +52,7 @@ export function resolveReferenceValue(
     switch (target.kind) {
       case 'number': {
         try {
-          const value = new Decimal(target.raw);
-          if (value.isNaN()) return engineError('NotANumber');
-          if (!value.isFinite()) return engineError('Overflow');
-          return value;
+          return normaliseDecimal(new Decimal(target.raw));
         } catch {
           return engineError('NotANumber');
         }
