@@ -960,8 +960,7 @@ diffable, and readable by anything.
     { "id": "n4", "kind": "operator", "op": "-",     "position": { "x": 186,  "y": 0 }, "chainId": "c1", "createdAt": 1785664803000 },
     { "id": "n5", "kind": "number",   "raw": "20",   "position": { "x": 220,  "y": 0 }, "chainId": "c1", "createdAt": 1785664804000 },
     { "id": "n6", "kind": "equals",                  "position": { "x": 275,  "y": 0 }, "chainId": "c1", "createdAt": 1785664805000 },
-    { "id": "n7", "kind": "result",   "sourceChainId": "c1", "position": { "x": 310, "y": 0 }, "chainId": "c1", "createdAt": 1785664805000,
-      "derived": { "display": "1204", "computedAt": "2026-08-02T10:04:12.412Z" } }
+    { "id": "n7", "kind": "result",   "sourceChainId": "c1", "position": { "x": 310, "y": 0 }, "chainId": "c1", "createdAt": 1785664805000 }
   ],
   "chains": [
     { "id": "c1", "members": ["n1", "n2", "n3", "n4", "n5", "n6", "n7"], "anchor": { "x": 0, "y": 0 } }
@@ -975,9 +974,10 @@ Notes on the format:
   so the file diffs cleanly in git and stays compact; they are normalised into `Record`s on load
   for O(1) lookup. Serialisation sorts keys so two identical documents produce byte-identical
   files.
-- **`derived` is a cache.** It exists so a freshly opened document can paint before evaluation
-  runs, and so a human reading the file sees the answers. On load, the engine recomputes and
-  overwrites it. If they disagree, the engine wins, silently.
+- **`derived` is a cache, stripped on write.** The in-memory result node still carries `derived`
+  so the UI can paint between keystrokes; the serialiser drops it (§12.3 save sequence). On load
+  the engine recomputes before the document is ready. A file that somehow still has `derived`
+  (hand-edited, older writer) is tolerated — the engine overwrites it, silently, and wins.
 - **Member `position` is redundant** with `anchor` + `members`. Kept because it makes the file
   self-describing and lets a reader reconstruct the picture without implementing the layout pass.
   Load ignores it for members and re-runs layout.
@@ -1132,7 +1132,7 @@ it unclear which parts were claims about the present and which were intentions.
 | 3 | `decimal.js`, not native floats | `0.1 + 0.2` must be `0.3` in a calculator | Bundle size becomes critical |
 | 4 | Adjacent numbers invalid, but `n(` multiplies | `12 34` is more likely a mis-snap than a product; `12(…)` is unambiguous maths and the reference app uses it (§10.2) | Never for the paren case; the number-number case if users ask |
 | 5 | Plain JSON documents | Inspectable, diffable, hand-editable; no lock-in | Documents grow large enough to need a binary format |
-| 6 | Derived values persisted as labelled cache | Paint before evaluating; readable files. Engine always wins | Cache drift causes real confusion |
+| 6 | `derived` stripped on write; tolerated on load as labelled cache | §12.3 save sequence keeps files free of stale paint; load still accepts `derived` so a hand-edited file can hint answers. Engine always wins | Wanting instant paint from autosaved files without waiting for evaluate |
 | 7 | Newer-schema files refused, not migrated | Guessing an unknown shape corrupts work | Never |
 | 8 | Zustand over Redux | Selector subscriptions matter during drag; less ceremony | State grows to need middleware ecosystem |
 | 9 | Result texture deferred to v1.1 | Decorative; hue + border already carry the meaning | It tests as load-bearing for comprehension |
