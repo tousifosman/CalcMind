@@ -1121,6 +1121,9 @@ document snapshots.
   back one keystroke at a time.
 - Viewport changes are excluded (§7).
 - Autosave and undo are independent: undo mutates the store, which marks it dirty, which saves.
+- Autosave is suppressible (`setSuppressed`) so a continuous gesture such as value scrubbing
+  (§8.8) does not enqueue a write per frame; force-flush (background / explicit save / document
+  switch) still writes once if dirty — kill-safety outranks suppress.
 
 ---
 

@@ -71,7 +71,7 @@ flowchart LR
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
-| **P5** | Persistence | 8 | In progress — P5.1–P5.3, P5.5, P5.7 done; P5.4 / P5.6 / P5.8 remain |
+| **P5** | Persistence | 8 | In progress — P5.1–P5.3, P5.5–P5.7 done; P5.4 / P5.8 remain |
 | **P6** | Linking | 8 | In progress — P6.1–P6.3, P6.5, P6.7, P6.8 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
@@ -763,7 +763,7 @@ flowchart LR
     style P53 fill:#22A75B,color:#fff
     style P54 fill:#E8A838,color:#fff
     style P55 fill:#22A75B,color:#fff
-    style P56 fill:#E8A838,color:#fff
+    style P56 fill:#22A75B,color:#fff
     style P57 fill:#22A75B,color:#fff
     style P58 fill:#8892A0,color:#fff
     style EXIT fill:#7030A0,color:#fff
@@ -774,9 +774,9 @@ gate. Neither `P5.1` nor `P5.3` carries a task-level dependency of its own — t
 just says "depends only on P4" — but the plan sequences both behind P4's own phase-exit check
 rather than jumping the queue the moment either task's box would otherwise look open, shown here
 as a gate from P4's tracking issue rather than an individual P4 subtask. `P5.2` / `P5.5` /
-`P5.7` done; `P5.4` and `P5.6` remain independently ready; `P5.8` still waits on `P5.4`. Kept
-current by hand alongside the acceptance-criteria boxes below — if a task's status here
-disagrees with its boxes, the boxes win and this diagram is stale.
+`P5.6` / `P5.7` done; `P5.4` remains ready; `P5.8` still waits on `P5.4`. Kept current by
+hand alongside the acceptance-criteria boxes below — if a task's status here disagrees with
+its boxes, the boxes win and this diagram is stale.
 
 ### P5.1 — Serialiser
 
@@ -864,13 +864,13 @@ too).
 **Touches.** `src/persistence/autosave.ts`, `src/store/documentStore.ts`.
 **Depends on.** P5.1, P5.3.
 
-- [ ] Mutations mark dirty; writes debounce **600ms**.
-- [ ] Force-flush on app background, web `visibilitychange` / `pagehide`, explicit save, and
+- [x] Mutations mark dirty; writes debounce **600ms**.
+- [x] Force-flush on app background, web `visibilitychange` / `pagehide`, explicit save, and
       document switch (§12.3).
-- [ ] Killing the app mid-edit loses **at most the debounce window**.
-- [ ] `lastSavedAt` is surfaced to the store.
-- [ ] Undo marks dirty and therefore saves — autosave and undo stay independent (§13).
-- [ ] Autosave is **suppressible**, because P6b.4's slider must suspend it mid-scrub (§8.8).
+- [x] Killing the app mid-edit loses **at most the debounce window**.
+- [x] `lastSavedAt` is surfaced to the store.
+- [x] Undo marks dirty and therefore saves — autosave and undo stay independent (§13).
+- [x] Autosave is **suppressible**, because P6b.4's slider must suspend it mid-scrub (§8.8).
       Build the hook now; one scrub otherwise writes hundreds of documents.
 
 ### P5.7 — Migration harness
