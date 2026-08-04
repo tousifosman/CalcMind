@@ -133,6 +133,10 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       dragging.value = 0;
 
       const position = { x: worldX, y: worldY };
+      // Candidate comes from uiStore rather than the session ref: every onUpdate
+      // publishes via runOnJS(updateDrag), and onEnd's runOnJS(endDrag) is queued
+      // after those — Reanimated's JS runtime is FIFO, so the last frame's candidate
+      // is already in dragSnap by the time this runs.
       const candidate = useUiStore.getState().dragSnap?.candidate ?? null;
       clearDragSnap();
 

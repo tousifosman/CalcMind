@@ -620,6 +620,26 @@ describe('P3.4 chain mutations: prepend / append / insert / newChain / detach', 
     expect(useDocumentStore.getState().undoStack).toHaveLength(1);
   });
 
+  test('formNewChain leftPosition overrides a stale left store cache for the anchor', () => {
+    // Drag release: left node still sits at its pre-drag store position, but the finger
+    // released elsewhere — without leftPosition the chain would anchor at the stale cache
+    // (the P3.1 class of bug). With it, anchor + layout start at the live release point.
+    const left = addNumberNode({ x: 10, y: 20 }, '3');
+    const right = addNumberNode({ x: 200, y: 20 }, '4');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    const release = { x: 80, y: 55 };
+    const chainId = formNewChain(left, right, release);
+
+    const chain = useDocumentStore.getState().document.chains[chainId!];
+    expect(chain.anchor).toEqual(release);
+    expect(useDocumentStore.getState().document.nodes[left].position).toEqual(release);
+    expect(useDocumentStore.getState().document.nodes[right].position).toEqual({
+      x: release.x + widthOf(useDocumentStore.getState().document.nodes[left]!, 'en-US'),
+      y: release.y,
+    });
+  });
+
   test('detachNode frees the member at the given position and reflows the remainder', () => {
     const [a, b, c] = seedChain([{ raw: '1' }, { raw: '2' }, { raw: '3' }]);
 
@@ -811,6 +831,47 @@ describe('P3.4 chain mutations: prepend / append / insert / newChain / detach', 
     expect(chains).toHaveLength(1);
     expect(chains[0]!.members).toEqual([left, right]);
     expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+  });
+
+  test('commitSnapOutcome newChain forwards position when the dragged node is the left member', () => {
+    // NEW_CHAIN [dragged, free]: dragged is leftId. Its store position is still the
+    // pre-drag home; the release `position` must become the chain anchor.
+    const dragged = addNumberNode({ x: 0, y: 0 }, '1');
+    const free = addNumberNode({ x: 200, y: 0 }, '2');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    const release = { x: 120, y: 40 };
+    commitSnapOutcome(
+      dragged,
+      { kind: 'newChain', leftId: dragged, rightId: free },
+      release,
+    );
+
+    const chains = Object.values(useDocumentStore.getState().document.chains);
+    expect(chains).toHaveLength(1);
+    expect(chains[0]!.anchor).toEqual(release);
+    expect(chains[0]!.members).toEqual([dragged, free]);
+    expect(useDocumentStore.getState().document.nodes[dragged].position).toEqual(release);
+  });
+
+  test('commitSnapOutcome newChain leaves the stationary left node alone when dragging the right', () => {
+    // NEW_CHAIN [free, dragged]: free is leftId and already authoritative in the store.
+    // Passing the dragged node's release position must not overwrite the left anchor.
+    const free = addNumberNode({ x: 50, y: 60 }, '1');
+    const dragged = addNumberNode({ x: 300, y: 60 }, '2');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    commitSnapOutcome(
+      dragged,
+      { kind: 'newChain', leftId: free, rightId: dragged },
+      { x: 999, y: 999 },
+    );
+
+    const chains = Object.values(useDocumentStore.getState().document.chains);
+    expect(chains).toHaveLength(1);
+    expect(chains[0]!.anchor).toEqual({ x: 50, y: 60 });
+    expect(chains[0]!.members).toEqual([free, dragged]);
+    expect(useDocumentStore.getState().document.nodes[free].position).toEqual({ x: 50, y: 60 });
   });
 
   test('appending a node already in the target chain is a no-op', () => {

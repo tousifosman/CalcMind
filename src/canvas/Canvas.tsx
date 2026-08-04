@@ -178,32 +178,6 @@ export function Canvas({ children, style, onTap, onLongPress }: CanvasProps) {
     };
   }, []);
 
-  // DEV-only probe for interactive verification (P3.5 zoom 0.25 / 4 checks). Not a
-  // product API. Gated on webpack's injected NODE_ENV without pulling in @types/node.
-  useEffect(() => {
-    const nodeEnv = (globalThis as { process?: { env?: { NODE_ENV?: string } } }).process?.env
-      ?.NODE_ENV;
-    if (nodeEnv !== 'development') return;
-    const g = globalThis as typeof globalThis & {
-      __CALCMIND_VIEWPORT__?: {
-        setZoom: (z: number) => void;
-        getZoom: () => number;
-        getDocument: () => ReturnType<typeof useDocumentStore.getState>['document'];
-      };
-    };
-    g.__CALCMIND_VIEWPORT__ = {
-      setZoom: (z: number) => {
-        zoom.value = clampZoom(z);
-        commitViewport();
-      },
-      getZoom: () => zoom.value,
-      getDocument: () => useDocumentStore.getState().document,
-    };
-    return () => {
-      delete g.__CALCMIND_VIEWPORT__;
-    };
-  });
-
   const webWheelProps: Record<string, unknown> = Platform.OS === 'web' ? { onWheel } : {};
 
   return (
