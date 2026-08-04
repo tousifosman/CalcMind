@@ -50,15 +50,12 @@ export type LoadError =
       message: string;
     };
 
-export type ValidateLoadedJsonResult =
+export type ValidateWireResult =
   | { ok: true; document: SerializedDocumentParsed }
-  | { ok: false; error: LoadError }
-  | {
-      ok: false;
-      needs_migration: true;
-      schemaVersion: number;
-      value: unknown;
-    };
+  | { ok: false; error: LoadError };
+
+/** Result of {@link validateLoadedJson} — same shape as {@link ValidateWireResult}. */
+export type ValidateLoadedJsonResult = ValidateWireResult;
 
 export type OpenDocumentResult =
   | {
@@ -158,51 +155,11 @@ export function validateWireDocument(
 }
 
 /**
- * Trust-boundary check for a raw JSON string (§12.3 / P5.2):
- *   1. JSON parse (malformed → error, file untouched)
- *   2. schemaVersion gate — greater than CURRENT → refuse (decision #7)
- *   3. zod wire schema — failures name the field; nothing partial returned
- *
- * Older-than-CURRENT documents are not validated here: migration (P5.7) must
- * run first, then this again. {@link openDocument} does that composition.
+ * Single implementation of the §12.3 trust-boundary after JSON is in hand:
+ * version gate (decision #7) → migrate → zod. Both {@link validateLoadedJson}
+ * and {@link materializeLoadedValue} go through this — no parallel copies.
  */
-export function validateLoadedJson(text: string): ValidateLoadedJsonResult {
-  const parsed = parseJsonText(text);
-  if (!parsed.ok) {
-    return parsed;
-  }
-
-  const version = readSchemaVersion(parsed.value);
-  if (!version.ok) {
-    return version;
-  }
-
-  if (version.schemaVersion > CURRENT_SCHEMA_VERSION) {
-    return { ok: false, error: refuseNewerSchema(version.schemaVersion) };
-  }
-
-  if (version.schemaVersion < CURRENT_SCHEMA_VERSION) {
-    return {
-      ok: false,
-      needs_migration: true,
-      schemaVersion: version.schemaVersion,
-      value: parsed.value,
-    };
-  }
-
-  return validateWireDocument(parsed.value);
-}
-
-/**
- * §12.3 open-document flow after a JSON value is in hand: version → migrate →
- * zod → normalise → layout → evaluate. Pure over the value; never writes storage.
- */
-export function materializeLoadedValue(
-  value: unknown,
-  locale: string,
-):
-  | { ok: true; document: CalcDocument }
-  | { ok: false; error: LoadError } {
+export function validateAndMigrateWire(value: unknown): ValidateWireResult {
   const version = readSchemaVersion(value);
   if (!version.ok) {
     return version;
@@ -227,7 +184,35 @@ export function materializeLoadedValue(
     wireValue = migrated.value;
   }
 
-  const validated = validateWireDocument(wireValue);
+  return validateWireDocument(wireValue);
+}
+
+/**
+ * Trust-boundary check for a raw JSON string (§12.3 / P5.2):
+ * parse, then {@link validateAndMigrateWire}. Convenience for callers that
+ * hold a string; {@link openDocument} uses the same gate via
+ * {@link materializeLoadedValue}.
+ */
+export function validateLoadedJson(text: string): ValidateLoadedJsonResult {
+  const parsed = parseJsonText(text);
+  if (!parsed.ok) {
+    return parsed;
+  }
+  return validateAndMigrateWire(parsed.value);
+}
+
+/**
+ * §12.3 open-document flow after a JSON value is in hand: version → migrate →
+ * zod → normalise → layout → evaluate. Pure over the value; never writes storage.
+ * Shares {@link validateAndMigrateWire} with {@link validateLoadedJson}.
+ */
+export function materializeLoadedValue(
+  value: unknown,
+  locale: string,
+):
+  | { ok: true; document: CalcDocument }
+  | { ok: false; error: LoadError } {
+  const validated = validateAndMigrateWire(value);
   if (!validated.ok) {
     return validated;
   }

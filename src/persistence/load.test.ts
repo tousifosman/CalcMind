@@ -177,7 +177,7 @@ describe('schemaVersion gate (decision #7)', () => {
     expect(result.error.kind).toBe('missing_schema_version');
   });
 
-  test('older schemaVersion signals needs_migration rather than zod-failing', () => {
+  test('older schemaVersion goes through the shared migrate gate (empty migrations → error)', () => {
     const older = JSON.stringify({
       schemaVersion: 0,
       id: 'doc_old',
@@ -188,10 +188,34 @@ describe('schemaVersion gate (decision #7)', () => {
       nodes: [],
       chains: [],
     });
+    // Production migrations is empty (v1 origin). The shared gate surfaces
+    // that as a migration error — same path materializeLoadedValue / openDocument use.
     const result = validateLoadedJson(older);
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect('needs_migration' in result && result.needs_migration).toBe(true);
+    expect(result.error.kind).toBe('migration');
+    expect(result.error.message).toMatch(/No migration from schemaVersion 0/);
+  });
+
+  test('validateLoadedJson and materializeLoadedValue share the newer-schema refusal', () => {
+    const newer = {
+      schemaVersion: CURRENT_SCHEMA_VERSION + 1,
+      id: 'doc_x',
+      name: 'Future',
+      createdAt: '2026-08-02T10:00:00.000Z',
+      updatedAt: '2026-08-02T10:00:00.000Z',
+      viewport: { pan: { x: 0, y: 0 }, zoom: 1 },
+      nodes: [],
+      chains: [],
+    };
+    const fromString = validateLoadedJson(JSON.stringify(newer));
+    const fromValue = materializeLoadedValue(newer, 'en-US');
+    expect(fromString.ok).toBe(false);
+    expect(fromValue.ok).toBe(false);
+    if (fromString.ok || fromValue.ok) return;
+    expect(fromString.error.kind).toBe('newer_schema');
+    expect(fromValue.error.kind).toBe('newer_schema');
+    expect(fromString.error.message).toBe(fromValue.error.message);
   });
 });
 
