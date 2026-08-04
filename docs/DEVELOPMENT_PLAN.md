@@ -71,8 +71,8 @@ flowchart LR
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
-| **P5** | Persistence | 8 | In progress — P5.1 and P5.3 done |
-| **P6** | Linking | 8 | Ready (depends only on P4, parallel with P5) |
+| **P5** | Persistence | 8 | In progress — P5.1 and P5.3 done; parallel with P6 |
+| **P6** | Linking | 8 | In progress — P6.1 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -948,24 +948,23 @@ flowchart LR
     P67 --> EXIT
     P68 --> EXIT
 
-    style P48 fill:#8892A0,color:#fff
+    style P48 fill:#22A75B,color:#fff
     style P29 fill:#22A75B,color:#fff
     style P35 fill:#22A75B,color:#fff
-    style P61 fill:#8892A0,color:#fff
-    style P62 fill:#8892A0,color:#fff
-    style P63 fill:#8892A0,color:#fff
-    style P64 fill:#8892A0,color:#fff
-    style P65 fill:#8892A0,color:#fff
+    style P61 fill:#22A75B,color:#fff
+    style P62 fill:#E8A838,color:#fff
+    style P63 fill:#E8A838,color:#fff
+    style P64 fill:#E8A838,color:#fff
+    style P65 fill:#E8A838,color:#fff
     style P66 fill:#8892A0,color:#fff
-    style P67 fill:#8892A0,color:#fff
+    style P67 fill:#E8A838,color:#fff
     style P68 fill:#8892A0,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
 Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
-gate. `P6.1` carries the phase's one real cross-phase dependency — `P4.8` (recompute on edit),
-not yet merged — and everything else here is downstream of it, which is why the whole phase reads
-grey today rather than any task looking individually ready. `P2.9` and `P3.5` are already-done
+gate. `P4.8` (recompute on edit) is done, so `P6.1` is no longer gated on a cross-phase
+dependency — everything else here is downstream of it. `P2.9` and `P3.5` are already-done
 prerequisites for `P6.4` and `P6.7` respectively, shown as separate external nodes rather than
 folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. Kept
 current by hand alongside the acceptance-criteria boxes below — if a task's status here disagrees
@@ -978,11 +977,11 @@ with its boxes, the boxes win and this diagram is stale.
 **Touches.** `src/engine/graph.ts`.
 **Depends on.** P4.8.
 
-- [ ] Graph built from the document: vertices are chains, edges come from reference nodes.
-- [ ] Edges keyed `(sourceNodeId, referenceNodeId)`, **never by source alone** — one source has
+- [x] Graph built from the document: vertices are chains, edges come from reference nodes.
+- [x] Edges keyed `(sourceNodeId, referenceNodeId)`, **never by source alone** — one source has
       many consumers (§11.1, and `2026-08-03` revision 7).
-- [ ] Pure; no store or React imports.
-- [ ] Tests for topological order (§14).
+- [x] Pure; no store or React imports.
+- [x] Tests for topological order (§14).
 
 ### P6.2 — Incremental cascade
 
