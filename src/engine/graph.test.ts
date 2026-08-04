@@ -1,6 +1,6 @@
 // Dirty-set recompute (P4.8, §11 / §11.4).
 import { computeChain } from './compute';
-import { dirtyClosure, markChainsStale, recomputeChain, recomputeFromSeeds } from './graph';
+import { dirtyClosure, markChainsStale, recomputeChain, recomputeFromSeeds, removeResultNodesForChain } from './graph';
 import type {
   CalcDocument,
   CalcNode,
@@ -119,6 +119,25 @@ describe('markChainsStale', () => {
       computedAt: '2026-08-04T00:00:00.000Z',
       outcome: { status: 'stale' },
     });
+  });
+});
+
+describe('removeResultNodesForChain', () => {
+  test('deletes results by sourceChainId and drops them from members', () => {
+    const doc = docWithChains({
+      c1: {
+        members: [
+          number('a', '2', 'c1'),
+          op('p', '+', 'c1'),
+          number('b', '3', 'c1'),
+          equals('e', 'c1'),
+          result('r', 'c1', '5'),
+        ],
+      },
+    });
+    removeResultNodesForChain(doc, 'c1');
+    expect(doc.nodes.r).toBeUndefined();
+    expect(doc.chains.c1.members).toEqual(['a', 'p', 'b', 'e']);
   });
 });
 

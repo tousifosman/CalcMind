@@ -20,7 +20,7 @@ import { layoutChain } from '../chains/layout';
 import { widthOf } from '../chains/measure';
 import type { SnapOutcome } from '../chains/snapping';
 import { getDeviceLocale } from '../ui/locale';
-import { recomputeFromSeeds } from '../engine/graph';
+import { recomputeFromSeeds, removeResultNodesForChain } from '../engine/graph';
 
 export function renameDocument(name: string): void {
   useDocumentStore.getState().applyCommand((draft) => {
@@ -81,27 +81,9 @@ function reflowChain(draft: CalcDocument, chainId: ChainId): void {
   }
 }
 
-/** §8.3: a chain that loses its `=` also loses its result node. Results are found by
- *  `sourceChainId` (and dropped from `members` if present) so this works whether or not
- *  the result was listed in `members` — §12.1's sample includes it; P4.7 creates one. */
-function removeResultNodesForChain(draft: CalcDocument, chainId: ChainId): void {
-  const toDelete: NodeId[] = [];
-  for (const [id, node] of Object.entries(draft.nodes)) {
-    if (node.kind === 'result' && node.sourceChainId === chainId) {
-      toDelete.push(id);
-    }
-  }
-  if (toDelete.length === 0) return;
-
-  for (const id of toDelete) {
-    delete draft.nodes[id];
-  }
-  const chain = draft.chains[chainId];
-  if (chain) {
-    const drop = new Set(toDelete);
-    chain.members = chain.members.filter((id) => !drop.has(id));
-  }
-}
+/** §8.3: a chain that loses its `=` also loses its result node. Deletion lives in
+ *  `removeResultNodesForChain` (`engine/graph.ts`) so the equals-loss path and the
+ *  not-Evaluated recompute path cannot drift apart. */
 
 /** §8.3 bookkeeping after a chain's `members` changed, in the same commit as the
  *  mutation: drop orphaned results if `=` is gone; otherwise recompute the chain's

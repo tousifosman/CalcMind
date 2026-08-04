@@ -62,7 +62,12 @@ export function markChainsStale(draft: CalcDocument, chainIds: readonly ChainId[
   }
 }
 
-function removeResultNodes(draft: CalcDocument, chainId: ChainId): void {
+/**
+ * Delete every result whose `sourceChainId` is `chainId`, and drop those ids from
+ * `chain.members` if the chain still exists (§8.3: losing `=` loses the result;
+ * also used when recompute finds the chain no longer Evaluated).
+ */
+export function removeResultNodesForChain(draft: CalcDocument, chainId: ChainId): void {
   const toDelete: NodeId[] = [];
   for (const [id, node] of Object.entries(draft.nodes)) {
     if (node.kind === 'result' && node.sourceChainId === chainId) {
@@ -102,7 +107,7 @@ export function recomputeChain(
 
   if (computed === null) {
     // Not Evaluated (Incomplete / Invalid / Valid without a live result path).
-    if (existing.length > 0) removeResultNodes(draft, chainId);
+    if (existing.length > 0) removeResultNodesForChain(draft, chainId);
     return;
   }
 
