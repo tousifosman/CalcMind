@@ -58,6 +58,7 @@ flowchart LR
     style P0 fill:#22A75B,color:#fff
     style P1 fill:#22A75B,color:#fff
     style P2 fill:#22A75B,color:#fff
+    style P3 fill:#22A75B,color:#fff
 ```
 
 | Phase | Goal | Tasks | State |
@@ -65,8 +66,8 @@ flowchart LR
 | ~~**P0**~~ | ~~Foundations~~ | — | **Done** — `08620f9` |
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
-| **P3** | Snapping | 7 | Next |
-| **P4** | Engine | 9 | Blocked on P3 — **critical path** |
+| ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
+| **P4** | Engine | 9 | Next — **critical path** |
 | **P5** | Persistence | 8 | Blocked on P4 |
 | **P6** | Linking | 8 | Blocked on P4, parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
@@ -360,7 +361,7 @@ flowchart LR
     style P35 fill:#22A75B,color:#fff
     style P36 fill:#22A75B,color:#fff
     style P37 fill:#22A75B,color:#fff
-    style EXIT fill:#7030A0,color:#fff
+    style EXIT fill:#22A75B,color:#fff
 ```
 
 Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
@@ -480,7 +481,13 @@ other route).
 > out past `DETACH_DISTANCE` detaches without re-snapping; single-member chains dissolve; chains
 > lay out flush with no gaps.
 
-- [ ] All of the above demonstrated by hand, at more than one zoom level.
+- [x] All of the above demonstrated by hand, at more than one zoom level.
+
+Demonstrated live at zoom 0.25 and 4 (not merely type-checked — `docs/journal/2026-08-03.md`
+revision 8). See `docs/journal/2026-08-04.md` for the session, including a caret-visibility
+false alarm from imprecise test targeting at extreme zoom (resolved — the underlying candidate
+detection is correct at both extremes) and an unrelated pre-existing finding about ctrl+wheel
+zoom's `preventDefault`.
 
 ---
 
