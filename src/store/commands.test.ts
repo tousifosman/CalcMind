@@ -16,9 +16,16 @@ import {
   editNumberNode,
   deselectNode,
   selectGroup,
+  prependToChain,
+  appendToChain,
+  insertIntoChain,
+  formNewChain,
+  detachNode,
+  commitSnapOutcome,
 } from './commands';
 import { createEmptyDocument } from '../model/factories';
 import { tokens } from '../ui/tokens';
+import { layoutChain } from '../chains/layout';
 import { widthOf } from '../chains/measure';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
@@ -308,7 +315,7 @@ describe('deleteNode', () => {
     expect(useDocumentStore.getState().document.nodes[id]).toBeUndefined();
   });
 
-  test('deleting a chain member drops it from chain.members without a dangling id', () => {
+  test('deleting a chain member drops it from chain.members; a leftover sole member dissolves to free', () => {
     const a = addNumberNode({ x: 0, y: 0 }, '1');
     const b = addNumberNode({ x: 20, y: 0 }, '2');
     useDocumentStore.getState().applyCommand((draft) => {
@@ -319,7 +326,11 @@ describe('deleteNode', () => {
 
     deleteNode(a);
 
-    expect(useDocumentStore.getState().document.chains.c_test.members).toEqual([b]);
+    // §8.3: a chain that drops to one member dissolves; the survivor becomes free.
+    expect(useDocumentStore.getState().document.chains.c_test).toBeUndefined();
+    expect(useDocumentStore.getState().document.nodes[b]).toMatchObject({
+      chainId: null,
+    });
   });
 
   test('deleting the last member of a chain removes the chain', () => {
@@ -469,5 +480,350 @@ describe('selectGroup', () => {
     const before = useDocumentStore.getState().undoStack.length;
     selectGroup(id);
     expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+  });
+});
+
+describe('P3.4 chain mutations: prepend / append / insert / newChain / detach', () => {
+  function seedChain(
+    members: Array<{ raw?: string; kind?: 'number' | 'operator' | 'equals' }>,
+    anchor = { x: 100, y: 40 },
+  ) {
+    const ids: string[] = [];
+    for (const m of members) {
+      let id: string;
+      if (m.kind === 'operator') id = addOperatorNode({ x: 0, y: 0 }, '+');
+      else if (m.kind === 'equals') id = addEqualsNode({ x: 0, y: 0 });
+      else id = addNumberNode({ x: 0, y: 0 }, m.raw ?? '1');
+      ids.push(id);
+    }
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.c1 = { id: 'c1', members: ids, anchor: { ...anchor } };
+      for (const id of ids) {
+        draft.nodes[id].chainId = 'c1';
+      }
+      // Member `position` is a cache of anchor+members (§8.1). Seed it so tests that
+      // assert "existing members stay put" compare against a laid-out baseline, not the
+      // {0,0} from addNumberNode.
+      const positions = layoutChain(draft.chains.c1, draft.nodes, 'en-US');
+      for (const id of ids) {
+        const pos = positions[id];
+        if (pos) draft.nodes[id].position = pos;
+      }
+    });
+    // Clear the add-node undo entries so each mutation test starts with a known stack depth.
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    return ids;
+  }
+
+  test('appendToChain joins a free node and reflows in the same commit', () => {
+    const [a, b] = seedChain([{ raw: '1' }, { raw: '2' }]);
+    const free = addNumberNode({ x: 500, y: 40 }, '9');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    appendToChain(free, 'c1');
+
+    const chain = useDocumentStore.getState().document.chains.c1;
+    expect(chain.members).toEqual([a, b, free]);
+    expect(useDocumentStore.getState().document.nodes[free]).toMatchObject({
+      chainId: 'c1',
+      position: {
+        x: 100 + widthOf(useDocumentStore.getState().document.nodes[a]!, 'en-US')
+          + widthOf(useDocumentStore.getState().document.nodes[b]!, 'en-US'),
+        y: 40,
+      },
+    });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+  });
+
+  test('prependToChain opens a gap on the left: anchor shifts, existing members stay', () => {
+    const [a, b] = seedChain([{ raw: '1' }, { raw: '2' }]);
+    const free = addNumberNode({ x: 0, y: 0 }, '9');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    const freeWidth = widthOf(useDocumentStore.getState().document.nodes[free]!, 'en-US');
+    const aBefore = { ...useDocumentStore.getState().document.nodes[a]!.position };
+    const bBefore = { ...useDocumentStore.getState().document.nodes[b]!.position };
+
+    prependToChain(free, 'c1');
+
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([free, a, b]);
+    expect(useDocumentStore.getState().document.chains.c1.anchor).toEqual({
+      x: 100 - freeWidth,
+      y: 40,
+    });
+    expect(useDocumentStore.getState().document.nodes[free].position).toEqual({
+      x: 100 - freeWidth,
+      y: 40,
+    });
+    // Pre-existing members must not jump — only the new leftmost cell is new.
+    expect(useDocumentStore.getState().document.nodes[a].position).toEqual(aBefore);
+    expect(useDocumentStore.getState().document.nodes[b].position).toEqual(bBefore);
+  });
+
+  test('insertIntoChain at index 0 shifts the anchor like prepend', () => {
+    const [a, b] = seedChain([{ raw: '1' }, { raw: '2' }]);
+    const free = addNumberNode({ x: 0, y: 0 }, '9');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    const freeWidth = widthOf(useDocumentStore.getState().document.nodes[free]!, 'en-US');
+    const aBefore = { ...useDocumentStore.getState().document.nodes[a]!.position };
+
+    insertIntoChain(free, 'c1', 0);
+
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([free, a, b]);
+    expect(useDocumentStore.getState().document.chains.c1.anchor).toEqual({
+      x: 100 - freeWidth,
+      y: 40,
+    });
+    expect(useDocumentStore.getState().document.nodes[a].position).toEqual(aBefore);
+  });
+
+  test('insertIntoChain splices at the given index', () => {
+    const [a, op, b] = seedChain([
+      { raw: '1' },
+      { kind: 'operator' },
+      { raw: '2' },
+    ]);
+    const free = addNumberNode({ x: 0, y: 0 }, '5');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    const aBefore = { ...useDocumentStore.getState().document.nodes[a]!.position };
+
+    insertIntoChain(free, 'c1', 1);
+
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([a, free, op, b]);
+    // Interior insert keeps the anchor; members before the slot stay put.
+    expect(useDocumentStore.getState().document.chains.c1.anchor).toEqual({ x: 100, y: 40 });
+    expect(useDocumentStore.getState().document.nodes[a].position).toEqual(aBefore);
+    expect(useDocumentStore.getState().document.nodes[free].position).toEqual({
+      x: 100 + widthOf(useDocumentStore.getState().document.nodes[a]!, 'en-US'),
+      y: 40,
+    });
+  });
+
+  test('formNewChain builds [left, right] with anchor at left.position', () => {
+    const left = addNumberNode({ x: 30, y: 70 }, '3');
+    const right = addNumberNode({ x: 200, y: 70 }, '4');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    const chainId = formNewChain(left, right);
+
+    expect(chainId).not.toBeNull();
+    const chain = useDocumentStore.getState().document.chains[chainId!];
+    expect(chain).toMatchObject({
+      anchor: { x: 30, y: 70 },
+      members: [left, right],
+    });
+    expect(useDocumentStore.getState().document.nodes[left].position).toEqual({ x: 30, y: 70 });
+    expect(useDocumentStore.getState().document.nodes[right].position).toEqual({
+      x: 30 + widthOf(useDocumentStore.getState().document.nodes[left]!, 'en-US'),
+      y: 70,
+    });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+  });
+
+  test('detachNode frees the member at the given position and reflows the remainder', () => {
+    const [a, b, c] = seedChain([{ raw: '1' }, { raw: '2' }, { raw: '3' }]);
+
+    detachNode(b, { x: 250, y: 90 });
+
+    expect(useDocumentStore.getState().document.nodes[b]).toMatchObject({
+      chainId: null,
+      position: { x: 250, y: 90 },
+    });
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([a, c]);
+    expect(useDocumentStore.getState().document.nodes[a].position).toEqual({ x: 100, y: 40 });
+    expect(useDocumentStore.getState().document.nodes[c].position).toEqual({
+      x: 100 + widthOf(useDocumentStore.getState().document.nodes[a]!, 'en-US'),
+      y: 40,
+    });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+  });
+
+  test('detach that leaves one member dissolves the chain', () => {
+    const [a, b] = seedChain([{ raw: '1' }, { raw: '2' }]);
+
+    detachNode(a, { x: 10, y: 10 });
+
+    expect(useDocumentStore.getState().document.chains.c1).toBeUndefined();
+    expect(useDocumentStore.getState().document.nodes[a]).toMatchObject({
+      chainId: null,
+      position: { x: 10, y: 10 },
+    });
+    expect(useDocumentStore.getState().document.nodes[b]).toMatchObject({ chainId: null });
+  });
+
+  test('detaching the equals node also deletes the chain\'s result node', () => {
+    const [a, eq] = seedChain([{ raw: '10' }, { kind: 'equals' }]);
+    // Two members so detach of equals leaves one (which then dissolves) — seed a third
+    // so we can observe the result deletion on a still-multi-member chain first.
+    const b = addNumberNode({ x: 0, y: 0 }, '20');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.nodes[b].chainId = 'c1';
+      draft.chains.c1.members = [a, b, eq];
+      draft.nodes.r1 = {
+        id: 'r1',
+        kind: 'result',
+        sourceChainId: 'c1',
+        position: { x: 0, y: 0 },
+        chainId: 'c1',
+        createdAt: 0,
+        derived: { display: '30', computedAt: '2026-08-04T00:00:00.000Z' },
+      };
+      draft.chains.c1.members.push('r1');
+    });
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    detachNode(eq, { x: 400, y: 40 });
+
+    expect(useDocumentStore.getState().document.nodes.r1).toBeUndefined();
+    expect(useDocumentStore.getState().document.nodes[eq]).toMatchObject({ chainId: null });
+    // a, b remain (no equals, no result) — still a two-member chain.
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([a, b]);
+  });
+
+  test('each mutation is a single undo entry that fully restores', () => {
+    const left = addNumberNode({ x: 0, y: 0 }, '1');
+    const right = addNumberNode({ x: 80, y: 0 }, '2');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    formNewChain(left, right);
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[left].chainId).toBeNull();
+    expect(useDocumentStore.getState().document.nodes[right].chainId).toBeNull();
+    expect(Object.keys(useDocumentStore.getState().document.chains)).toHaveLength(0);
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[left].chainId).not.toBeNull();
+  });
+
+  test('prependToChain undo/redo restores anchor and membership', () => {
+    const [a, b] = seedChain([{ raw: '1' }, { raw: '2' }]);
+    const free = addNumberNode({ x: 0, y: 0 }, '9');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    const anchorBefore = { ...useDocumentStore.getState().document.chains.c1.anchor };
+
+    prependToChain(free, 'c1');
+    const shiftedAnchor = { ...useDocumentStore.getState().document.chains.c1.anchor };
+    expect(shiftedAnchor.x).toBeLessThan(anchorBefore.x);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([a, b]);
+    expect(useDocumentStore.getState().document.chains.c1.anchor).toEqual(anchorBefore);
+    expect(useDocumentStore.getState().document.nodes[free].chainId).toBeNull();
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([free, a, b]);
+    expect(useDocumentStore.getState().document.chains.c1.anchor).toEqual(shiftedAnchor);
+  });
+
+  test('appendToChain undo/redo restores membership', () => {
+    const [a, b] = seedChain([{ raw: '1' }, { raw: '2' }]);
+    const free = addNumberNode({ x: 0, y: 0 }, '9');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    appendToChain(free, 'c1');
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([a, b]);
+    expect(useDocumentStore.getState().document.nodes[free].chainId).toBeNull();
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([a, b, free]);
+  });
+
+  test('insertIntoChain undo/redo restores membership', () => {
+    const [a, b] = seedChain([{ raw: '1' }, { raw: '2' }]);
+    const free = addNumberNode({ x: 0, y: 0 }, '5');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    insertIntoChain(free, 'c1', 1);
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([a, b]);
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([a, free, b]);
+  });
+
+  test('detachNode undo/redo restores the member and chain', () => {
+    const [a, b, c] = seedChain([{ raw: '1' }, { raw: '2' }, { raw: '3' }]);
+
+    detachNode(b, { x: 250, y: 90 });
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([a, b, c]);
+    expect(useDocumentStore.getState().document.nodes[b].chainId).toBe('c1');
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[b]).toMatchObject({
+      chainId: null,
+      position: { x: 250, y: 90 },
+    });
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([a, c]);
+  });
+
+  test('commitSnapOutcome dispatches append', () => {
+    const [a] = seedChain([{ raw: '1' }, { raw: '2' }]);
+    const free = addNumberNode({ x: 0, y: 0 }, '9');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    commitSnapOutcome(free, { kind: 'append', chainId: 'c1' });
+
+    expect(useDocumentStore.getState().document.chains.c1.members.at(-1)).toBe(free);
+    expect(useDocumentStore.getState().document.nodes[a].chainId).toBe('c1');
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+  });
+
+  test('commitSnapOutcome dispatches prepend with a left-shifted anchor', () => {
+    const [a, b] = seedChain([{ raw: '1' }, { raw: '2' }]);
+    const free = addNumberNode({ x: 0, y: 0 }, '9');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    const freeWidth = widthOf(useDocumentStore.getState().document.nodes[free]!, 'en-US');
+    const aBefore = { ...useDocumentStore.getState().document.nodes[a]!.position };
+
+    commitSnapOutcome(free, { kind: 'prepend', chainId: 'c1' });
+
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([free, a, b]);
+    expect(useDocumentStore.getState().document.chains.c1.anchor).toEqual({
+      x: 100 - freeWidth,
+      y: 40,
+    });
+    expect(useDocumentStore.getState().document.nodes[a].position).toEqual(aBefore);
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+  });
+
+  test('commitSnapOutcome dispatches insert', () => {
+    const [a, b] = seedChain([{ raw: '1' }, { raw: '2' }]);
+    const free = addNumberNode({ x: 0, y: 0 }, '5');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    commitSnapOutcome(free, { kind: 'insert', chainId: 'c1', index: 1 });
+
+    expect(useDocumentStore.getState().document.chains.c1.members).toEqual([a, free, b]);
+  });
+
+  test('commitSnapOutcome dispatches newChain', () => {
+    const left = addNumberNode({ x: 10, y: 20 }, '1');
+    const right = addNumberNode({ x: 90, y: 20 }, '2');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    commitSnapOutcome(right, { kind: 'newChain', leftId: left, rightId: right });
+
+    const chains = Object.values(useDocumentStore.getState().document.chains);
+    expect(chains).toHaveLength(1);
+    expect(chains[0]!.members).toEqual([left, right]);
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+  });
+
+  test('appending a node already in the target chain is a no-op', () => {
+    const [a] = seedChain([{ raw: '1' }, { raw: '2' }]);
+    const before = useDocumentStore.getState().undoStack.length;
+    appendToChain(a, 'c1');
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+  });
+
+  test('detaching a free node is a no-op', () => {
+    const id = addNumberNode({ x: 1, y: 2 }, '1');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    detachNode(id, { x: 9, y: 9 });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+    expect(useDocumentStore.getState().document.nodes[id].position).toEqual({ x: 1, y: 2 });
   });
 });

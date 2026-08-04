@@ -419,13 +419,13 @@ order is the truth and is never re-derived from `x`).
 **Touches.** `src/store/commands.ts`.
 **Depends on.** P3.1, P3.3.
 
-- [ ] Commands for insert / append / prepend / new-chain / detach — one undo entry each.
-- [ ] A chain dropping to **one** member dissolves; that member becomes free with an authoritative
+- [x] Commands for insert / append / prepend / new-chain / detach — one undo entry each.
+- [x] A chain dropping to **one** member dissolves; that member becomes free with an authoritative
       `position`.
-- [ ] An empty chain is deleted.
-- [ ] A chain that loses its `=` also loses its result node.
-- [ ] Detach sets `chainId: null` and writes the node's authoritative `position`.
-- [ ] Layout re-runs **in the same commit** as the mutation, never as a follow-up effect.
+- [x] An empty chain is deleted.
+- [x] A chain that loses its `=` also loses its result node.
+- [x] Detach sets `chainId: null` and writes the node's authoritative `position`.
+- [x] Layout re-runs **in the same commit** as the mutation, never as a follow-up effect.
 
 ### P3.5 — Node drag gesture
 
