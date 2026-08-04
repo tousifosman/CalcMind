@@ -1,12 +1,175 @@
-// Dirty-set recompute (§11, §11.4). See docs/ARCHITECTURE.md.
+// Dirty-set recompute and the chain-level reference DAG (§11, §11.4).
+// See docs/ARCHITECTURE.md.
 //
-// P4.8 is the single-chain half: a mutation seeds its own chain, and that chain
-// alone is recomputed. P6.2 extends `dirtyClosure` to transitive dependents in
+// P4.8 landed the single-chain half: a mutation seeds its own chain, and that
+// chain alone is recomputed. P6.1 builds the reference DAG (`buildDependencyGraph`,
+// `topologicalOrder`). P6.2 extends `dirtyClosure` to transitive dependents in
 // topological order — callers keep calling `recomputeFromSeeds` with the same
 // signature, so the cascade lands without rewriting the store wiring.
 import { createResultNode } from '../model/factories';
-import type { CalcDocument, ChainId, NodeId, ResultNode } from '../model/types';
+import type {
+  CalcDocument,
+  CalcNode,
+  ChainId,
+  NodeId,
+  ResultNode,
+} from '../model/types';
 import { computeChain } from './compute';
+
+/** One reference link. Keyed by `(sourceNodeId, referenceNodeId)` — never by
+ *  source alone, because one value commonly feeds several consumers (§11.1,
+ *  `2026-08-03` revision 7). */
+export interface DependencyEdge {
+  sourceNodeId: NodeId;
+  referenceNodeId: NodeId;
+  /** Chain that produces / owns the referenced node. */
+  sourceChainId: ChainId;
+  /** Chain that contains the reference node (the dependent). */
+  dependentChainId: ChainId;
+}
+
+/** Chain-level DAG built from reference nodes (§11). Vertices are chains;
+ *  edge `A → B` when `B` contains a reference to a node in `A`. */
+export interface DependencyGraph {
+  /** Every chain id in the document, in `Object.keys` order. */
+  vertices: readonly ChainId[];
+  /** Reference links keyed by {@link dependencyEdgeKey}. */
+  edges: ReadonlyMap<string, DependencyEdge>;
+  /**
+   * Adjacency for cascade: `sourceChainId → dependent chain ids` (deduped,
+   * preserving first-seen order). Many references from B into A collapse to
+   * one chain edge here; `edges` still keeps each link.
+   */
+  dependents: ReadonlyMap<ChainId, readonly ChainId[]>;
+}
+
+/** Stable map key for a reference edge — pair, never source alone (§11.1). */
+export function dependencyEdgeKey(
+  sourceNodeId: NodeId,
+  referenceNodeId: NodeId,
+): string {
+  return `${sourceNodeId}\u001f${referenceNodeId}`;
+}
+
+/**
+ * Which chain produces `node` for dependency purposes. Results use
+ * `sourceChainId` (the chain whose evaluation they cache); everything else
+ * uses `chainId`. Free / unknown nodes return `null` — no chain edge.
+ */
+function chainOfSource(node: CalcNode, document: CalcDocument): ChainId | null {
+  if (node.kind === 'result') {
+    return document.chains[node.sourceChainId] !== undefined
+      ? node.sourceChainId
+      : null;
+  }
+  if (node.chainId !== null && document.chains[node.chainId] !== undefined) {
+    return node.chainId;
+  }
+  return null;
+}
+
+/**
+ * Build the chain-level dependency DAG from the document's reference nodes
+ * (§11). Pure: reads `document.nodes` / `document.chains` only.
+ *
+ * Dangling targets (missing node, or target with no chain) and free references
+ * (`chainId === null`) contribute no edge — P6.4 owns the dangling UI state;
+ * the graph simply has nothing to wire.
+ *
+ * Self-edges and longer cycles are recorded as ordinary edges; {@link
+ * topologicalOrder} still returns every vertex (cycle members trail). P6.3
+ * colours them `CircularReference` at build time.
+ */
+export function buildDependencyGraph(document: CalcDocument): DependencyGraph {
+  const vertices = Object.keys(document.chains);
+  const edges = new Map<string, DependencyEdge>();
+  const dependentSets = new Map<ChainId, ChainId[]>();
+  const dependentSeen = new Map<ChainId, Set<ChainId>>();
+
+  for (const node of Object.values(document.nodes)) {
+    if (node.kind !== 'reference') continue;
+    if (node.chainId === null || document.chains[node.chainId] === undefined) {
+      continue;
+    }
+    const target = document.nodes[node.targetNodeId];
+    if (!target) continue;
+    const sourceChainId = chainOfSource(target, document);
+    if (sourceChainId === null) continue;
+
+    const key = dependencyEdgeKey(node.targetNodeId, node.id);
+    edges.set(key, {
+      sourceNodeId: node.targetNodeId,
+      referenceNodeId: node.id,
+      sourceChainId,
+      dependentChainId: node.chainId,
+    });
+
+    let bucket = dependentSets.get(sourceChainId);
+    let seen = dependentSeen.get(sourceChainId);
+    if (!bucket || !seen) {
+      bucket = [];
+      seen = new Set();
+      dependentSets.set(sourceChainId, bucket);
+      dependentSeen.set(sourceChainId, seen);
+    }
+    if (!seen.has(node.chainId)) {
+      seen.add(node.chainId);
+      bucket.push(node.chainId);
+    }
+  }
+
+  return { vertices, edges, dependents: dependentSets };
+}
+
+/**
+ * Topological order of chains: sources before their dependents (§11). Stable
+ * among independent chains (follows `graph.vertices` order).
+ *
+ * When the graph contains a cycle, every vertex is still returned — nodes that
+ * Kahn's algorithm cannot emit are appended in vertex order. P6.3 will mark
+ * those chains; until then callers that only feed DAGs see a total order.
+ */
+export function topologicalOrder(graph: DependencyGraph): ChainId[] {
+  const inDegree = new Map<ChainId, number>();
+  for (const id of graph.vertices) {
+    inDegree.set(id, 0);
+  }
+  for (const [source, deps] of graph.dependents) {
+    if (!inDegree.has(source)) continue;
+    for (const dep of deps) {
+      if (!inDegree.has(dep)) continue;
+      // Self-edge: still raises in-degree so the node is treated as cyclic.
+      inDegree.set(dep, (inDegree.get(dep) ?? 0) + 1);
+    }
+  }
+
+  const queue: ChainId[] = [];
+  for (const id of graph.vertices) {
+    if ((inDegree.get(id) ?? 0) === 0) queue.push(id);
+  }
+
+  const order: ChainId[] = [];
+  let head = 0;
+  while (head < queue.length) {
+    const id = queue[head++];
+    order.push(id);
+    const deps = graph.dependents.get(id);
+    if (!deps) continue;
+    for (const dep of deps) {
+      const next = (inDegree.get(dep) ?? 0) - 1;
+      inDegree.set(dep, next);
+      if (next === 0) queue.push(dep);
+    }
+  }
+
+  if (order.length < graph.vertices.length) {
+    const emitted = new Set(order);
+    for (const id of graph.vertices) {
+      if (!emitted.has(id)) order.push(id);
+    }
+  }
+  return order;
+}
 
 /**
  * Expand a mutation seed into the ordered list of chains that must be
@@ -15,7 +178,7 @@ import { computeChain } from './compute';
  *
  * P4.8: the seed itself (deduped, existing chains only).
  * P6.2: replace this body with "seed ∪ transitive dependents in topo order"
- * after P6.1 builds the reference DAG. Do not change the signature.
+ * using {@link buildDependencyGraph}. Do not change the signature.
  */
 export function dirtyClosure(
   document: CalcDocument,

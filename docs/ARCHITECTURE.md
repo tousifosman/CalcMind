@@ -856,7 +856,9 @@ flowchart TD
 P4.8 lands the single-chain half in `src/engine/graph.ts`: `dirtyClosure(seed)` currently
 returns the seed itself, and `recomputeFromSeeds` marks stale then evaluates that set in one
 turn via `documentStore.applyCommand`'s `recomputeSeeds` option (or directly from chain
-finalisation). P6.2 widens `dirtyClosure` only — callers and the store API stay put.
+finalisation). P6.1 adds `buildDependencyGraph` / `topologicalOrder` — vertices are chains,
+edges are reference links keyed `(sourceNodeId, referenceNodeId)` (§11.1). P6.2 widens
+`dirtyClosure` only — callers and the store API stay put.
 
 ### 11.1 Identity hues: the visual language of a link
 
