@@ -13,4 +13,9 @@ module.exports = {
     'node_modules/(?!((jest-)?react-native|@react-native(-community)?|react-native-gesture-handler|react-native-reanimated|react-native-svg|nanoid|fast-check|immer)/)',
   ],
   setupFiles: ['./node_modules/react-native-gesture-handler/jestSetup.js'],
+
+  // Nested clones / worktrees under the repo root (local-only) collide with
+  // haste and steal react-test-renderer from a different node_modules tree.
+  modulePathIgnorePatterns: ['<rootDir>/CalcMind/', '<rootDir>/copilot-worktrees/'],
+  testPathIgnorePatterns: ['<rootDir>/CalcMind/', '<rootDir>/copilot-worktrees/'],
 };

@@ -996,3 +996,140 @@ describe('moveChain', () => {
     expect(useDocumentStore.getState().undoStack).toHaveLength(0);
   });
 });
+
+describe('P4.7 result node lifecycle', () => {
+  test('create -> snap -> = -> result (section 14 integration)', () => {
+    const left = addNumberNode({ x: 0, y: 0 }, '1221');
+    const plus = addOperatorNode({ x: 80, y: 0 }, '+');
+    const mid = addNumberNode({ x: 160, y: 0 }, '3');
+    const minus = addOperatorNode({ x: 240, y: 0 }, '-');
+    const right = addNumberNode({ x: 320, y: 0 }, '20');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    formNewChain(left, plus);
+    const chainId = useDocumentStore.getState().document.nodes[left]!.chainId!;
+    appendToChain(mid, chainId);
+    appendToChain(minus, chainId);
+    appendToChain(right, chainId);
+
+    const eqId = appendEqualsNode(right);
+
+    const doc = useDocumentStore.getState().document;
+    const chain = doc.chains[chainId]!;
+    expect(chain.members.slice(0, 5)).toEqual([left, plus, mid, minus, right]);
+    expect(doc.nodes[eqId]!.kind).toBe('equals');
+    expect(chain.members).toContain(eqId);
+
+    const resultId = chain.members.find((id) => doc.nodes[id]!.kind === 'result');
+    expect(resultId).toBeDefined();
+    expect(doc.nodes[resultId!]).toMatchObject({
+      kind: 'result',
+      sourceChainId: chainId,
+      chainId,
+      derived: { display: '1,204' },
+    });
+    expect(chain.members[chain.members.indexOf(eqId) + 1]).toBe(resultId);
+  });
+
+  test('removing = deletes the result node (section 8.3)', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '10');
+    const plus = addOperatorNode({ x: 40, y: 0 }, '+');
+    const b = addNumberNode({ x: 80, y: 0 }, '20');
+    formNewChain(a, plus);
+    const chainId = useDocumentStore.getState().document.nodes[a]!.chainId!;
+    appendToChain(b, chainId);
+    const eqId = appendEqualsNode(b);
+    const resultId = useDocumentStore
+      .getState()
+      .document.chains[chainId]!.members.find(
+        (id) => useDocumentStore.getState().document.nodes[id]!.kind === 'result',
+      )!;
+    expect(useDocumentStore.getState().document.nodes[resultId]).toBeDefined();
+
+    deleteNode(eqId);
+
+    expect(useDocumentStore.getState().document.nodes[resultId]).toBeUndefined();
+    expect(
+      Object.values(useDocumentStore.getState().document.nodes).some(
+        (n) => n.kind === 'result' && n.sourceChainId === chainId,
+      ),
+    ).toBe(false);
+  });
+
+  test('setNodeRaw rejects edits on a result - throws, does not swallow', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '7');
+    appendEqualsNode(a);
+    const resultId = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!.id;
+
+    expect(() => setNodeRaw(resultId, '99')).toThrow(/read-only/);
+    expect(useDocumentStore.getState().document.nodes[resultId]).toMatchObject({
+      kind: 'result',
+      derived: { display: '7' },
+    });
+  });
+
+  test('derived is written from the engine - never trusted as an input', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '2');
+    const times = addOperatorNode({ x: 40, y: 0 }, '×');
+    const b = addNumberNode({ x: 80, y: 0 }, '3');
+    formNewChain(a, times);
+    appendToChain(b, useDocumentStore.getState().document.nodes[a]!.chainId!);
+    appendEqualsNode(b);
+
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    expect(result.derived?.display).toBe('6');
+    const poisonedId = result.id;
+
+    useDocumentStore.getState().applyCommand((draft) => {
+      const r = Object.values(draft.nodes).find((n) => n.kind === 'result');
+      if (r && r.kind === 'result') {
+        r.derived = { display: 'POISON', computedAt: '1999-01-01T00:00:00.000Z' };
+      }
+    });
+
+    const eq = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'equals',
+    )!;
+    deleteNode(eq.id);
+    appendEqualsNode(b);
+    const fresh = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    expect(fresh.derived?.display).toBe('6');
+    expect(fresh.id).not.toBe(poisonedId);
+  });
+
+  test('DivideByZero still creates a result with derived.outcome error (P4.6)', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const div = addOperatorNode({ x: 40, y: 0 }, '÷');
+    const b = addNumberNode({ x: 80, y: 0 }, '0');
+    formNewChain(a, div);
+    appendToChain(b, useDocumentStore.getState().document.nodes[a]!.chainId!);
+    appendEqualsNode(b);
+
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    expect(result.derived).toEqual({
+      display: '',
+      computedAt: expect.any(String),
+      outcome: { status: 'error', error: 'DivideByZero' },
+    });
+  });
+
+  test('Incomplete chain with = does not create a result', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '3');
+    const { numberId } = appendOperatorAndNumber(a, '+');
+    // Chain is 3 + <empty>; appending = keeps it Incomplete (empty raw).
+    appendEqualsNode(numberId);
+
+    const results = Object.values(useDocumentStore.getState().document.nodes).filter(
+      (n) => n.kind === 'result',
+    );
+    expect(results).toHaveLength(0);
+  });
+});

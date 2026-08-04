@@ -69,7 +69,7 @@ flowchart LR
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
-| **P4** | Engine | 9 | **6/9** — P4.1–P4.6 done; P4.7–P4.9 next |
+| **P4** | Engine | 9 | **7/9** — P4.1–P4.7 done; P4.8–P4.9 next |
 | **P5** | Persistence | 8 | Blocked on P4 |
 | **P6** | Linking | 8 | Blocked on P4, parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
@@ -500,6 +500,7 @@ reason it is testable. Enforced by the definition of done above.
 
 ```mermaid
 flowchart LR
+
     P3EXIT(["P3 phase exit<br/>#44"])
     P21["P2.1<br/>Locale display<br/>#9"]
     P24["P2.4<br/>Node views<br/>#12"]
@@ -544,7 +545,7 @@ flowchart LR
     style P44 fill:#22A75B,color:#fff
     style P45 fill:#22A75B,color:#fff
     style P46 fill:#22A75B,color:#fff
-    style P47 fill:#F0A020,color:#fff
+    style P47 fill:#22A75B,color:#fff
     style P48 fill:#8892A0,color:#fff
     style P49 fill:#8892A0,color:#fff
     style EXIT fill:#7030A0,color:#fff
@@ -653,12 +654,12 @@ punctuated).
 **Touches.** `src/store/commands.ts`.
 **Depends on.** P4.5, P3.4.
 
-- [ ] Appending `=` to a `Valid` chain creates a `ResultNode` with `sourceChainId` set.
-- [ ] Removing `=` deletes the result node (§8.3).
-- [ ] The result is read-only; edit attempts are rejected, not silently swallowed.
-- [ ] `derived` is written as a cache and **never trusted on read** — the engine always wins,
+- [x] Appending `=` to a `Valid` chain creates a `ResultNode` with `sourceChainId` set.
+- [x] Removing `=` deletes the result node (§8.3).
+- [x] The result is read-only; edit attempts are rejected, not silently swallowed.
+- [x] `derived` is written as a cache and **never trusted on read** — the engine always wins,
       silently (§6, §12.1).
-- [ ] Integration test: create → snap → `=` → result (§14).
+- [x] Integration test: create → snap → `=` → result (§14).
 
 ### P4.8 — Recompute on edit
 

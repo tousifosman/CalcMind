@@ -11,6 +11,7 @@ import {
   ParenNode,
   ParenSide,
   EqualsNode,
+  ResultNode,
 } from './types';
 
 export function createNodeId(): NodeId {
@@ -82,5 +83,18 @@ export function createEqualsNode(position: Vec2): EqualsNode {
     position,
     chainId: null,
     createdAt: Date.now(),
+  };
+}
+
+/** Result nodes are derived (§6): callers set `sourceChainId` and write `derived` as a
+ *  cache from the engine. Position is a layout cache once the node is a chain member. */
+export function createResultNode(position: Vec2, sourceChainId: ChainId): ResultNode {
+  return {
+    id: createNodeId(),
+    kind: 'result',
+    position,
+    chainId: null,
+    createdAt: Date.now(),
+    sourceChainId,
   };
 }

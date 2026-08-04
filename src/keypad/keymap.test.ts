@@ -135,7 +135,7 @@ describe('dispatchEditorCommand: editing a number (§8.6 edit target)', () => {
 });
 
 describe('dispatchEditorCommand: completing a full chain by typing (§8.5, P2.8 acceptance)', () => {
-  test('12 + 34 = builds one chain with all four members plus the trailing equals', () => {
+  test('12 + 34 = builds one chain with members, trailing equals, and a result (P4.7)', () => {
     dispatchEditorCommand({ region: 'digit', value: '1' });
     dispatchEditorCommand({ region: 'digit', value: '2' });
     dispatchEditorCommand({ region: 'operator', op: '+' });
@@ -147,11 +147,14 @@ describe('dispatchEditorCommand: completing a full chain by typing (§8.5, P2.8 
     const chainIds = Object.keys(doc.chains);
     expect(chainIds).toHaveLength(1);
     const chain = doc.chains[chainIds[0]];
-    const raws = chain.members.map((id) => {
-      const node = doc.nodes[id];
-      return node.kind === 'number' ? node.raw : node.kind === 'operator' ? node.op : '=';
+    const kinds = chain.members.map((id) => doc.nodes[id].kind);
+    expect(kinds).toEqual(['number', 'operator', 'number', 'equals', 'result']);
+    const result = doc.nodes[chain.members[4]];
+    expect(result).toMatchObject({
+      kind: 'result',
+      sourceChainId: chain.id,
+      derived: { display: '46' },
     });
-    expect(raws).toEqual(['12', '+', '34', '=']);
   });
 
   test('an operator on a selected symbol node (not a number) still continues the chain', () => {

@@ -13,6 +13,7 @@ import {
   createOperatorNode,
   createParenNode,
   createEqualsNode,
+  createResultNode,
   createChainId,
 } from '../model/factories';
 import { CalcDocument, CalcNode, Chain, ChainId, NodeId, OperatorSymbol, ParenSide, Vec2 } from '../model/types';
@@ -20,6 +21,7 @@ import { layoutChain } from '../chains/layout';
 import { widthOf } from '../chains/measure';
 import type { SnapOutcome } from '../chains/snapping';
 import { getDeviceLocale } from '../ui/locale';
+import { computeChain } from '../engine/compute';
 
 export function renameDocument(name: string): void {
   useDocumentStore.getState().applyCommand((draft) => {
@@ -82,8 +84,7 @@ function reflowChain(draft: CalcDocument, chainId: ChainId): void {
 
 /** §8.3: a chain that loses its `=` also loses its result node. Results are found by
  *  `sourceChainId` (and dropped from `members` if present) so this works whether or not
- *  the result was listed in `members` — §12.1's sample includes it; earlier typing paths
- *  never created one. */
+ *  the result was listed in `members` — §12.1's sample includes it; P4.7 creates one. */
 function removeResultNodesForChain(draft: CalcDocument, chainId: ChainId): void {
   const toDelete: NodeId[] = [];
   for (const [id, node] of Object.entries(draft.nodes)) {
@@ -103,6 +104,55 @@ function removeResultNodesForChain(draft: CalcDocument, chainId: ChainId): void 
   }
 }
 
+/** §9 Valid → Evaluated: when a chain has `=` and is structurally Evaluated, ensure a
+ *  ResultNode exists with `sourceChainId` set. `derived` is written from `computeChain`
+ *  as a cache only — never read back as an input (§6, §12.1). Recompute-on-edit is P4.8;
+ *  this only creates when missing. */
+function ensureResultNodeForChain(draft: CalcDocument, chainId: ChainId): void {
+  const chain = draft.chains[chainId];
+  if (!chain) return;
+
+  for (const node of Object.values(draft.nodes)) {
+    if (node.kind === 'result' && node.sourceChainId === chainId) {
+      return;
+    }
+  }
+
+  const locale = getDeviceLocale();
+  const computed = computeChain(chain, draft.nodes, locale);
+  if (computed === null) {
+    // Not Evaluated (Incomplete / Invalid / Valid without going through `=` — but we
+    // only call this when `=` is present, so Incomplete/Invalid). No result yet (§9).
+    return;
+  }
+
+  const result = createResultNode({ x: 0, y: 0 }, chainId);
+  result.chainId = chainId;
+  const computedAt = new Date().toISOString();
+  if (computed.ok) {
+    result.derived = {
+      display: computed.display,
+      computedAt,
+    };
+  } else {
+    // P4.6's resultCellContent needs `outcome: error` to show the explanation —
+    // an unset `derived` paints a blank cell (§10.4 / PR #68 review).
+    result.derived = {
+      display: '',
+      computedAt,
+      outcome: { status: 'error', error: computed.error.kind },
+    };
+  }
+
+  draft.nodes[result.id] = result;
+  const equalsIndex = chain.members.findIndex((id) => draft.nodes[id]?.kind === 'equals');
+  if (equalsIndex >= 0) {
+    chain.members.splice(equalsIndex + 1, 0, result.id);
+  } else {
+    chain.members.push(result.id);
+  }
+}
+
 /** §8.3 bookkeeping after a chain's `members` changed, in the same commit as the
  *  mutation: drop orphaned results if `=` is gone; delete an empty chain; dissolve a
  *  single-member chain (sole member becomes free with its current `position`
@@ -114,6 +164,8 @@ function finalizeChain(draft: CalcDocument, chainId: ChainId): void {
   const hasEquals = chain.members.some((id) => draft.nodes[id]?.kind === 'equals');
   if (!hasEquals) {
     removeResultNodesForChain(draft, chainId);
+  } else {
+    ensureResultNodeForChain(draft, chainId);
   }
 
   if (chain.members.length === 0) {
