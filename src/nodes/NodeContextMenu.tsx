@@ -1,0 +1,206 @@
+// Long-press context menus (§8.6, P2.9).
+//
+// Two variants, both rendered as a floating sheet positioned at the long-press
+// screen point:
+//
+//   • Node menu — `Copy`, `Delete`, `Select group`. (`Unlink from parent` arrives with P6.4.)
+//   • Canvas menu — `Add number`, `Paste`, `Add graph`, all **disabled** (§17.2 defers
+//     graphing; copy/paste is future work).
+//
+// Dismissal: tapping the scrim (the transparent full-screen backdrop) closes the menu without
+// taking any action. Selecting a menu item also closes it after running its handler.
+//
+// Precedence with P3.7 long-press-to-move-chain: the context menu has precedence. The menu
+// opens on a 500 ms long-press; P3.7 will use the same gesture, so it must check
+// `contextMenu !== null` before activating chain-drag mode (recorded here as the decided
+// precedence — see journal entry 2026-08-04.md).
+import React from 'react';
+import {
+  Modal,
+  Pressable,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+} from 'react-native';
+import { useUiStore } from '../store/uiStore';
+import { NodeId, Vec2 } from '../model/types';
+
+// ─── Item shape ──────────────────────────────────────────────────────────────
+
+interface MenuItem {
+  label: string;
+  disabled?: boolean;
+  onPress?: () => void;
+}
+
+// ─── Single row ──────────────────────────────────────────────────────────────
+
+function MenuRow({ item }: { item: MenuItem }) {
+  return (
+    <TouchableOpacity
+      testID={`context-menu-item-${item.label}`}
+      style={[styles.row, item.disabled && styles.rowDisabled]}
+      onPress={item.disabled ? undefined : item.onPress}
+      disabled={item.disabled}
+      accessibilityLabel={item.label}
+      accessibilityState={{ disabled: item.disabled ?? false }}
+    >
+      <Text style={[styles.rowText, item.disabled && styles.rowTextDisabled]}>{item.label}</Text>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Floating sheet ───────────────────────────────────────────────────────────
+
+interface MenuSheetProps {
+  anchor: Vec2;
+  items: MenuItem[];
+  onDismiss: () => void;
+}
+
+function MenuSheet({ anchor, items, onDismiss }: MenuSheetProps) {
+  return (
+    <Modal transparent animationType="none" onRequestClose={onDismiss} testID="context-menu-modal">
+      {/* Full-screen scrim: tapping outside dismisses without acting */}
+      <Pressable style={styles.scrim} onPress={onDismiss} testID="context-menu-scrim">
+        {/* Inner Pressable stops the sheet's own taps from bubbling to the scrim */}
+        <Pressable
+          style={[styles.sheet, { left: anchor.x, top: anchor.y }]}
+          testID="context-menu-sheet"
+        >
+          {items.map((item) => (
+            <MenuRow key={item.label} item={item} />
+          ))}
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ─── Node context menu ────────────────────────────────────────────────────────
+
+interface NodeContextMenuProps {
+  nodeId: NodeId;
+  anchor: Vec2;
+  onDelete: (nodeId: NodeId) => void;
+  onSelectGroup: (nodeId: NodeId) => void;
+  onDismiss: () => void;
+}
+
+export function NodeContextMenu({
+  nodeId,
+  anchor,
+  onDelete,
+  onSelectGroup,
+  onDismiss,
+}: NodeContextMenuProps) {
+  const items: MenuItem[] = [
+    {
+      label: 'Copy',
+      // Copy is future work — declared per §8.6 but not yet functional.
+      disabled: true,
+    },
+    {
+      label: 'Delete',
+      onPress: () => {
+        onDelete(nodeId);
+        onDismiss();
+      },
+    },
+    {
+      label: 'Select group',
+      onPress: () => {
+        onSelectGroup(nodeId);
+        onDismiss();
+      },
+    },
+  ];
+
+  return <MenuSheet anchor={anchor} items={items} onDismiss={onDismiss} />;
+}
+
+// ─── Canvas context menu ──────────────────────────────────────────────────────
+
+interface CanvasContextMenuProps {
+  anchor: Vec2;
+  onDismiss: () => void;
+}
+
+export function CanvasContextMenu({ anchor, onDismiss }: CanvasContextMenuProps) {
+  // All items are disabled in P2.9: §17.2 defers graphing; copy/paste is future work;
+  // `Add number` is handled by a normal tap — a long-press on empty canvas reaching
+  // this menu is the explicit §8.6 affordance so it's declared here disabled rather than
+  // wired to addNumberNode (which would bypass the intent signal of a deliberate long-press).
+  const items: MenuItem[] = [
+    { label: 'Add number', disabled: true },
+    { label: 'Paste', disabled: true },
+    { label: 'Add graph', disabled: true },
+  ];
+
+  return <MenuSheet anchor={anchor} items={items} onDismiss={onDismiss} />;
+}
+
+// ─── Integrated overlay (reads from uiStore) ──────────────────────────────────
+
+/** Renders whichever context menu is currently open (or nothing). Mount once near
+ *  the root, above the canvas and keypad. Handlers are injected as props so this
+ *  component stays decoupled from command imports. */
+interface ContextMenuOverlayProps {
+  onDeleteNode: (nodeId: NodeId) => void;
+  onSelectGroup: (nodeId: NodeId) => void;
+}
+
+export function ContextMenuOverlay({ onDeleteNode, onSelectGroup }: ContextMenuOverlayProps) {
+  const contextMenu = useUiStore((state) => state.contextMenu);
+  const closeContextMenu = useUiStore((state) => state.closeContextMenu);
+
+  if (!contextMenu) return null;
+
+  if (contextMenu.kind === 'node') {
+    return (
+      <NodeContextMenu
+        nodeId={contextMenu.nodeId}
+        anchor={contextMenu.anchor}
+        onDelete={onDeleteNode}
+        onSelectGroup={onSelectGroup}
+        onDismiss={closeContextMenu}
+      />
+    );
+  }
+
+  return <CanvasContextMenu anchor={contextMenu.anchor} onDismiss={closeContextMenu} />;
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  scrim: {
+    flex: 1,
+  },
+  sheet: {
+    position: 'absolute',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
+    minWidth: 180,
+    paddingVertical: 4,
+  },
+  row: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+  },
+  rowDisabled: {
+    opacity: 0.35,
+  },
+  rowText: {
+    fontSize: 16,
+    color: '#1A1A2E',
+  },
+  rowTextDisabled: {
+    color: '#888',
+  },
+});
