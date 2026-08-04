@@ -76,6 +76,11 @@ function chainOfSource(node: CalcNode, document: CalcDocument): ChainId | null {
  * (`chainId === null`) contribute no edge — P6.4 owns the dangling UI state;
  * the graph simply has nothing to wire.
  *
+ * An edge means "B reads a node in A," not "the reference evaluates successfully."
+ * Pointing at an operator or paren still wires the chain edge even though
+ * `resolveReferenceValue` would yield `NotANumber` — recomputing on an upstream
+ * edit just re-derives the same error.
+ *
  * Self-edges and longer cycles are recorded as ordinary edges; {@link
  * topologicalOrder} still returns every vertex (cycle members trail). P6.3
  * colours them `CircularReference` at build time.
@@ -118,7 +123,14 @@ export function buildDependencyGraph(document: CalcDocument): DependencyGraph {
     }
   }
 
-  return { vertices, edges, dependents: dependentSets };
+  // Freeze adjacency lists so the `readonly` in `DependencyGraph.dependents`
+  // is honest at runtime too (callers get a ReadonlyMap view of a finished graph).
+  const dependents = new Map<ChainId, readonly ChainId[]>();
+  for (const [source, deps] of dependentSets) {
+    dependents.set(source, Object.freeze(deps));
+  }
+
+  return { vertices, edges, dependents };
 }
 
 /**
