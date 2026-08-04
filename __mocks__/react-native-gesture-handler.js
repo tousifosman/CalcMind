@@ -8,7 +8,19 @@ const { View } = require('react-native');
 
 function makeGestureBuilder() {
   const builder = {};
-  const chainable = ['minPointers', 'maxPointers', 'onStart', 'onUpdate', 'onEnd', 'onChange', 'maxDuration', 'minDuration'];
+  const chainable = [
+    'minPointers',
+    'maxPointers',
+    'onStart',
+    'onUpdate',
+    'onEnd',
+    'onChange',
+    'onFinalize',
+    'maxDuration',
+    'minDuration',
+    'minDistance',
+    'enabled',
+  ];
   for (const method of chainable) {
     builder[method] = () => builder;
   }

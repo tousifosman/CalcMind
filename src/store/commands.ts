@@ -374,13 +374,23 @@ export function insertIntoChain(nodeId: NodeId, chainId: ChainId, index: number)
 }
 
 /** Create a fresh two-member chain ordered `[leftId, rightId]` (§8.3 NEW_CHAIN).
- *  Anchor is the left node's current (authoritative) position; layout reflows both. */
-export function formNewChain(leftId: NodeId, rightId: NodeId): ChainId | null {
+ *  Anchor is the left node's position; pass `leftPosition` when the left node is the
+ *  one being dragged so the anchor reflects the release point rather than a stale
+ *  store cache (P3.5). */
+export function formNewChain(
+  leftId: NodeId,
+  rightId: NodeId,
+  leftPosition?: Vec2,
+): ChainId | null {
   let created: ChainId | null = null;
   useDocumentStore.getState().applyCommand((draft) => {
     const left = draft.nodes[leftId];
     const right = draft.nodes[rightId];
     if (!left || !right || leftId === rightId) return;
+
+    if (leftPosition) {
+      left.position = { x: leftPosition.x, y: leftPosition.y };
+    }
 
     removeFromCurrentChain(draft, leftId);
     removeFromCurrentChain(draft, rightId);
@@ -411,8 +421,14 @@ export function detachNode(nodeId: NodeId, position: Vec2): void {
 }
 
 /** Dispatch a P3.3 `SnapOutcome` onto the matching mutation command. One undo entry —
- *  each branch calls a single `applyCommand`. Convenience for P3.5's release handler. */
-export function commitSnapOutcome(nodeId: NodeId, outcome: SnapOutcome): void {
+ *  each branch calls a single `applyCommand`. `position` is the drag release point in
+ *  world units; required for NEW_CHAIN when the dragged node is the left member so the
+ *  anchor is not taken from a stale store position (P3.5). */
+export function commitSnapOutcome(
+  nodeId: NodeId,
+  outcome: SnapOutcome,
+  position?: Vec2,
+): void {
   switch (outcome.kind) {
     case 'prepend':
       prependToChain(nodeId, outcome.chainId);
@@ -423,10 +439,24 @@ export function commitSnapOutcome(nodeId: NodeId, outcome: SnapOutcome): void {
     case 'insert':
       insertIntoChain(nodeId, outcome.chainId, outcome.index);
       break;
-    case 'newChain':
-      formNewChain(outcome.leftId, outcome.rightId);
+    case 'newChain': {
+      const leftPos =
+        position && nodeId === outcome.leftId ? position : undefined;
+      formNewChain(outcome.leftId, outcome.rightId, leftPos);
       break;
+    }
   }
+}
+
+/** Reposition a free node. One undo entry. No-op if the node is missing or still
+ *  chained — members get their position from layout (§8.1), not from this command. */
+export function moveFreeNode(nodeId: NodeId, position: Vec2): void {
+  useDocumentStore.getState().applyCommand((draft) => {
+    const node = draft.nodes[nodeId];
+    if (!node || node.chainId !== null) return;
+    if (node.position.x === position.x && node.position.y === position.y) return;
+    node.position = { x: position.x, y: position.y };
+  });
 }
 
 /** Selects every node in the same chain as `nodeId` (§8.6, P2.9). Nodes that are

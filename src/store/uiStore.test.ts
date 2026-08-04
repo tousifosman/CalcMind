@@ -6,6 +6,7 @@ function resetStore() {
     clearConfirmVisible: false,
     selectedNodeId: null,
     editingNodeId: null,
+    dragSnap: null,
   });
 }
 

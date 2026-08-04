@@ -434,14 +434,14 @@ order is the truth and is never re-derived from `x`).
 **Touches.** `src/nodes/useNodeDrag.ts`.
 **Depends on.** P3.3, P3.4.
 
-- [ ] Implements the §8.2 states: Idle → Dragging → Detaching / Snapping → Idle.
-- [ ] Drag position lives in Reanimated shared values. The store is written **only on release** —
+- [x] Implements the §8.2 states: Idle → Dragging → Detaching / Snapping → Idle.
+- [x] Drag position lives in Reanimated shared values. The store is written **only on release** —
       no mid-drag frame may touch undo history (§11.4, and the pattern P1 already established in
       `Canvas.tsx`).
-- [ ] The snap candidate is recomputed per frame and exposed to the caret (P3.6).
-- [ ] Drag composes correctly with the canvas pan gesture: a press on a node drags the node, a
+- [x] The snap candidate is recomputed per frame and exposed to the caret (P3.6).
+- [x] Drag composes correctly with the canvas pan gesture: a press on a node drags the node, a
       press on empty canvas pans the canvas.
-- [ ] Verified interactively at zoom 0.25 **and** 4 — snapping must feel the same at both.
+- [x] Verified interactively at zoom 0.25 **and** 4 — snapping must feel the same at both.
 
 ### P3.6 — Insertion feedback
 

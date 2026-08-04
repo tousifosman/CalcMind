@@ -21,6 +21,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useDocumentStore } from '../store/documentStore';
 import { Vec2, ZOOM_MIN, ZOOM_MAX } from '../model/types';
+import { CanvasViewportContext } from './ViewportContext';
 
 const WHEEL_COMMIT_DEBOUNCE_MS = 200;
 /** Wheel deltaY-per-notch that reads as one "ctrl+wheel" zoom step. */
@@ -180,17 +181,19 @@ export function Canvas({ children, style, onTap, onLongPress }: CanvasProps) {
   const webWheelProps: Record<string, unknown> = Platform.OS === 'web' ? { onWheel } : {};
 
   return (
-    <View style={[styles.fill, style]} {...webWheelProps}>
-      <GestureDetector gesture={composedGesture}>
-        <View style={styles.fill} testID="canvas-surface">
-          <Animated.View style={[styles.fill, outerStyle]}>
-            <Animated.View style={[styles.fill, styles.originTopLeft, innerStyle]}>
-              {children}
+    <CanvasViewportContext.Provider value={{ panX, panY, zoom }}>
+      <View style={[styles.fill, style]} {...webWheelProps}>
+        <GestureDetector gesture={composedGesture}>
+          <View style={styles.fill} testID="canvas-surface">
+            <Animated.View style={[styles.fill, outerStyle]}>
+              <Animated.View style={[styles.fill, styles.originTopLeft, innerStyle]}>
+                {children}
+              </Animated.View>
             </Animated.View>
-          </Animated.View>
-        </View>
-      </GestureDetector>
-    </View>
+          </View>
+        </GestureDetector>
+      </View>
+    </CanvasViewportContext.Provider>
   );
 }
 
