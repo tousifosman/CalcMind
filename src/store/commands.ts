@@ -17,6 +17,7 @@ import {
 } from '../model/factories';
 import { CalcDocument, CalcNode, Chain, ChainId, NodeId, OperatorSymbol, ParenSide, Vec2 } from '../model/types';
 import { layoutChain } from '../chains/layout';
+import { widthOf } from '../chains/measure';
 import type { SnapOutcome } from '../chains/snapping';
 import { getDeviceLocale } from '../ui/locale';
 
@@ -303,7 +304,11 @@ export function deleteNode(nodeId: NodeId): void {
 
 // --- P3.4: snap / detach commits (§8.3 bookkeeping) ---------------------------------
 
-/** Prepend `nodeId` as the new leftmost member of `chainId`. One undo entry. */
+/** Prepend `nodeId` as the new leftmost member of `chainId`. One undo entry.
+ *  Shifts `chain.anchor` left by `widthOf(node)` so existing members keep their world
+ *  positions and only the new leftmost cell is new — §8.3's "opens a gap at the pending
+ *  insertion point" for a left-edge snap. Leaving the anchor fixed would reflow the whole
+ *  formula rightward onto the new node's slot. */
 export function prependToChain(nodeId: NodeId, chainId: ChainId): void {
   useDocumentStore.getState().applyCommand((draft) => {
     const node = draft.nodes[nodeId];
@@ -314,6 +319,11 @@ export function prependToChain(nodeId: NodeId, chainId: ChainId): void {
     removeFromCurrentChain(draft, nodeId);
     // Target chain is a different id, so finalize on the source cannot have deleted it.
     if (!draft.chains[chainId]) return;
+    const locale = getDeviceLocale();
+    chain.anchor = {
+      x: chain.anchor.x - widthOf(node, locale),
+      y: chain.anchor.y,
+    };
     node.chainId = chainId;
     chain.members.unshift(nodeId);
     finalizeChain(draft, chainId);
@@ -337,7 +347,9 @@ export function appendToChain(nodeId: NodeId, chainId: ChainId): void {
 }
 
 /** Insert `nodeId` into `chainId` before `members[index]` (§8.3 INSERT_AT).
- *  `index` is clamped to `[0, members.length]` so a stale caret cannot write past the end. */
+ *  `index` is clamped to `[0, members.length]` so a stale caret cannot write past the end.
+ *  Index 0 is the same geometry as prepend (snap's `memberBoundaries` never yields 0, but
+ *  a direct call can) — shift the anchor left so members to the right of the gap stay put. */
 export function insertIntoChain(nodeId: NodeId, chainId: ChainId, index: number): void {
   useDocumentStore.getState().applyCommand((draft) => {
     const node = draft.nodes[nodeId];
@@ -348,6 +360,13 @@ export function insertIntoChain(nodeId: NodeId, chainId: ChainId, index: number)
     removeFromCurrentChain(draft, nodeId);
     if (!draft.chains[chainId]) return;
     const clamped = Math.max(0, Math.min(index, chain.members.length));
+    if (clamped === 0) {
+      const locale = getDeviceLocale();
+      chain.anchor = {
+        x: chain.anchor.x - widthOf(node, locale),
+        y: chain.anchor.y,
+      };
+    }
     node.chainId = chainId;
     chain.members.splice(clamped, 0, nodeId);
     finalizeChain(draft, chainId);
@@ -386,7 +405,7 @@ export function detachNode(nodeId: NodeId, position: Vec2): void {
   useDocumentStore.getState().applyCommand((draft) => {
     const node = draft.nodes[nodeId];
     if (!node || node.chainId === null) return;
-    node.position = { x: position.x, y: position.y };
+    node.position = { ...position };
     removeFromCurrentChain(draft, nodeId);
   });
 }
