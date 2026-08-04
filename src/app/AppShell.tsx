@@ -13,31 +13,40 @@ import { NodeLayer } from '../canvas/NodeLayer';
 import { hitTestNode } from '../canvas/hitTest';
 import { Keypad } from '../keypad/Keypad';
 import { ContextMenuOverlay } from '../nodes/NodeContextMenu';
+import { commandFromHardwareKey, dispatchEditorCommand } from '../keypad/keymap';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
-import { addNumberNode, selectNode, editNumberNode, deselectNode, deleteNode, selectGroup } from '../store/commands';
+import { addNumberNode, selectNode, editNumberNode, deleteNode, selectGroup } from '../store/commands';
 import { getDeviceLocale } from '../ui/locale';
 import { Vec2 } from '../model/types';
 
 export function AppShell() {
-  // Escape deselects (§8.5, §8.6) when nothing is focused to catch the key itself - a number
-  // node being edited handles its own Escape in NumberNode.tsx, since react-native-web's
-  // TextInput stops the keydown from ever reaching this listener while it's focused. Web only:
-  // there is no hardware-keyboard equivalent on a touch-only device, and full keyboard support
-  // (native included) is P2.8/P7.2's job.
+  // Hardware/web-keyboard dispatch (§8.5, P2.8), through the same `dispatchEditorCommand`
+  // the on-screen keypad uses below. Web only: there is no hardware-keyboard equivalent on a
+  // touch-only device. A number node being edited handles its own keys locally in
+  // NumberNode.tsx instead - react-native-web's TextInput stops most handled keydowns from
+  // reaching this listener while it's focused (docs/journal/2026-08-03.md), but not
+  // reliably every one: Enter was observed reaching both handlers, double-dispatching (the
+  // editing node's own '=' append, then a second, unwanted "nothing selected" one here). The
+  // activeElement check below is the actual guard against that - the comment above is why a
+  // key gets to the input at all, not why this listener skips it.
   useEffect(() => {
     // No DOM lib in this project's tsconfig (a bare RN app, per AGENTS.md) - `any` here is
     // the same trade Canvas.tsx's onWheel already makes for the same reason.
     const webWindow = Platform.OS === 'web' ? (globalThis as any).window : undefined;
     if (!webWindow) return;
     function onKeyDown(e: any): void {
-      if (e.key === 'Escape') deselectNode();
+      const focusedTag = webWindow.document?.activeElement?.tagName;
+      if (focusedTag === 'INPUT' || focusedTag === 'TEXTAREA') return;
+      const command = commandFromHardwareKey(e.key);
+      if (command) dispatchEditorCommand(command);
     }
     webWindow.addEventListener('keydown', onKeyDown);
     return () => webWindow.removeEventListener('keydown', onKeyDown);
   }, []);
 
   function handleCanvasTap(worldPoint: Vec2): void {
+    useUiStore.getState().setLastInteractionPoint(worldPoint);
     const { document } = useDocumentStore.getState();
     const hit = hitTestNode(document.nodes, worldPoint, getDeviceLocale());
     if (hit) {
@@ -71,7 +80,7 @@ export function AppShell() {
         <Canvas style={styles.fill} onTap={handleCanvasTap} onLongPress={handleCanvasLongPress}>
           <NodeLayer />
         </Canvas>
-        <Keypad />
+        <Keypad locale={getDeviceLocale()} onKeyPress={dispatchEditorCommand} />
         <ContextMenuOverlay onDeleteNode={deleteNode} onSelectGroup={selectGroup} />
       </View>
     </GestureHandlerRootView>

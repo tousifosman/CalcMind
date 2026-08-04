@@ -1113,6 +1113,7 @@ it unclear which parts were claims about the present and which were intentions.
 | 13 | All connectors shown, not just selected | Tydlig hides them and the review names that as confusing (§11.1) | Density testing shows it is too noisy — then fade, don't hide |
 | 14 | Always-on pills | Taken from the supplied reference; makes structure permanently legible | The canvas reads as too busy with real content |
 | 15 | Swipe-to-clear requires confirmation | Tydlig's bare swipe wipes a document; too destructive for one stray gesture even with undo (§8.5) | Never |
+| 16 | Typing builds chains directly, not through P3's snapping | Typing always knows exactly which chain to extend (whichever the selected node belongs to), so it appends deterministically (`store/commands.ts`'s `appendMembersToChain`) instead of running §8.2-8.4's geometric candidate search, which exists to disambiguate a *dragged* node's several nearby neighbours (P2.8) | P3's chain layout pass changes how `Chain.anchor`/positions are derived and this stops matching it |
 
 ## 17. Open questions
 

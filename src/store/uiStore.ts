@@ -16,6 +16,13 @@ export interface UiState {
   showKeypad: () => void;
   hideKeypad: () => void;
 
+  /** Where a key that creates a node (§8.5: "otherwise creates a new node at the
+   *  caret/last-tap point") should place it, when there's no selection to act on
+   *  instead. Updated on every canvas tap; an on-screen or hardware key press never
+   *  moves it. Ephemeral - it is not part of the document and never undoable. */
+  lastInteractionPoint: Vec2;
+  setLastInteractionPoint: (point: Vec2) => void;
+
   /** Swipe-across-backspace clear confirmation (§8.5, decision #15). Ephemeral
    *  for the same reason keypad visibility is: it is a prompt about intent, not
    *  a document edit, so it must sit outside undo history. */
@@ -55,6 +62,9 @@ export const useUiStore = create<UiState>((set) => ({
   toggleKeypad: () => set((state) => ({ keypadVisible: !state.keypadVisible })),
   showKeypad: () => set({ keypadVisible: true }),
   hideKeypad: () => set({ keypadVisible: false }),
+
+  lastInteractionPoint: { x: 0, y: 0 },
+  setLastInteractionPoint: (point) => set({ lastInteractionPoint: point }),
 
   clearConfirmVisible: false,
   requestClearConfirm: () => set({ clearConfirmVisible: true }),
