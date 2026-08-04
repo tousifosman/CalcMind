@@ -4,6 +4,19 @@ import { DETACH_DISTANCE } from '../chains/bounds';
 import type { SnapOutcome } from '../chains/snapping';
 import type { Vec2 } from '../model/types';
 
+/** §8.2 MovingChain: dwell before a move that lifts the whole chain. Context menu is
+ *  500 ms (P2.9); this stays shorter so hold-then-drag and hold-for-menu don't collide. */
+export const CHAIN_MOVE_HOLD_MS = 200;
+
+/**
+ * §8.3 / §17.1 mapping: long-press-then-drag moves the chain; plain drag detaches.
+ * Flipping this boolean is the one-line remap the architecture calls out — try both
+ * before locking the decision (P3.7).
+ */
+export const LONG_PRESS_MOVES_CHAIN = true;
+
+export type NodeDragMode = 'free' | 'detachMember' | 'moveChain';
+
 export type DragReleaseDecision =
   | { kind: 'snap'; outcome: SnapOutcome }
   | { kind: 'detach'; position: Vec2 }
@@ -24,7 +37,38 @@ export function crossedDetachDistance(home: Vec2, current: Vec2): boolean {
   return worldDistance(home, current) >= DETACH_DISTANCE;
 }
 
-/** Map end-of-drag geometry onto a single commit action.
+/**
+ * Decide whether this press is a free-node move, a member detach, or a whole-chain move.
+ *
+ * Precedence (deliberate, P2.9 / P3.7):
+ * 1. Free node → always `free`.
+ * 2. `Select group` includes this node → `moveChain` (§8.6 other route).
+ * 3. Context menu already claimed the press → never `moveChain` (menu wins at 500 ms).
+ * 4. Otherwise the §17.1 dwell mapping (`LONG_PRESS_MOVES_CHAIN`).
+ */
+export function resolveNodeDragMode(args: {
+  wasChained: boolean;
+  heldMs: number;
+  groupSelected: boolean;
+  contextMenuOpen: boolean;
+  /** Override for the §17.1 A/B trial; defaults to `LONG_PRESS_MOVES_CHAIN`. */
+  longPressMovesChain?: boolean;
+}): NodeDragMode {
+  if (!args.wasChained) return 'free';
+  if (args.groupSelected) return 'moveChain';
+  if (args.contextMenuOpen) return 'detachMember';
+
+  const longPressMovesChain = args.longPressMovesChain ?? LONG_PRESS_MOVES_CHAIN;
+  const heldLong = args.heldMs >= CHAIN_MOVE_HOLD_MS;
+  if (longPressMovesChain) {
+    return heldLong ? 'moveChain' : 'detachMember';
+  }
+  return heldLong ? 'detachMember' : 'moveChain';
+}
+
+/** Map end-of-drag geometry onto a single commit action for free / detachMember modes.
+ *  `moveChain` commits are handled by the gesture (anchor = homeAnchor + delta) and
+ *  never go through snap/detach.
  *
  *  - A snap candidate always wins (P3.3 already applied hysteresis / nearest).
  *  - A chained member that crossed detach with no candidate becomes free at `position`.

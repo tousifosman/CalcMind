@@ -1,7 +1,9 @@
 import { DETACH_DISTANCE, SNAP_DISTANCE } from '../chains/bounds';
 import {
+  CHAIN_MOVE_HOLD_MS,
   crossedDetachDistance,
   decideDragRelease,
+  resolveNodeDragMode,
   worldDistance,
 } from './dragLifecycle';
 
@@ -20,6 +22,58 @@ describe('worldDistance / crossedDetachDistance', () => {
 
   test('DETACH_DISTANCE stays strictly above SNAP_DISTANCE (hysteresis premise)', () => {
     expect(DETACH_DISTANCE).toBeGreaterThan(SNAP_DISTANCE);
+  });
+});
+
+describe('resolveNodeDragMode', () => {
+  const base = {
+    wasChained: true,
+    heldMs: 0,
+    groupSelected: false,
+    contextMenuOpen: false,
+    longPressMovesChain: true,
+  };
+
+  test('free node is always free, regardless of dwell or group', () => {
+    expect(
+      resolveNodeDragMode({ ...base, wasChained: false, heldMs: 999, groupSelected: true }),
+    ).toBe('free');
+  });
+
+  test('Select group forces moveChain (the §8.6 other route)', () => {
+    expect(resolveNodeDragMode({ ...base, heldMs: 0, groupSelected: true })).toBe('moveChain');
+  });
+
+  test('open context menu blocks moveChain even after a long dwell', () => {
+    expect(
+      resolveNodeDragMode({
+        ...base,
+        heldMs: CHAIN_MOVE_HOLD_MS + 50,
+        contextMenuOpen: true,
+      }),
+    ).toBe('detachMember');
+  });
+
+  test('assumption mapping: short drag detaches, dwell ≥ 200ms moves chain', () => {
+    expect(resolveNodeDragMode({ ...base, heldMs: CHAIN_MOVE_HOLD_MS - 1 })).toBe('detachMember');
+    expect(resolveNodeDragMode({ ...base, heldMs: CHAIN_MOVE_HOLD_MS })).toBe('moveChain');
+  });
+
+  test('opposite mapping: short drag moves chain, dwell ≥ 200ms detaches', () => {
+    expect(
+      resolveNodeDragMode({
+        ...base,
+        heldMs: 0,
+        longPressMovesChain: false,
+      }),
+    ).toBe('moveChain');
+    expect(
+      resolveNodeDragMode({
+        ...base,
+        heldMs: CHAIN_MOVE_HOLD_MS,
+        longPressMovesChain: false,
+      }),
+    ).toBe('detachMember');
   });
 });
 

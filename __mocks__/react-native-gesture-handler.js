@@ -12,6 +12,7 @@ function makeGestureBuilder() {
     'minPointers',
     'maxPointers',
     'onStart',
+    'onBegin',
     'onUpdate',
     'onEnd',
     'onChange',
@@ -19,6 +20,7 @@ function makeGestureBuilder() {
     'maxDuration',
     'minDuration',
     'minDistance',
+    'activateAfterLongPress',
     'enabled',
   ];
   for (const method of chainable) {
@@ -34,6 +36,7 @@ const Gesture = {
   LongPress: makeGestureBuilder,
   Simultaneous: () => makeGestureBuilder(),
   Race: () => makeGestureBuilder(),
+  Exclusive: () => makeGestureBuilder(),
 };
 
 function GestureDetector({ children }) {

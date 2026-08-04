@@ -11,9 +11,9 @@
 // taking any action. Selecting a menu item also closes it after running its handler.
 //
 // Precedence with P3.7 long-press-to-move-chain: the context menu has precedence. The menu
-// opens on a 500 ms long-press; P3.7 will use the same gesture, so it must check
-// `contextMenu !== null` before activating chain-drag mode (recorded here as the decided
-// precedence — see journal entry 2026-08-04.md).
+// opens on a 500 ms long-press; chain-move arms at 200 ms then requires movement. If the
+// menu is already open, `useNodeDrag` checks `contextMenu !== null` and refuses moveChain
+// (recorded as the decided precedence — see journal entry 2026-08-04.md).
 import React from 'react';
 import {
   Modal,
