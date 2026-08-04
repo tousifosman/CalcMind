@@ -355,11 +355,11 @@ flowchart LR
     style P29 fill:#22A75B,color:#fff
     style P31 fill:#22A75B,color:#fff
     style P32 fill:#22A75B,color:#fff
-    style P33 fill:#FFBF28,color:#fff
-    style P34 fill:#8892A0,color:#fff
-    style P35 fill:#8892A0,color:#fff
+    style P33 fill:#22A75B,color:#fff
+    style P34 fill:#22A75B,color:#fff
+    style P35 fill:#22A75B,color:#fff
     style P36 fill:#8892A0,color:#fff
-    style P37 fill:#8892A0,color:#fff
+    style P37 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
@@ -458,19 +458,19 @@ order is the truth and is never re-derived from `x`).
 ### P3.7 — Chain move vs member detach
 
 **Objective.** Settle §17.1, the one genuinely open interaction in the design.
-**Architecture.** §8.2 (`MovingChain`), §8.3 **[assumption]**, §17.1, §8.6 (`Select group` is the
+**Architecture.** §8.2 (`MovingChain`), §8.3, §17.1, §8.6 (`Select group` is the
 other route).
 **Touches.** `src/nodes/useNodeDrag.ts`.
 **Depends on.** P3.5, P2.9.
 
-- [ ] Long-press 200ms on a member then move drags the **whole chain** (anchor updates); a plain
+- [x] Long-press 200ms on a member then move drags the **whole chain** (anchor updates); a plain
       drag detaches that member.
-- [ ] No conflict with P2.9's long-press context menu — one gesture, one outcome, decided
+- [x] No conflict with P2.9's long-press context menu — one gesture, one outcome, decided
       deliberately.
-- [ ] **Decide this on a real device, not on paper.** §17.1 says the opposite mapping is
+- [x] **Decide this on a real device, not on paper.** §17.1 says the opposite mapping is
       defensible, that both gestures exist in the reference app, and that this is one line in
       `useNodeDrag`. Try both.
-- [ ] Whichever way it lands, record it in the journal with what convinced you. This closes an open
+- [x] Whichever way it lands, record it in the journal with what convinced you. This closes an open
       question, so it earns a `Now known:` line — and if the shipped mapping is the opposite of the
       assumption above, update §8.3 and §17.1 in the same commit.
 
