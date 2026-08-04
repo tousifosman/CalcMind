@@ -898,6 +898,62 @@ too).
 Depends only on P4. Continuation (§8.7) already landed as P4.9, so this phase is the general graph,
 hue assignment, and failure states.
 
+```mermaid
+flowchart LR
+    P48["P4.8<br/>Recompute on edit<br/>#56"]
+    P29["P2.9<br/>Context menus<br/>#17"]
+    P35["P3.5<br/>Drag gesture<br/>#41"]
+    P61["P6.1<br/>Dependency graph<br/>#83"]
+    P62["P6.2<br/>Incremental cascade<br/>#84"]
+    P63["P6.3<br/>Cycle detection<br/>#85"]
+    P64["P6.4<br/>Dangling references<br/>#86"]
+    P65["P6.5<br/>Identity + hue<br/>#87"]
+    P66["P6.6<br/>Connector rendering<br/>#89"]
+    P67["P6.7<br/>Drag result into chain<br/>#88"]
+    P68["P6.8<br/>Palette a11y<br/>#90"]
+    EXIT(["Phase exit check<br/>#91"])
+
+    P48 --> P61
+    P61 --> P62
+    P61 --> P63
+    P61 --> P64
+    P29 --> P64
+    P61 --> P65
+    P65 --> P66
+    P61 --> P67
+    P35 --> P67
+    P65 --> P68
+
+    P62 --> EXIT
+    P63 --> EXIT
+    P64 --> EXIT
+    P66 --> EXIT
+    P67 --> EXIT
+    P68 --> EXIT
+
+    style P48 fill:#8892A0,color:#fff
+    style P29 fill:#22A75B,color:#fff
+    style P35 fill:#22A75B,color:#fff
+    style P61 fill:#8892A0,color:#fff
+    style P62 fill:#8892A0,color:#fff
+    style P63 fill:#8892A0,color:#fff
+    style P64 fill:#8892A0,color:#fff
+    style P65 fill:#8892A0,color:#fff
+    style P66 fill:#8892A0,color:#fff
+    style P67 fill:#8892A0,color:#fff
+    style P68 fill:#8892A0,color:#fff
+    style EXIT fill:#7030A0,color:#fff
+```
+
+Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
+gate. `P6.1` carries the phase's one real cross-phase dependency — `P4.8` (recompute on edit),
+not yet merged — and everything else here is downstream of it, which is why the whole phase reads
+grey today rather than any task looking individually ready. `P2.9` and `P3.5` are already-done
+prerequisites for `P6.4` and `P6.7` respectively, shown as separate external nodes rather than
+folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. Kept
+current by hand alongside the acceptance-criteria boxes below — if a task's status here disagrees
+with its boxes, the boxes win and this diagram is stale.
+
 ### P6.1 — Dependency graph
 
 **Objective.** Build the chain-level DAG from reference nodes.
