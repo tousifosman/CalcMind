@@ -72,7 +72,7 @@ flowchart LR
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | **P5** | Persistence | 8 | In progress — P5.1–P5.5, P5.7–P5.8 done; P5.6 (autosave) remains |
-| **P6** | Linking | 8 | In progress — P6.1 done; parallel with P5 |
+| **P6** | Linking | 8 | In progress — P6.1–P6.2 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -956,7 +956,7 @@ flowchart LR
     style P29 fill:#22A75B,color:#fff
     style P35 fill:#22A75B,color:#fff
     style P61 fill:#22A75B,color:#fff
-    style P62 fill:#E8A838,color:#fff
+    style P62 fill:#22A75B,color:#fff
     style P63 fill:#E8A838,color:#fff
     style P64 fill:#E8A838,color:#fff
     style P65 fill:#E8A838,color:#fff
@@ -995,10 +995,10 @@ with its boxes, the boxes win and this diagram is stale.
 **Touches.** `src/engine/graph.ts`, `src/store/documentStore.ts`.
 **Depends on.** P6.1.
 
-- [ ] Mutating a chain recomputes it and its transitive dependents in topological order.
-- [ ] Chains not downstream of the edit are **never** re-evaluated — assert it in a test.
-- [ ] Reproduces §11's worked example: editing `1221 → 1300` yields `1303`, then `2606`.
-- [ ] Tests for incremental dirty propagation (§14).
+- [x] Mutating a chain recomputes it and its transitive dependents in topological order.
+- [x] Chains not downstream of the edit are **never** re-evaluated — assert it in a test.
+- [x] Reproduces §11's worked example: editing `1221 → 1300` yields `1303`, then `2606`.
+- [x] Tests for incremental dirty propagation (§14).
 
 ### P6.3 — Cycle detection
 
