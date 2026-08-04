@@ -19,12 +19,16 @@ let failMoveAt = null;
 let moveCallCount = 0;
 let failMoveMessage = 'simulated crash mid-save';
 
+/** @type {string[]} */
+let nextPickPaths = [];
+
 function resetMemoryFs() {
   files = new Map();
   ops = [];
   failMoveAt = null;
   moveCallCount = 0;
   failMoveMessage = 'simulated crash mid-save';
+  nextPickPaths = [];
 }
 
 /** Fail the next moveFile (equivalent to `__setFailNthMove(1, message)`). */
@@ -166,11 +170,23 @@ const api = {
   },
 };
 
+function setNextPickPaths(paths) {
+  nextPickPaths = Array.isArray(paths) ? paths.slice() : [];
+}
+
+async function pickFile(_options) {
+  const paths = nextPickPaths;
+  nextPickPaths = [];
+  ops.push({ op: 'pickFile', paths });
+  return paths;
+}
+
 module.exports = {
   __esModule: true,
   ...api,
   // Named exports matching the package surface used by adapter.native.ts
   DocumentDirectoryPath: DOC_ROOT,
+  TemporaryDirectoryPath: `${DOC_ROOT}/tmp`,
   exists: api.exists,
   mkdir: api.mkdir,
   writeFile: api.writeFile,
@@ -180,11 +196,13 @@ module.exports = {
   readDir: api.readDir,
   readdir: api.readdir,
   stat: api.stat,
+  pickFile,
   // Test helpers (not part of the real package)
   __resetMemoryFs: resetMemoryFs,
   __getOps: getOps,
   __getFiles: getFiles,
   __setFailNextMove: setFailNextMove,
   __setFailNthMove: setFailNthMove,
+  __setNextPickPaths: setNextPickPaths,
   __DOC_ROOT: DOC_ROOT,
 };

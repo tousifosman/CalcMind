@@ -9,15 +9,18 @@
 // flushed on close); that completion is the durability barrier before rename.
 import {
   DocumentDirectoryPath,
+  TemporaryDirectoryPath,
   exists,
   mkdir,
   moveFile,
+  pickFile,
   readDir,
   readFile,
   stat,
   unlink,
   writeFile,
 } from '@dr.pogodin/react-native-fs';
+import { Platform, Share } from 'react-native';
 
 import type { DocumentMeta, StorageAdapter } from './adapter';
 import { assertSafeDocumentId, isSafeDocumentId } from './documentId';
@@ -146,12 +149,73 @@ async function removeDocument(id: string): Promise<void> {
   await unlinkIfExists(tmpPath(id));
 }
 
+function exportFilename(id: string, json: string): string {
+  let base = id;
+  try {
+    const parsed = JSON.parse(json) as { name?: unknown };
+    if (typeof parsed.name === 'string' && parsed.name.trim().length > 0) {
+      base = parsed.name
+        .trim()
+        .replace(/[^\w\- ]+/g, '_')
+        .replace(/\s+/g, ' ')
+        .slice(0, 80);
+    }
+  } catch {
+    // Keep id.
+  }
+  return `${base}.calcmind.json`;
+}
+
+/**
+ * Export via the OS share sheet (§12.2 / P5.8).
+ * iOS gets a `file://` URL to a temp `.calcmind.json`; Android's RN Share API
+ * only documents `message`/`title`, so the JSON goes as the share body there.
+ */
+async function exportDocument(id: string): Promise<void> {
+  const json = await readDocument(id);
+  const filename = exportFilename(id, json);
+  const tempPath = `${TemporaryDirectoryPath}/${filename}`;
+  await writeFile(tempPath, json, 'utf8');
+  try {
+    if (Platform.OS === 'ios') {
+      await Share.share(
+        { url: `file://${tempPath}`, title: filename },
+        { subject: filename },
+      );
+    } else {
+      await Share.share(
+        { message: json, title: filename },
+        { dialogTitle: filename },
+      );
+    }
+  } finally {
+    await unlinkIfExists(tempPath);
+  }
+}
+
+/**
+ * File picker → raw JSON string. Cancel / empty selection → `null`.
+ * Does not validate — callers must run the P5.5 load pipeline (§12.3).
+ */
+async function importDocument(): Promise<string | null> {
+  const paths = await pickFile({
+    mimeTypes: ['application/json', 'text/plain', '*/*'],
+    pickerType: 'singleFile',
+  });
+  if (paths.length === 0) {
+    return null;
+  }
+  return readFile(paths[0], 'utf8');
+}
+
 export function createNativeStorageAdapter(): StorageAdapter {
   return {
     list: listDocuments,
     read: readDocument,
     write: atomicWrite,
     remove: removeDocument,
+    exportDocument,
+    importDocument,
   };
 }
 
