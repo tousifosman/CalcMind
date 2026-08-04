@@ -4,9 +4,10 @@ import { useDocumentStore } from '../store/documentStore';
 import { setNodeRaw } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
 import { rolePalette } from '../ui/tokens';
-import { explainEngineError, type EngineErrorKind } from '../engine/errors';
+import { explainEngineError, explainCircularReference, CIRCULAR_UNLINK_LABEL, type EngineErrorKind } from '../engine/errors';
 import type { ResultDerived, ResultNode as ResultNodeModel } from '../model/types';
 import { renderNode, unmountAll, findHostByTestID } from './testUtils';
+import { act } from 'react-test-renderer';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
 
@@ -130,17 +131,64 @@ describe('ResultNode', () => {
     },
   );
 
-  test('CircularReference renders an explanation stub (full cycle naming is P6.3)', () => {
+  test('CircularReference names the cycle and offers Unlink (§11.2)', () => {
     addResultNode(
       resultWith({
         display: '1',
         computedAt: '2026-08-04T00:00:00.000Z',
-        outcome: { status: 'error', error: 'CircularReference' },
+        outcome: {
+          status: 'error',
+          error: 'CircularReference',
+          cycle: {
+            chainIds: ['c1', 'c2'],
+            chainLabels: ['Alpha', 'Beta'],
+            closingReferenceNodeId: 'ref-close',
+          },
+        },
       }),
     );
 
     const renderer = renderNode(<ResultNode id="r1" />);
-    expect(contentText(renderer)).toBe(explainEngineError('CircularReference'));
+    expect(contentText(renderer)).toBe(explainCircularReference(['Alpha', 'Beta']));
     expect(contentText(renderer)).not.toBe('?');
+    expect(contentText(renderer)).not.toBe(explainEngineError('CircularReference'));
+
+    const unlink = renderer.root.findByProps({ testID: 'result-node-r1-unlink' });
+    expect(unlink.props.accessibilityLabel).toBe(CIRCULAR_UNLINK_LABEL);
+  });
+
+  test('Unlink deletes the closing reference via unlinkReference', () => {
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.nodes['ref-close'] = {
+        id: 'ref-close',
+        kind: 'reference',
+        position: { x: 0, y: 0 },
+        chainId: 'c2',
+        createdAt: 0,
+        targetNodeId: 'r1',
+      };
+      draft.chains.c2 = { id: 'c2', anchor: { x: 0, y: 0 }, members: ['ref-close'] };
+      draft.nodes.r1 = resultWith({
+        display: '1',
+        computedAt: '2026-08-04T00:00:00.000Z',
+        outcome: {
+          status: 'error',
+          error: 'CircularReference',
+          cycle: {
+            chainIds: ['c1', 'c2'],
+            chainLabels: ['A', 'B'],
+            closingReferenceNodeId: 'ref-close',
+          },
+        },
+      });
+      draft.chains.c1 = { id: 'c1', anchor: { x: 0, y: 0 }, members: ['r1'] };
+    });
+
+    const renderer = renderNode(<ResultNode id="r1" />);
+    const unlink = renderer.root.findByProps({ testID: 'result-node-r1-unlink' });
+    act(() => {
+      unlink.props.onPress();
+    });
+    expect(useDocumentStore.getState().document.nodes['ref-close']).toBeUndefined();
   });
 });
