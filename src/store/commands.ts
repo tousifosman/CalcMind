@@ -364,6 +364,18 @@ export function deleteNode(nodeId: NodeId): void {
   });
 }
 
+/**
+ * Break a reference link by deleting the reference node (§11.2). Used by the
+ * CircularReference Unlink affordance (P6.3) on the DFS closing edge; P6.4's
+ * long-press `Unlink from parent` will share this path. One undo entry via
+ * {@link deleteNode}.
+ */
+export function unlinkReference(referenceNodeId: NodeId): void {
+  const node = useDocumentStore.getState().document.nodes[referenceNodeId];
+  if (!node || node.kind !== 'reference') return;
+  deleteNode(referenceNodeId);
+}
+
 // --- P3.4: snap / detach commits (§8.3 bookkeeping) ---------------------------------
 
 /** Prepend `nodeId` as the new leftmost member of `chainId`. One undo entry.

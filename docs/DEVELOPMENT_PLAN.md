@@ -72,7 +72,7 @@ flowchart LR
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | **P5** | Persistence | 8 | In progress — P5.1–P5.3, P5.5, P5.7 done; P5.4 / P5.6 / P5.8 remain |
-| **P6** | Linking | 8 | In progress — P6.1–P6.2 done; parallel with P5 |
+| **P6** | Linking | 8 | In progress — P6.1–P6.3 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -641,7 +641,7 @@ punctuated).
 **Depends on.** P4.5, P2.4.
 
 - [x] `Incomplete`, `InvalidSequence`, `DivideByZero`, `Overflow`, `NotANumber` each render
-      distinguishably. `CircularReference` needs the graph and lands with P6.3.
+      distinguishably. `CircularReference` cycle naming and Unlink landed with P6.3.
 - [x] A `Stale` result keeps showing its previous value **dimmed** rather than flashing empty (§9).
 - [x] No error is rendered as a bare glyph — §11.2 is the design's sharpest criticism of the
       reference app and applies to engine errors, not just broken links.
@@ -954,7 +954,8 @@ flowchart LR
     style P35 fill:#22A75B,color:#fff
     style P61 fill:#22A75B,color:#fff
     style P62 fill:#22A75B,color:#fff
-    style P63 fill:#E8A838,color:#fff
+    style P63 fill:#22A75B,color:#fff
+
     style P64 fill:#E8A838,color:#fff
     style P65 fill:#E8A838,color:#fff
     style P66 fill:#8892A0,color:#fff
@@ -1004,11 +1005,11 @@ with its boxes, the boxes win and this diagram is stale.
 **Touches.** `src/engine/graph.ts`, `src/nodes/ResultNode.tsx`.
 **Depends on.** P6.1.
 
-- [ ] DFS colouring at build time. **Every chain in the cycle** enters `CircularReference`.
-- [ ] The rest of the document keeps working.
-- [ ] Rendered per §11.2: **name the cycle** and offer to unlink the edge that closed it. Not a
+- [x] DFS colouring at build time. **Every chain in the cycle** enters `CircularReference`.
+- [x] The rest of the document keeps working.
+- [x] Rendered per §11.2: **name the cycle** and offer to unlink the edge that closed it. Not a
       bare glyph.
-- [ ] Test with a deliberate cycle, asserting only the cycle is affected.
+- [x] Test with a deliberate cycle, asserting only the cycle is affected.
 
 ### P6.4 — Dangling references
 

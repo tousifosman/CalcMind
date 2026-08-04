@@ -856,9 +856,12 @@ flowchart TD
 `src/engine/graph.ts` owns the cascade: `buildDependencyGraph` / `topologicalOrder`
 (vertices are chains; edges keyed `(sourceNodeId, referenceNodeId)`, §11.1), and
 `dirtyClosure(seed)` returns the seed ∪ its transitive dependents in topo order.
-`recomputeFromSeeds` marks that set stale then evaluates it in one turn via
-`documentStore.applyCommand`'s `recomputeSeeds` option (or directly from chain
-finalisation). Callers and the store API were kept stable through P4.8 → P6.2.
+P6.3 colours cycles at build time (`DependencyGraph.cycles` via DFS) and
+`recomputeFromSeeds` paints every cycle member `CircularReference` with named-cycle
+metadata while leaving unrelated chains alone. Evaluation marks the dirty set stale
+then runs it in one turn via `documentStore.applyCommand`'s `recomputeSeeds` option
+(or directly from chain finalisation). Callers and the store API were kept stable
+through P4.8 → P6.3.
 
 ### 11.1 Identity hues: the visual language of a link
 
@@ -934,7 +937,7 @@ the result texture may as well use it too.
 | 60fps drag | Reanimated worklets; store commit only on release |
 | Re-render scope | Per-node Zustand selectors + `React.memo`; a node re-renders only when its own slice changes |
 | Snap search | O(n) to ~500 nodes; spatial hash beyond (§8.4) |
-| Evaluation | Dirty-set only; never a full document sweep |
+| Evaluation | Dirty-set only; never a full *evaluation* sweep. Cycle bookkeeping (P6.3) builds the reference graph and, only when the dirty set touches a cycle or is clearing a `CircularReference`, scans result outcomes to recover/refresh circular paints — it does not re-evaluate untouched chains. |
 | Text measurement | Memoised per `(raw, fontSize)` |
 
 ---
