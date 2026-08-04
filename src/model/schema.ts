@@ -40,7 +40,28 @@ const resultNodeSchema = z.object({
   ...nodeBaseSchema,
   kind: z.literal('result'),
   sourceChainId: z.string(),
-  derived: z.object({ display: z.string(), computedAt: z.string() }).optional(),
+  derived: z
+    .object({
+      display: z.string(),
+      computedAt: z.string(),
+      outcome: z
+        .union([
+          z.object({ status: z.literal('stale') }),
+          z.object({
+            status: z.literal('error'),
+            error: z.enum([
+              'Incomplete',
+              'InvalidSequence',
+              'DivideByZero',
+              'Overflow',
+              'NotANumber',
+              'CircularReference',
+            ]),
+          }),
+        ])
+        .optional(),
+    })
+    .optional(),
 });
 
 const referenceNodeSchema = z.object({
