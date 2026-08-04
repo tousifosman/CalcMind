@@ -1,7 +1,9 @@
 // Node drag gesture (§8.2, P3.5). Position lives in Reanimated shared values every
 // frame; the document store is written only on release via P3.4 commands (§11.4).
 // Snap candidates are recomputed on the JS thread each update and published to
-// `uiStore.dragSnap` for the insertion caret (P3.6) — ephemeral, outside undo.
+// `uiStore.dragSnap` — ephemeral, outside undo. NodeLayer reads that feed for the
+// §8.3 insertion gap + caret (P3.6); this hook never writes document positions
+// mid-drag, so the preview can open and close without touching undo history.
 import { useCallback, useEffect, useRef } from 'react';
 import { Gesture } from 'react-native-gesture-handler';
 import {

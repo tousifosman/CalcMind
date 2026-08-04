@@ -37,6 +37,11 @@ export const glyphColor = '#FFFFFF';
  *  callouts, not a colour invented for this purpose. */
 export const labelColor = '#3B4252';
 
+/** Mid-drag insertion caret (§8.3 / P3.6). Light hairline on the dark canvas — not an
+ *  identity hue and not a role fill, so it never reads as "this slot is a number/operator".
+ *  `labelColor` is too dark against the canvas to see (verified in-browser). */
+export const insertionCaretColor = '#F3F4F6';
+
 /** Result cells get a dot texture on top of their fill: a 4x4 unit tile with
  *  1-unit dots at (1,0) and (3,2), coloured resultDotColor. See §1.2 and §11.3. */
 export const resultDotColor = '#FFD1CF';
