@@ -19,6 +19,12 @@ export interface StorageAdapter {
   /** Must be atomic (§12.3): crash mid-save leaves the old file or the new one. */
   write(id: string, json: string): Promise<void>;
   remove(id: string): Promise<void>;
+  /**
+   * Optional one-generation backup (§12.3). Native keeps `<id>.calcmind.json.bak`;
+   * web IndexedDB transactions need no `.bak`. The load pipeline (P5.5) calls this
+   * when the primary is missing or not valid JSON — never to overwrite either file.
+   */
+  readBackup?(id: string): Promise<string>;
   /** Optional: OS share sheet (native) or file download (web). */
   exportDocument?(id: string): Promise<void>;
   /** Optional: file picker → raw JSON string. */

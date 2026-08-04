@@ -1468,3 +1468,64 @@ describe('P4.8 recompute on edit', () => {
     });
   });
 });
+
+describe('P6.2 incremental cascade', () => {
+  test('§11: editing 1221→1300 updates 1303 then 2606; unrelated chain untouched', () => {
+    const graphCompute = require('../engine/compute') as typeof import('../engine/compute');
+    const actualCompute = graphCompute.computeChain.bind(graphCompute);
+    const evaluated: string[] = [];
+    const spy = jest.spyOn(graphCompute, 'computeChain').mockImplementation((chain, nodes, locale, chains, stack) => {
+      evaluated.push(chain.id);
+      return actualCompute(chain, nodes, locale, chains, stack);
+    });
+
+    try {
+      // c1: 1221 + 3 =
+      const n1 = addNumberNode({ x: 0, y: 0 }, '1221');
+      const p1 = addOperatorNode({ x: 40, y: 0 }, '+');
+      const n2 = addNumberNode({ x: 80, y: 0 }, '3');
+      formNewChain(n1, p1);
+      const c1 = useDocumentStore.getState().document.nodes[n1]!.chainId!;
+      appendToChain(n2, c1);
+      appendEqualsNode(n2);
+      const r1 = Object.values(useDocumentStore.getState().document.nodes).find(
+        (n) => n.kind === 'result' && n.sourceChainId === c1,
+      )!;
+      expect(r1).toMatchObject({ derived: { display: '1,224' } });
+
+      // c2: continuation × 2 =
+      const { chainId: c2, operatorId } = continueFromResult(r1.id, '×');
+      const n3 = appendNumberNode(operatorId, '2');
+      appendEqualsNode(n3);
+      const r2 = Object.values(useDocumentStore.getState().document.nodes).find(
+        (n) => n.kind === 'result' && n.sourceChainId === c2,
+      )!;
+      expect(r2).toMatchObject({ derived: { display: '2,448' } });
+
+      // c3: unrelated evaluated chain
+      const lone = addNumberNode({ x: 0, y: 200 }, '9');
+      appendEqualsNode(lone);
+      const c3 = useDocumentStore.getState().document.nodes[lone]!.chainId!;
+      const r3 = Object.values(useDocumentStore.getState().document.nodes).find(
+        (n) => n.kind === 'result' && n.sourceChainId === c3,
+      )!;
+      const r3Derived = { ...(r3.kind === 'result' ? r3.derived! : {}) };
+
+      evaluated.length = 0;
+      setNodeRaw(n1, '1300');
+
+      expect(evaluated).toEqual([c1, c2]);
+      expect(useDocumentStore.getState().document.nodes[r1.id]).toMatchObject({
+        derived: { display: '1,303' },
+      });
+      expect(useDocumentStore.getState().document.nodes[r2.id]).toMatchObject({
+        derived: { display: '2,606' },
+      });
+      expect(useDocumentStore.getState().document.nodes[r3.id]).toMatchObject({
+        derived: r3Derived,
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});

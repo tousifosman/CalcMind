@@ -207,3 +207,26 @@ describe('native atomic write (§12.3)', () => {
     expect(list[0].id).toBe('doc_1');
   });
 });
+
+describe('native readBackup (P5.5 recovery)', () => {
+  test('write twice, then readBackup returns the prior generation', async () => {
+    const adapter = createNativeStorageAdapter();
+    await adapter.write('doc_1', '{"n":1}');
+    await adapter.write('doc_1', '{"n":2}');
+
+    await expect(adapter.read('doc_1')).resolves.toBe('{"n":2}');
+    expect(adapter.readBackup).toBeDefined();
+    await expect(adapter.readBackup!('doc_1')).resolves.toBe('{"n":1}');
+    expect(fs.__getFiles().get(bakPath('doc_1'))).toBe('{"n":1}');
+  });
+
+  test('after primary is removed, readBackup still returns the last good file', async () => {
+    const adapter = createNativeStorageAdapter();
+    await adapter.write('doc_1', '{"n":1}');
+    await adapter.write('doc_1', '{"n":2}');
+    await fs.unlink(primaryPath('doc_1'));
+
+    await expect(adapter.read('doc_1')).rejects.toBeTruthy();
+    await expect(adapter.readBackup!('doc_1')).resolves.toBe('{"n":1}');
+  });
+});
