@@ -57,14 +57,15 @@ flowchart LR
     P6b --> P7
     style P0 fill:#22A75B,color:#fff
     style P1 fill:#22A75B,color:#fff
+    style P2 fill:#22A75B,color:#fff
 ```
 
 | Phase | Goal | Tasks | State |
 |---|---|---|---|
 | ~~**P0**~~ | ~~Foundations~~ | — | **Done** — `08620f9` |
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
-| **P2** | Nodes + keypad | 10 | In progress — 9/10 (P2.1–P2.8, P2.10) |
-| **P3** | Snapping | 7 | Blocked on P2 |
+| ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
+| **P3** | Snapping | 7 | Next |
 | **P4** | Engine | 9 | Blocked on P3 — **critical path** |
 | **P5** | Persistence | 8 | Blocked on P4 |
 | **P6** | Linking | 8 | Blocked on P4, parallel with P5 |
@@ -307,7 +308,15 @@ stray gesture, even with undo).
 > locale decimal key; hardware keyboard mapped; delete works; `raw` round-trips `"3."`; `13,5`
 > displays per locale while storing `13.5`.
 
-- [ ] All of the above demonstrated by hand in a browser, in one sitting.
+- [x] All of the above demonstrated by hand in a browser, in one sitting.
+
+Demonstrated in a real Chromium session (not merely type-checked — see `docs/journal/2026-08-04.md`
+revision 2, the recorded mistake this guards against). Found and fixed one real bug in the
+process: hardware-typed `-` after a number leaked into the freshly-appended operand's `raw`
+(`3 −` produced a new operand pre-loaded with `"-"` instead of `""`), silently negating the
+second operand of every keyboard-typed subtraction. `+` masked the same underlying defect
+because `+` isn't valid canonical raw, so the leaked character was silently rejected rather
+than visible.
 
 ---
 
