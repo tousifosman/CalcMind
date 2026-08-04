@@ -126,7 +126,30 @@ export function dispatchEditorCommand(command: EditorCommand): void {
   // discards one abandoned by any other selection change, so do that first and fall
   // through to the "nothing selected" case rather than chain a node that's about to
   // disappear out from under itself.
+  //
+  // Opening a paren is the one exception. `2 ×` then `(` is not the user abandoning the
+  // chain - §10.2 decision #4's "implicit multiplication only before `(`" makes the paren
+  // group `×`'s right operand, so it has to continue the very chain the discarded
+  // placeholder was sitting in, not fall through and start a disconnected one anchored
+  // back at the last tap point. Verified live: without this, `2 × (3 + 4) =` silently
+  // evaluated only `(3 + 4)`, dropping `2 ×` into an orphaned Incomplete chain.
   if (isStructural(command) && editingNumber && editingNumber.raw === '') {
+    if (command.region === 'paren' && command.side === 'open' && editingNumber.chainId) {
+      const chainId = editingNumber.chainId;
+      deleteNode(editingNumber.id);
+      const chain = useDocumentStore.getState().document.chains[chainId];
+      // `appendOperatorAndNumber` always appends the operator and this placeholder together
+      // onto a chain that had >= 1 member already (or creates one with exactly the anchor),
+      // so deleting just the placeholder leaves >= 2 members behind - never the 1-member
+      // state that dissolves a chain. Written explicitly rather than relying on that
+      // invariant never changing: if it ever does and the chain is gone, fall through to
+      // the ordinary discard-and-deselect path below instead of risking a crash.
+      const anchorId = chain && chain.members.length > 0 ? chain.members[chain.members.length - 1] : undefined;
+      if (anchorId) {
+        selectNode(appendParenNode(anchorId, 'open'));
+        return;
+      }
+    }
     deselectNode();
     selectedNode = undefined;
     editingNumber = undefined;
