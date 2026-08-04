@@ -325,6 +325,48 @@ than visible.
 Every threshold in this phase is in **world units** so snapping feels identical at any zoom (§7).
 A threshold compared against screen pixels is a bug, and it will only show up at non-default zoom.
 
+```mermaid
+flowchart LR
+    P22["P2.2<br/>Text measurement<br/>#10"]
+    P29["P2.9<br/>Context menus<br/>#17"]
+    P31["P3.1<br/>Chain layout<br/>#37"]
+    P32["P3.2<br/>Bounds + queries<br/>#38"]
+    P33["P3.3<br/>Snap resolution<br/>#39"]
+    P34["P3.4<br/>Chain mutations<br/>#40"]
+    P35["P3.5<br/>Drag gesture<br/>#41"]
+    P36["P3.6<br/>Insertion feedback<br/>#42"]
+    P37["P3.7<br/>Move vs. detach<br/>#43"]
+    EXIT(["Phase exit check<br/>#44"])
+
+    P22 --> P31
+    P31 --> P32
+    P32 --> P33
+    P31 --> P34
+    P33 --> P34
+    P33 --> P35
+    P34 --> P35
+    P35 --> P36
+    P35 --> P37
+    P29 --> P37
+    P36 --> EXIT
+    P37 --> EXIT
+
+    style P22 fill:#22A75B,color:#fff
+    style P29 fill:#22A75B,color:#fff
+    style P31 fill:#22A75B,color:#fff
+    style P32 fill:#22A75B,color:#fff
+    style P33 fill:#FFBF28,color:#fff
+    style P34 fill:#8892A0,color:#fff
+    style P35 fill:#8892A0,color:#fff
+    style P36 fill:#8892A0,color:#fff
+    style P37 fill:#8892A0,color:#fff
+    style EXIT fill:#7030A0,color:#fff
+```
+
+Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
+gate. Kept current by hand alongside the acceptance-criteria boxes below — if a task's status
+here disagrees with its boxes, the boxes win and this diagram is stale.
+
 ### P3.1 — Chain layout pass
 
 **Objective.** Lay a chain's members out flush, left to right, from its anchor.
