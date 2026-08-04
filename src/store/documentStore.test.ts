@@ -1,13 +1,15 @@
-import { useDocumentStore } from './documentStore';
+import { setDocumentDirtyHandler, useDocumentStore } from './documentStore';
 import { renameDocument } from './commands';
 import { createEmptyDocument } from '../model/factories';
 import { ZOOM_MIN, ZOOM_MAX } from '../model/types';
 
 function resetStore() {
+  setDocumentDirtyHandler(null);
   useDocumentStore.setState({
     document: createEmptyDocument(),
     undoStack: [],
     redoStack: [],
+    lastSavedAt: null,
   });
 }
 
@@ -77,5 +79,60 @@ describe('applyCommand recomputeSeeds (P4.8)', () => {
         draft.name = 'x';
       }, { recomputeSeeds: ['c1'] }),
     ).toThrow(/locale is required/);
+  });
+});
+
+describe('persistence dirty signalling (P5.6)', () => {
+  test('applyCommand, undo, and redo notify the dirty handler', () => {
+    const dirty = jest.fn();
+    setDocumentDirtyHandler(dirty);
+
+    renameDocument('One');
+    expect(dirty).toHaveBeenCalledTimes(1);
+
+    useDocumentStore.getState().undo();
+    expect(dirty).toHaveBeenCalledTimes(2);
+
+    useDocumentStore.getState().redo();
+    expect(dirty).toHaveBeenCalledTimes(3);
+  });
+
+  test('a no-op recipe does not notify dirty', () => {
+    const dirty = jest.fn();
+    setDocumentDirtyHandler(dirty);
+    const before = useDocumentStore.getState().document.name;
+    useDocumentStore.getState().applyCommand(draft => {
+      draft.name = before;
+    });
+    expect(dirty).not.toHaveBeenCalled();
+  });
+
+  test('setViewport notifies dirty when the camera actually moves', () => {
+    const dirty = jest.fn();
+    setDocumentDirtyHandler(dirty);
+    useDocumentStore.getState().setViewport({ pan: { x: 1, y: 2 } });
+    expect(dirty).toHaveBeenCalledTimes(1);
+    useDocumentStore.getState().setViewport({ pan: { x: 1, y: 2 } });
+    expect(dirty).toHaveBeenCalledTimes(1);
+  });
+
+  test('setLastSavedAt is surfaced on the store', () => {
+    useDocumentStore.getState().setLastSavedAt('2026-08-04T12:00:00.000Z');
+    expect(useDocumentStore.getState().lastSavedAt).toBe('2026-08-04T12:00:00.000Z');
+  });
+
+  test('replaceDocument clears history and lastSavedAt without notifying dirty', () => {
+    const dirty = jest.fn();
+    setDocumentDirtyHandler(dirty);
+    renameDocument('Before');
+    useDocumentStore.getState().setLastSavedAt('2026-08-04T12:00:00.000Z');
+    dirty.mockClear();
+
+    const next = createEmptyDocument('Loaded');
+    useDocumentStore.getState().replaceDocument(next);
+    expect(useDocumentStore.getState().document.name).toBe('Loaded');
+    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+    expect(useDocumentStore.getState().lastSavedAt).toBeNull();
+    expect(dirty).not.toHaveBeenCalled();
   });
 });
