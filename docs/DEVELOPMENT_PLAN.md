@@ -333,12 +333,12 @@ order is the truth and is never re-derived from `x`).
 **Touches.** `src/chains/layout.ts`.
 **Depends on.** P2.2.
 
-- [ ] Pure function `(chain, nodes) → positions`. No store access, no React.
-- [ ] Members lay out flush — no gaps, no overlaps — all at `y = anchor.y`.
-- [ ] Changing a member's `raw` re-flows the chain **in the same commit** as the edit (§8.1), so no
+- [x] Pure function `(chain, nodes) → positions`. No store access, no React.
+- [x] Members lay out flush — no gaps, no overlaps — all at `y = anchor.y`.
+- [x] Changing a member's `raw` re-flows the chain **in the same commit** as the edit (§8.1), so no
       frame ever renders a stale layout.
-- [ ] Member `position` is written as a cache; `anchor` + `members` remain the truth (§8.1, §6.1).
-- [ ] Test that reordering `members` reorders the layout, and that **identical `x` values never
+- [x] Member `position` is written as a cache; `anchor` + `members` remain the truth (§8.1, §6.1).
+- [x] Test that reordering `members` reorders the layout, and that **identical `x` values never
       reorder anything** — the §6.1 guarantee that a rendering bug cannot change a user's answer.
 
 ### P3.2 — Node bounds and neighbour queries

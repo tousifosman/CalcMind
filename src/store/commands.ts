@@ -2,8 +2,9 @@
 // documentStore.applyCommand, which makes every mutation here undoable). See
 // docs/ARCHITECTURE.md §5 (architecture), §6 (node kinds) and §13 (undo/redo).
 //
-// Chain mutations (snap, drag, detach...) land in P3 once the layout pass
-// exists to give them something to act on.
+// The §8.1 flush layout pass lives in ../chains/layout.ts (P3.1) and is applied here via
+// reflowChain. Chain mutations from dragging (snap, insert, detach...) still land later in
+// P3 (P3.4) - this file's only chain-building path so far is typing (P2.8).
 import { useDocumentStore } from './documentStore';
 import { useUiStore } from './uiStore';
 import {
@@ -13,8 +14,8 @@ import {
   createEqualsNode,
   createChainId,
 } from '../model/factories';
-import { CalcNode, Chain, NodeId, OperatorSymbol, ParenSide, Vec2 } from '../model/types';
-import { widthOf } from '../chains/measure';
+import { CalcDocument, CalcNode, Chain, ChainId, NodeId, OperatorSymbol, ParenSide, Vec2 } from '../model/types';
+import { layoutChain } from '../chains/layout';
 import { getDeviceLocale } from '../ui/locale';
 
 export function renameDocument(name: string): void {
@@ -61,10 +62,24 @@ export function addEqualsNode(position: Vec2): NodeId {
 // which chain to extend - whichever one the selected node already belongs to - so it can
 // append directly, with none of that candidate search.
 
+/** Re-flows a chain via `layoutChain` (P3.1, §8.1) and writes the result onto each
+ *  member's `position` in `draft`. `position` is a cache - `chain.anchor` + `chain.members`
+ *  stay the truth - so this is safe to call after any mutation that could change a member's
+ *  width or a chain's membership, in the same commit as that mutation. */
+function reflowChain(draft: CalcDocument, chainId: ChainId): void {
+  const chain = draft.chains[chainId];
+  if (!chain) return;
+  const positions = layoutChain(chain, draft.nodes, getDeviceLocale());
+  for (const memberId of chain.members) {
+    const member = draft.nodes[memberId];
+    const position = positions[memberId];
+    if (member && position) member.position = position;
+  }
+}
+
 /** Appends already-constructed nodes to the chain the node at `anchorNodeId` belongs to,
- *  creating a new one-member chain first if it doesn't have one yet. Positions each
- *  appended node with §8.1's flush layout formula so it reads correctly immediately, rather
- *  than waiting on a chain layout pass to catch up (there isn't one yet - P3 territory).
+ *  creating a new one-member chain first if it doesn't have one yet, then re-flows the
+ *  whole chain with `layoutChain` (P3.1) so every member reads correctly immediately.
  *  One call is one undo entry, however many nodes it appends - which is what lets
  *  `appendOperatorAndNumber` below insert its operator and its fresh operand atomically. */
 function appendMembersToChain(anchorNodeId: NodeId, newNodes: CalcNode[]): void {
@@ -80,18 +95,13 @@ function appendMembersToChain(anchorNodeId: NodeId, newNodes: CalcNode[]): void 
       anchorNode.chainId = chain.id;
     }
 
-    const locale = getDeviceLocale();
     for (const node of newNodes) {
-      let x = chain.anchor.x;
-      for (const memberId of chain.members) {
-        const member = draft.nodes[memberId];
-        if (member) x += widthOf(member, locale);
-      }
       node.chainId = chain.id;
-      node.position = { x, y: chain.anchor.y };
       draft.nodes[node.id] = node;
       chain.members.push(node.id);
     }
+
+    reflowChain(draft, chain.id);
   });
 }
 
@@ -164,7 +174,11 @@ export function setNodeRaw(nodeId: NodeId, raw: string): void {
 
   store.applyCommand((draft) => {
     const node = draft.nodes[nodeId];
-    if (node && node.kind === 'number') node.raw = raw;
+    if (!node || node.kind !== 'number') return;
+    node.raw = raw;
+    // A raw edit can change the node's widthOf (§8.1), so the chain it belongs to - if
+    // any - must re-flow in this same commit, or a frame could render a stale layout.
+    if (node.chainId !== null) reflowChain(draft, node.chainId);
   });
 
   if (useDocumentStore.getState().undoStack.length === stackLengthBefore) {

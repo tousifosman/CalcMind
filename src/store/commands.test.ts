@@ -19,6 +19,7 @@ import {
 } from './commands';
 import { createEmptyDocument } from '../model/factories';
 import { tokens } from '../ui/tokens';
+import { widthOf } from '../chains/measure';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
 
@@ -272,6 +273,22 @@ describe('setNodeRaw', () => {
     setNodeRaw(b, '2');
 
     expect(useDocumentStore.getState().undoStack).toHaveLength(stackBefore + 2);
+  });
+
+  test('a raw edit that widens a member re-flows the rest of its chain in the same commit (P3.1, §8.1)', () => {
+    const first = addNumberNode({ x: 0, y: 0 }, '1');
+    const { operatorId, numberId } = appendOperatorAndNumber(first, '+');
+    const operatorXBefore = useDocumentStore.getState().document.nodes[operatorId]!.position.x;
+    const numberXBefore = useDocumentStore.getState().document.nodes[numberId]!.position.x;
+
+    setNodeRaw(first, '999999'); // much wider than '1', which floors at nodeHeight
+
+    const nodes = useDocumentStore.getState().document.nodes;
+    expect(nodes[first]!.position.x).toBe(0); // anchor member itself never moves
+    expect(nodes[operatorId]!.position.x).toBeGreaterThan(operatorXBefore);
+    expect(nodes[numberId]!.position.x).toBeGreaterThan(numberXBefore);
+    // Still flush: no gap between the widened first member and the operator that follows it.
+    expect(nodes[operatorId]!.position.x).toBe(nodes[first]!.position.x + widthOf(nodes[first]!, 'en-US'));
   });
 });
 
