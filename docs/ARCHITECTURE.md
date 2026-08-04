@@ -83,8 +83,8 @@ The reference raster has a cell height of 256px. Tokens below are that geometry 
 | 6 | `#560BAD` | violet — replaces `#5B4CC4` (protan vs equals) |
 
 Identity hues are render-time only (decision #12, §11.1). Validated under Machado et al.
-(2009) protanopia/deuteranopia simulation to ΔE₇₆ ≥ 15 against adjacent swatches and the
-structural fills above (P6.8); method locked in `src/ui/paletteAccessibility.ts`.
+(2009) protanopia/deuteranopia simulation to ΔE₇₆ ≥ 15 against every other identity swatch
+and the structural fills above (P6.8); method locked in `src/ui/paletteAccessibility.ts`.
 
 The result texture is a 4×4 unit tile with 1-unit dots at `(1,0)` and `(3,2)`.
 
@@ -1190,7 +1190,7 @@ fits long-press. `Select group` remains the dwell-free alternative (§8.6). Cont
    nicety. Open question is only *when*: a labelled canvas is far more readable than an unlabelled
    one, so this may deserve to land before P7.
 6. ~~**Identity palette accessibility**~~ — **resolved (P6.8).** Machado et al. (2009)
-   protanopia/deuteranopia simulation; ΔE₇₆ ≥ 15 for adjacent identity pairs and every
+   protanopia/deuteranopia simulation; ΔE₇₆ ≥ 15 for every identity×identity pair and every
    identity×structural pair. Four of the six first-guess swatches failed and were replaced
    (§1.2). Method locked in `src/ui/paletteAccessibility.ts`; results in the journal.
    Non-chromatic channels (connector line, `Unlink from parent`) remain required — hue is

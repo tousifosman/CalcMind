@@ -47,7 +47,7 @@ export const resultDotColor = '#FFD1CF';
 
 /** Identity hues (§11.1 / P6.5 / P6.8): assigned at render time to a value that is
  *  referenced or labelled. Never persisted — decision 12. Validated for
- *  deuteranopia/protanopia against adjacent swatches and the structural role
+ *  deuteranopia/protanopia against every other swatch and the structural role
  *  fills (§1.2) — see `paletteAccessibility.ts` and the P6.8 journal entry.
  *  Replaces the pre-check first guess (`#2F6BFF`, `#22A75B`, `#E0479E`,
  *  `#00B8D9`, `#8E6E53`, `#5B4CC4`). */
@@ -59,3 +59,24 @@ export const identityHues = [
   '#B8860B',
   '#560BAD',
 ] as const;
+
+/** Mix `#RRGGBB` toward white by `amount` ∈ [0, 1]. Shared by paren depth tints
+ *  and identity reference borders. */
+export function lightenHex(hex: string, amount: number): string {
+  const body = hex.startsWith('#') ? hex.slice(1) : hex;
+  const mix = (value: number) =>
+    Math.round(value + (255 - value) * amount)
+      .toString(16)
+      .padStart(2, '0');
+  const channels = [body.slice(0, 2), body.slice(2, 4), body.slice(4, 6)].map(
+    (c) => parseInt(c, 16),
+  );
+  return `#${channels.map(mix).join('')}`;
+}
+
+/** Lighter border twin for an identity fill. Role cells pair fill with a distinct
+ *  border band; references do the same so the cell stays bounded on the dark
+ *  canvas rather than reading as a flat unedged block. */
+export function identityBorderFor(fillHue: string): string {
+  return lightenHex(fillHue, 0.35);
+}

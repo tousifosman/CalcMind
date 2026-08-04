@@ -1,5 +1,5 @@
 // P6.8 — identity palette CVD check. Method: Machado et al. 2009 severity-1.0
-// simulation + CIE76 ΔE ≥ MIN_DELTA_E for adjacent identity pairs and every
+// simulation + CIE76 ΔE ≥ MIN_DELTA_E for every identity×identity pair and every
 // identity×structural pair. See docs/journal/2026-08-04.md (P6.8 entry).
 import {
   MIN_DELTA_E,
@@ -33,7 +33,7 @@ describe('paletteAccessibility primitives', () => {
 });
 
 describe('identity palette CVD validation (P6.8)', () => {
-  test(`adjacent identity pairs and identity×structural stay ≥ ${MIN_DELTA_E} ΔE under normal/protan/deutan`, () => {
+  test(`all identity pairs and identity×structural stay ≥ ${MIN_DELTA_E} ΔE under normal/protan/deutan`, () => {
     const collisions = findPaletteCollisions(identityHues, MIN_DELTA_E);
     expect(collisions).toEqual([]);
   });

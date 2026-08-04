@@ -9,7 +9,7 @@ import React from 'react';
 import { Text } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
-import { tokens, rolePalette, glyphColor } from '../ui/tokens';
+import { tokens, rolePalette, glyphColor, lightenHex } from '../ui/tokens';
 import { Cell, glyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
 
@@ -26,16 +26,10 @@ interface ParenNodeProps {
 const MAX_TINT_DEPTH = 4;
 const TINT_STEP = 0.12;
 
-function lighten(hex: string, amount: number): string {
-  const mix = (value: number) => Math.round(value + (255 - value) * amount).toString(16).padStart(2, '0');
-  const channels = [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)].map((c) => parseInt(c, 16));
-  return `#${channels.map(mix).join('')}`;
-}
-
 /** Exported for direct unit testing of the colour math, separate from rendering. */
 export function tintForDepth(hex: string, depth: number): string {
   const steps = Math.min(Math.max(depth, 0), MAX_TINT_DEPTH);
-  return steps === 0 ? hex : lighten(hex, steps * TINT_STEP);
+  return steps === 0 ? hex : lightenHex(hex, steps * TINT_STEP);
 }
 
 function ParenNodeComponent({ id, depth = 0 }: ParenNodeProps) {

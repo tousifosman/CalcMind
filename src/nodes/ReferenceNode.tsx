@@ -9,7 +9,7 @@ import { useNode } from '../store/selectors';
 import { useDocumentStore } from '../store/documentStore';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
-import { glyphColor, tokens } from '../ui/tokens';
+import { glyphColor, identityBorderFor, tokens } from '../ui/tokens';
 import { Cell, glyphTextStyle } from './Cell';
 import { referenceDisplayText } from '../chains/referenceDisplay';
 import { useReferenceIdentityHue } from './useIdentityHue';
@@ -30,9 +30,13 @@ function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
 
   const locale = getDeviceLocale();
   const text = referenceDisplayText(node, nodes, locale);
-  // Declaring cells draw a ring; references fill with the hue (§11.1 / linking-model.svg).
+  // Declaring cells draw a ring; references fill with the hue (§11.1). Border is
+  // a lightened twin of the fill (rolePalette pattern) so the cell stays bounded
+  // on the dark canvas — linking-model.svg paints both the same, which reads flat.
   const fill = identityHue ?? REFERENCE_NEUTRAL.fill;
-  const border = identityHue ?? REFERENCE_NEUTRAL.border;
+  const border = identityHue
+    ? identityBorderFor(identityHue)
+    : REFERENCE_NEUTRAL.border;
 
   return (
     <Cell

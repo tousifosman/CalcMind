@@ -7,14 +7,16 @@ import { useDocumentStore } from '../store/documentStore';
 import { addNumberNode, continueFromResult, appendEqualsNode } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
 import { assignIdentityHues } from '../engine/identity';
-import { identityHues, rolePalette } from '../ui/tokens';
+import { identityBorderFor, identityHues, rolePalette } from '../ui/tokens';
 import { renderNode, unmountAll, findHostByTestID } from './testUtils';
+import { resetIdentityHueCacheForTests } from './useIdentityHue';
 import type { ResultNode as ResultNodeModel } from '../model/types';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
 
 function resetStore() {
   useDocumentStore.setState({ document: createEmptyDocument(), undoStack: [], redoStack: [] });
+  resetIdentityHueCacheForTests();
 }
 
 beforeEach(resetStore);
@@ -89,10 +91,11 @@ describe('identity hue rendering (P6.5 / §11.1)', () => {
       expect.arrayContaining([
         expect.objectContaining({
           backgroundColor: hue,
-          borderColor: hue,
+          borderColor: identityBorderFor(hue!),
         }),
       ]),
     );
+    expect(identityBorderFor(hue!)).not.toBe(hue);
   });
 
   test('two references to the same source share one hue; a second identity takes another slot', () => {

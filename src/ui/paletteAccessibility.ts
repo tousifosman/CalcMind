@@ -9,8 +9,9 @@
 //   1. Simulate CVD with Machado et al. (2009) severity-1.0 matrices in
 //      linear-sRGB space.
 //   2. Convert to CIE L*a*b* (D65) and measure ΔE₇₆.
-//   3. Require ΔE ≥ {@link MIN_DELTA_E} for every adjacent identity pair and
-//      every identity×structural pair, under normal / protan / deutan.
+//   3. Require ΔE ≥ {@link MIN_DELTA_E} for every identity×identity pair (all
+//      pairs, not only neighbours-in-declaration-order) and every
+//      identity×structural pair, under normal / protan / deutan.
 import { identityHues, rolePalette } from './tokens';
 
 /** Glanceable-separation floor used for P6.8. Below this, two fills are treated
@@ -126,8 +127,10 @@ export const structuralFills: ReadonlyArray<{ role: string; hex: string }> = [
 ];
 
 /**
- * Adjacent identity pairs + every identity×structural pair under the three
+ * Every identity×identity pair + every identity×structural pair under the three
  * vision conditions. Returns every pair whose ΔE falls below `minDeltaE`.
+ * All-pairs (not just adjacent-in-array) because any two identities can share a
+ * canvas; declaration order is not a spatial neighbour relation.
  */
 export function findPaletteCollisions(
   palette: readonly string[] = identityHues,
@@ -137,12 +140,14 @@ export function findPaletteCollisions(
   const failures: PalettePairFailure[] = [];
 
   for (const kind of kinds) {
-    for (let i = 0; i < palette.length - 1; i++) {
-      const a = palette[i]!;
-      const b = palette[i + 1]!;
-      const deltaE = deltaE76(simulateCvd(a, kind), simulateCvd(b, kind));
-      if (deltaE < minDeltaE) {
-        failures.push({ kind, a, b, deltaE });
+    for (let i = 0; i < palette.length; i++) {
+      for (let j = i + 1; j < palette.length; j++) {
+        const a = palette[i]!;
+        const b = palette[j]!;
+        const deltaE = deltaE76(simulateCvd(a, kind), simulateCvd(b, kind));
+        if (deltaE < minDeltaE) {
+          failures.push({ kind, a, b, deltaE });
+        }
       }
     }
     for (const hue of palette) {

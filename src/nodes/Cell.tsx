@@ -47,7 +47,14 @@ export function Cell({
       ) : null}
       <View
         testID={testID}
-        style={[styles.band, { width, borderColor: border, backgroundColor: fill }]}
+        style={[
+          styles.band,
+          { width, borderColor: border, backgroundColor: fill },
+          // Clip the inset ring to the rounded corner only when a ring is present —
+          // keep overflow visible otherwise so shared Cell chrome never hides a
+          // future focus/selection affordance that paints past the band bounds.
+          identityHue ? styles.bandClip : null,
+        ]}
       >
         {identityHue ? (
           <View
@@ -95,6 +102,8 @@ const styles = StyleSheet.create({
     borderWidth: tokens.borderBand,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  bandClip: {
     overflow: 'hidden',
   },
   identityRing: {

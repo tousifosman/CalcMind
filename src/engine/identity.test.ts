@@ -129,14 +129,17 @@ describe('assignIdentityHues', () => {
       a: number('a', '1', 'A'),
       b: number('b', '2', 'B'),
       d: number('d', '4', 'D'),
+      // Reference grants `a` identity too (already labelled) and must not itself
+      // become a map key — callers look up the target.
+      ref: reference('ref', 'a'),
     };
     const hues = assignIdentityHues(nodes, PALETTE);
     expect(hues.get('a')).toBe('#AAA111');
     expect(hues.get('b')).toBe('#BBB222');
     expect(hues.get('c')).toBe('#CCC333');
     expect(hues.get('d')).toBe('#AAA111'); // wrap
-    // References are not keys — callers look up the target.
     expect(hues.has('ref')).toBe(false);
+    expect(hues.get(nodes.ref.targetNodeId)).toBe('#AAA111');
   });
 
   test('empty palette yields no hues', () => {
