@@ -151,6 +151,6 @@ const styles = StyleSheet.create({
   caret: {
     position: 'absolute',
     borderRadius: 1,
-    zIndex: 900,
+    zIndex: 1100, // above the dragged node (zIndex 1000) so the hairline stays visible in the gap
   },
 });

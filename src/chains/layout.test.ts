@@ -142,7 +142,7 @@ describe('insertionFeedback: mid-drag gap + caret (§8.3)', () => {
     expect(feedback.caret).toEqual({
       x: 100 - gap,
       y: 40,
-      width: tokens.borderBand,
+      width: Math.max(tokens.borderBand, 4),
       height: tokens.nodeHeight,
     });
   });
@@ -182,7 +182,7 @@ describe('insertionFeedback: mid-drag gap + caret (§8.3)', () => {
     expect(feedback.caret).toEqual({
       x: boundary,
       y: 40,
-      width: tokens.borderBand,
+      width: Math.max(tokens.borderBand, 4),
       height: tokens.nodeHeight,
     });
   });

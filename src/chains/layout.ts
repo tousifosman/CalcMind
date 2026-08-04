@@ -70,7 +70,7 @@ function caretAt(x: number, y: number): InsertionCaret {
   return {
     x,
     y,
-    width: tokens.borderBand,
+    width: Math.max(tokens.borderBand, 4),
     height: tokens.nodeHeight,
   };
 }
