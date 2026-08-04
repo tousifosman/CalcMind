@@ -138,7 +138,13 @@ export function dispatchEditorCommand(command: EditorCommand): void {
       const chainId = editingNumber.chainId;
       deleteNode(editingNumber.id);
       const chain = useDocumentStore.getState().document.chains[chainId];
-      const anchorId = chain?.members[chain.members.length - 1];
+      // `appendOperatorAndNumber` always appends the operator and this placeholder together
+      // onto a chain that had >= 1 member already (or creates one with exactly the anchor),
+      // so deleting just the placeholder leaves >= 2 members behind - never the 1-member
+      // state that dissolves a chain. Written explicitly rather than relying on that
+      // invariant never changing: if it ever does and the chain is gone, fall through to
+      // the ordinary discard-and-deselect path below instead of risking a crash.
+      const anchorId = chain && chain.members.length > 0 ? chain.members[chain.members.length - 1] : undefined;
       if (anchorId) {
         selectNode(appendParenNode(anchorId, 'open'));
         return;
