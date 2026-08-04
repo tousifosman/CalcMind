@@ -34,4 +34,4 @@ overturned it.
 |---|---|
 | [2026-08-02](2026-08-02.md) | Repo bootstrap; Expo dropped for bare RN CLI; design work begins |
 | [2026-08-03](2026-08-03.md) | Design grounded in observed reference behaviour (three rounds); P0 foundations; P1 canvas pan/zoom |
-| [2026-08-04](2026-08-04.md) | P2.8–P2 exit; P3–P4; P5.1 serialiser; P5.3 native adapter; P5.6 autosave; P6.1 dependency graph |
+| [2026-08-04](2026-08-04.md) | P2–P4 exit; P5.1–P5.3/P5.5–P5.7 persistence; P5.6 autosave; P6.1–P6.2 cascade |

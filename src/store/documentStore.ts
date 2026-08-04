@@ -1,11 +1,11 @@
 // Document store. See docs/ARCHITECTURE.md §5 (architecture), §7 (viewport is
 // excluded from undo history), §13 (undo/redo via immer patches).
 //
-// Dirty-set recompute (P4.8, §11 / §11.4) runs inside the same `produceWithPatches`
+// Dirty-set recompute (P4.8 / P6.2, §11 / §11.4) runs inside the same `produceWithPatches`
 // turn as the mutation when `recomputeSeeds` is passed — so undo restores both the
-// edit and the result in one entry, and no committed frame shows a stale-but-undimmed
-// result. The expansion from "these chains" to "transitive dependents" lives entirely
-// in `engine/graph.ts`'s `dirtyClosure`; this store API stays stable through P6.2.
+// edit and the cascaded results in one entry, and no committed frame shows a
+// stale-but-undimmed result. The dirty set (seed ∪ transitive dependents) lives in
+// `engine/graph.ts`'s `dirtyClosure`; this store API stayed stable through P6.2.
 //
 // Persistence dirty signalling (P5.6, §12.3): mutations notify an optional listener
 // rather than importing autosave — §5 forbids store → persistence. The app shell
