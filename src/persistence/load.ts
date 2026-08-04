@@ -7,11 +7,7 @@
 import { prettifyError } from 'zod';
 
 import { layoutChain } from '../chains/layout';
-import {
-  buildDependencyGraph,
-  recomputeChain,
-  topologicalOrder,
-} from '../engine/graph';
+import { recomputeFromSeeds } from '../engine/graph';
 import {
   serializedDocumentSchema,
   type SerializedDocumentParsed,
@@ -245,6 +241,10 @@ export function materializeLoadedValue(
  * Re-flow every chain (member `position` from the file is ignored for members —
  * §12.1), then evaluate all chains in topological order. `derived` from the file
  * may paint for a moment; the engine overwrites it and always wins (decision #6).
+ *
+ * Uses {@link recomputeFromSeeds} with every chain as seed so load stays on the
+ * same mark→evaluate path as edits (P6.2's widened `dirtyClosure` yields the
+ * full topo order when every chain is seeded).
  */
 export function prepareLoadedDocument(
   document: CalcDocument,
@@ -252,18 +252,8 @@ export function prepareLoadedDocument(
 ): void {
   reflowAllChains(document, locale);
 
-  const graph = buildDependencyGraph(document);
-  const order = topologicalOrder(graph);
-  // Also evaluate chains that somehow aren't graph vertices (shouldn't happen —
-  // vertices are Object.keys(chains) — but keep the loop total).
-  const seen = new Set<ChainId>(order);
-  for (const chainId of order) {
-    recomputeChain(document, chainId, locale);
-  }
-  for (const chainId of Object.keys(document.chains) as ChainId[]) {
-    if (seen.has(chainId)) continue;
-    recomputeChain(document, chainId, locale);
-  }
+  const allChainIds = Object.keys(document.chains) as ChainId[];
+  recomputeFromSeeds(document, allChainIds, locale);
 
   // Result create/remove can change membership widths — lay out again.
   reflowAllChains(document, locale);
