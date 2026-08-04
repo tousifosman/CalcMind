@@ -72,7 +72,7 @@ flowchart LR
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | **P5** | Persistence | 8 | In progress — P5.1 and P5.3 done; parallel with P6 |
-| **P6** | Linking | 8 | In progress — P6.1 done; parallel with P5 |
+| **P6** | Linking | 8 | In progress — P6.1 and P6.5 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -955,10 +955,10 @@ flowchart LR
     style P62 fill:#E8A838,color:#fff
     style P63 fill:#E8A838,color:#fff
     style P64 fill:#E8A838,color:#fff
-    style P65 fill:#E8A838,color:#fff
-    style P66 fill:#8892A0,color:#fff
+    style P65 fill:#22A75B,color:#fff
+    style P66 fill:#E8A838,color:#fff
     style P67 fill:#E8A838,color:#fff
-    style P68 fill:#8892A0,color:#fff
+    style P68 fill:#E8A838,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
@@ -966,7 +966,8 @@ Green = done, amber = ready to start, grey = blocked on a dependency, purple = t
 gate. `P4.8` (recompute on edit) is done, so `P6.1` is no longer gated on a cross-phase
 dependency — everything else here is downstream of it. `P2.9` and `P3.5` are already-done
 prerequisites for `P6.4` and `P6.7` respectively, shown as separate external nodes rather than
-folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. Kept
+folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. `P6.5`
+unblocked `P6.6` and `P6.8`. Kept
 current by hand alongside the acceptance-criteria boxes below — if a task's status here disagrees
 with its boxes, the boxes win and this diagram is stale.
 
@@ -1034,14 +1035,14 @@ punctuate — the review's sharpest criticism of the reference app).
 **Touches.** `src/engine/identity.ts`, node components.
 **Depends on.** P6.1.
 
-- [ ] A value acquires an identity when it is **referenced OR labelled** — either alone is enough.
+- [x] A value acquires an identity when it is **referenced OR labelled** — either alone is enough.
       The reference-only rule was wrong; see §11.1 and `2026-08-03` revision 1.
-- [ ] No identity → **no hue**. Colour is spent only where it carries information (§11.1).
-- [ ] Every reference to a value is filled with that value's hue, so two cells sharing a hue are
+- [x] No identity → **no hue**. Colour is spent only where it carries information (§11.1).
+- [x] Every reference to a value is filled with that value's hue, so two cells sharing a hue are
       the same value wherever they sit.
-- [ ] Hue is **derived at render time from traversal order and never persisted** (decision #12), so
+- [x] Hue is **derived at render time from traversal order and never persisted** (decision #12), so
       it is stable across loads without occupying the schema.
-- [ ] Test: save, reload, assert identical hue assignment.
+- [x] Test: save, reload, assert identical hue assignment.
 
 ### P6.6 — Connector rendering
 

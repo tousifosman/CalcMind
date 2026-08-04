@@ -890,7 +890,10 @@ Rules that follow from this:
   long-press `Unlink from parent` affordance carry the same information non-chromatically.
 - Hue is a **render-time property derived from the graph**, never persisted. Reopening a document
   reassigns hues deterministically by traversal order, so they are stable across loads without
-  being stored.
+  being stored. Implemented in `src/engine/identity.ts`: identity-bearing node ids (referenced
+  or labelled) are sorted lexicographically and coloured from `identityHues` in `ui/tokens.ts`.
+  Sorting, not `Object.keys` insertion order, is what keeps save→reload assignment identical
+  (serialize writes nodes sorted by id).
 - Connectors are drawn for **all** links by default, not only the selected one. Tydlig hides them
   until you swipe and the review calls that out as confusing; showing them costs a little visual
   noise and buys comprehension. If density becomes a problem, fade unselected connectors rather
