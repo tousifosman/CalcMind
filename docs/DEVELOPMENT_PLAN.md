@@ -72,7 +72,7 @@ flowchart LR
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | **P5** | Persistence | 8 | In progress — P5.1 and P5.3 done; parallel with P6 |
-| **P6** | Linking | 8 | In progress — P6.1 done; parallel with P5 |
+| **P6** | Linking | 8 | In progress — P6.1 and P6.7 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -957,7 +957,7 @@ flowchart LR
     style P64 fill:#E8A838,color:#fff
     style P65 fill:#E8A838,color:#fff
     style P66 fill:#8892A0,color:#fff
-    style P67 fill:#E8A838,color:#fff
+    style P67 fill:#22A75B,color:#fff
     style P68 fill:#8892A0,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
@@ -1065,14 +1065,14 @@ sharing the canvas transform), decision #13.
 ### P6.7 — Drag a result into a chain
 
 **Objective.** The second way to create a reference.
-**Architecture.** §11 (dragging a result into another chain creates a reference), §8.3.
+**Architecture.** §11 (dragging a result into another chain creates a reference), §8.3, §8.7.
 **Touches.** `src/nodes/useNodeDrag.ts`, `src/store/commands.ts`.
 **Depends on.** P6.1, P3.5.
 
-- [ ] Dragging a result node into another chain inserts a **reference** to it — not a copy of its
+- [x] Dragging a result node into another chain inserts a **reference** to it — not a copy of its
       value, and not the result node itself.
-- [ ] The source chain keeps its own result.
-- [ ] Snapping behaves exactly as for any other node (§8.3) — no special case in `snapping.ts`.
+- [x] The source chain keeps its own result.
+- [x] Snapping behaves exactly as for any other node (§8.3) — no special case in `snapping.ts`.
 
 ### P6.8 — Palette accessibility validation
 

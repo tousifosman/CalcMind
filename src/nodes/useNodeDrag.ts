@@ -168,10 +168,13 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
 
       // Once past DETACH_DISTANCE, probe as free so the vacated chain can become a
       // candidate again — hysteresis (DETACH > SNAP) stops an immediate re-snap (§8.2).
+      // Results never probe as free (P6.7): own-chain stays excluded, and a miss
+      // cancels rather than detaching — R is not a free-floating node.
       const probe = {
         ...current,
         position,
-        chainId: sess.detached ? null : current.chainId,
+        chainId:
+          sess.detached && current.kind !== 'result' ? null : current.chainId,
       };
       const locale = getDeviceLocale();
       const neighbours = makeSnappingNeighbours(document.chains, document.nodes, locale);
@@ -217,11 +220,16 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
 
       switch (decision.kind) {
         case 'snap':
+          // Result → reference substitution lives in commitSnapOutcome (P6.7 / §11).
           commitSnapOutcome(nodeId, decision.outcome, position);
           break;
-        case 'detach':
+        case 'detach': {
+          // P6.7: a result dragged off with no candidate snaps back — never detaches.
+          const dragged = useDocumentStore.getState().document.nodes[nodeId];
+          if (dragged?.kind === 'result') break;
           detachNode(nodeId, decision.position);
           break;
+        }
         case 'move':
           moveFreeNode(nodeId, decision.position);
           break;
