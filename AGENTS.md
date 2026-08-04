@@ -40,10 +40,9 @@ is binding — do not re-derive the superseded version of it.
 - **Keep docs from going stale.** If a change contradicts `README.md`, `AGENTS.md`,
   `docs/ARCHITECTURE.md` or `docs/DEVELOPMENT_PLAN.md`, fix them in the same commit. Tick a task's
   acceptance criteria in the same commit as the code that satisfies them. When every box on a task
-  is ticked, cross the task out too, in the same commit: strike through its heading in
-  `docs/DEVELOPMENT_PLAN.md` (`### ~~P2.1 — ...~~`), and if its phase has a mermaid dependency
-  diagram, strike through that task's label there as well — the green fill alone is easy to miss
-  scanning a wide diagram; the strikethrough is what actually reads as "done".
+  is ticked, also flip its node in `docs/DEVELOPMENT_PLAN.md`'s mermaid dependency diagram (if its
+  phase has one) to the green "done" fill, in the same commit — status there is read by colour
+  alone; do not strike through diagram labels or task headings.
 - **Dependency versions here are deliberate.** Check the journal's Findings before
   upgrading or adding anything — notably the reanimated / gesture-handler pairing.
 - **Match the surrounding code.** Comment density and naming in this repo are deliberate;
