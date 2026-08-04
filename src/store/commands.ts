@@ -216,6 +216,29 @@ export function deleteNode(nodeId: NodeId): void {
   });
 }
 
+/** Selects every node in the same chain as `nodeId` (§8.6, P2.9). Nodes that are
+ *  not chain members — i.e. free nodes with `chainId === null` — count as a group
+ *  of one. This is purely ephemeral UI state; the document is not changed. */
+export function selectGroup(nodeId: NodeId): void {
+  const { document } = useDocumentStore.getState();
+  const node = document.nodes[nodeId];
+  if (!node) return;
+
+  let ids: NodeId[];
+  if (node.chainId !== null) {
+    const chain = document.chains[node.chainId];
+    ids = chain ? chain.members : [nodeId];
+  } else {
+    ids = [nodeId];
+  }
+
+  useUiStore.getState().setGroupSelected(new Set(ids));
+  // Select the long-pressed node as the primary selection so the keypad still has
+  // a sensible target while the group highlight is visible.
+  useUiStore.getState().setSelectedNode(nodeId);
+  useUiStore.getState().setEditingNode(null);
+}
+
 // Selection (§8.6, §13, P2.6). `uiStore` holds selectedNodeId/editingNodeId as bare ephemeral
 // state and has no document to consult; these wrappers are what add the one piece of domain
 // behaviour selection needs - discarding a number node that's being abandoned mid-edit with

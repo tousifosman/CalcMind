@@ -5,6 +5,11 @@
 import { create } from 'zustand';
 import { NodeId, Vec2 } from '../model/types';
 
+/** Discriminated union for the two menu variants (§8.6). */
+export type ContextMenu =
+  | { kind: 'node'; nodeId: NodeId; anchor: Vec2 }
+  | { kind: 'canvas'; anchor: Vec2 };
+
 export interface UiState {
   keypadVisible: boolean;
   toggleKeypad: () => void;
@@ -36,6 +41,20 @@ export interface UiState {
   editingNodeId: NodeId | null;
   setSelectedNode: (id: NodeId | null) => void;
   setEditingNode: (id: NodeId | null) => void;
+
+  /** The open context menu, if any (§8.6, P2.9). Ephemeral — a menu is a momentary
+   *  prompt, not a document change. `anchor` is in screen coordinates so the overlay
+   *  can position itself without needing the viewport transform. */
+  contextMenu: ContextMenu | null;
+  openContextMenu: (menu: ContextMenu) => void;
+  closeContextMenu: () => void;
+
+  /** Nodes selected as a group (§8.6 `Select group`, P2.9). A group is the whole
+   *  chain that contains the long-pressed node. Ephemeral: moving and deleting a
+   *  group are the operations it enables (P3.7); the set itself is not a document edit. */
+  groupSelectedIds: ReadonlySet<NodeId>;
+  setGroupSelected: (ids: ReadonlySet<NodeId>) => void;
+  clearGroupSelected: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -55,4 +74,12 @@ export const useUiStore = create<UiState>((set) => ({
   editingNodeId: null,
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setEditingNode: (id) => set({ editingNodeId: id }),
+
+  contextMenu: null,
+  openContextMenu: (menu) => set({ contextMenu: menu }),
+  closeContextMenu: () => set({ contextMenu: null }),
+
+  groupSelectedIds: new Set(),
+  setGroupSelected: (ids) => set({ groupSelectedIds: ids }),
+  clearGroupSelected: () => set({ groupSelectedIds: new Set() }),
 }));

@@ -38,9 +38,13 @@ interface CanvasProps {
    *  hit a node or empty space is the caller's job (§8.6, P2.6) - Canvas has no node data to
    *  hit-test against, and shouldn't need any to stay a plain transform container. */
   onTap?: (worldPoint: Vec2) => void;
+  /** Fired on a long-press (≥500 ms) that doesn't turn into a pan, with both the
+   *  long-pressed world point and the raw screen point (for menu positioning).
+   *  Same caller-decides contract as `onTap`: Canvas reports geometry only. */
+  onLongPress?: (worldPoint: Vec2, screenPoint: Vec2) => void;
 }
 
-export function Canvas({ children, style, onTap }: CanvasProps) {
+export function Canvas({ children, style, onTap, onLongPress }: CanvasProps) {
   const setViewport = useDocumentStore((state) => state.setViewport);
 
   // Read once, non-reactively: Canvas drives the viewport, it doesn't need to
@@ -110,9 +114,24 @@ export function Canvas({ children, style, onTap }: CanvasProps) {
       }
     });
 
+  // Long-press opens the context menu (§8.6, P2.9). 500 ms — long enough to be
+  // deliberate, short enough not to feel sluggish. The menu takes precedence over P3.7's
+  // long-press-to-move-chain; see the precedence note in NodeContextMenu.tsx.
+  const longPress = Gesture.LongPress()
+    .minDuration(500)
+    .onEnd((e, success) => {
+      'worklet';
+      if (success && onLongPress) {
+        const worldPoint = { x: e.x / zoom.value + panX.value, y: e.y / zoom.value + panY.value };
+        const screenPoint = { x: e.absoluteX, y: e.absoluteY };
+        runOnJS(onLongPress)(worldPoint, screenPoint);
+      }
+    });
+
   // Race, not Simultaneous: a drag activates pan before release and should win outright,
   // while a tap only resolves on release once pan/pinch have failed to activate.
-  const composedGesture = Gesture.Race(Gesture.Simultaneous(pan, pinch), tap);
+  // Long-press competes in the same race — if pan activates first it cancels long-press.
+  const composedGesture = Gesture.Race(Gesture.Simultaneous(pan, pinch), tap, longPress);
 
   const outerStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: -panX.value * zoom.value }, { translateY: -panY.value * zoom.value }],

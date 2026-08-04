@@ -12,10 +12,11 @@ import { Canvas } from '../canvas/Canvas';
 import { NodeLayer } from '../canvas/NodeLayer';
 import { hitTestNode } from '../canvas/hitTest';
 import { Keypad } from '../keypad/Keypad';
+import { ContextMenuOverlay } from '../nodes/NodeContextMenu';
 import { commandFromHardwareKey, dispatchEditorCommand } from '../keypad/keymap';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
-import { addNumberNode, selectNode, editNumberNode } from '../store/commands';
+import { addNumberNode, selectNode, editNumberNode, deleteNode, selectGroup } from '../store/commands';
 import { getDeviceLocale } from '../ui/locale';
 import { Vec2 } from '../model/types';
 
@@ -61,13 +62,26 @@ export function AppShell() {
     useUiStore.getState().showKeypad();
   }
 
+  // Long-press dispatches the §8.6 context menu. `screenPoint` is in absolute screen
+  // coordinates so the floating sheet can be positioned without the viewport transform.
+  function handleCanvasLongPress(worldPoint: Vec2, screenPoint: Vec2): void {
+    const { document } = useDocumentStore.getState();
+    const hit = hitTestNode(document.nodes, worldPoint, getDeviceLocale());
+    if (hit) {
+      useUiStore.getState().openContextMenu({ kind: 'node', nodeId: hit.id, anchor: screenPoint });
+    } else {
+      useUiStore.getState().openContextMenu({ kind: 'canvas', anchor: screenPoint });
+    }
+  }
+
   return (
     <GestureHandlerRootView style={styles.fill}>
       <View style={styles.fill}>
-        <Canvas style={styles.fill} onTap={handleCanvasTap}>
+        <Canvas style={styles.fill} onTap={handleCanvasTap} onLongPress={handleCanvasLongPress}>
           <NodeLayer />
         </Canvas>
         <Keypad locale={getDeviceLocale()} onKeyPress={dispatchEditorCommand} />
+        <ContextMenuOverlay onDeleteNode={deleteNode} onSelectGroup={selectGroup} />
       </View>
     </GestureHandlerRootView>
   );

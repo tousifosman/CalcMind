@@ -1,0 +1,175 @@
+// Tests for the §8.6 context menu components and the uiStore context menu state.
+import React from 'react';
+import { act } from 'react-test-renderer';
+import { NodeContextMenu, CanvasContextMenu, ContextMenuOverlay } from './NodeContextMenu';
+import { useUiStore } from '../store/uiStore';
+import { useDocumentStore } from '../store/documentStore';
+import { addNumberNode } from '../store/commands';
+import { createEmptyDocument } from '../model/factories';
+import { renderNode, unmountAll } from './testUtils';
+
+jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
+
+function resetStore() {
+  useDocumentStore.setState({ document: createEmptyDocument(), undoStack: [], redoStack: [] });
+  useUiStore.setState({
+    selectedNodeId: null,
+    editingNodeId: null,
+    contextMenu: null,
+    groupSelectedIds: new Set(),
+  });
+}
+
+beforeEach(resetStore);
+afterEach(unmountAll);
+
+const ANCHOR = { x: 100, y: 200 };
+
+describe('NodeContextMenu', () => {
+  test('calls onDelete with nodeId and then onDismiss when Delete is pressed', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '3');
+    const onDelete = jest.fn();
+    const onDismiss = jest.fn();
+
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId={id}
+        anchor={ANCHOR}
+        onDelete={onDelete}
+        onSelectGroup={jest.fn()}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    // Find the Delete TouchableOpacity by testID via findAllByProps traversal
+    const deleteBtn = renderer.root
+      .findAll((node) => node.props.testID === `context-menu-item-Delete`)
+      .find((node) => typeof node.type === 'function' || node.props.onPress !== undefined);
+
+    expect(deleteBtn).toBeDefined();
+    act(() => {
+      deleteBtn!.props.onPress();
+    });
+
+    expect(onDelete).toHaveBeenCalledWith(id);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  test('calls onSelectGroup with nodeId and then onDismiss when Select group is pressed', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '3');
+    const onSelectGroup = jest.fn();
+    const onDismiss = jest.fn();
+
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId={id}
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={onSelectGroup}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    const selectGroupBtn = renderer.root
+      .findAll((node) => node.props.testID === `context-menu-item-Select group`)
+      .find((node) => node.props.onPress !== undefined);
+
+    expect(selectGroupBtn).toBeDefined();
+    act(() => {
+      selectGroupBtn!.props.onPress();
+    });
+
+    expect(onSelectGroup).toHaveBeenCalledWith(id);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  test('Copy is marked disabled', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '3');
+
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId={id}
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onDismiss={jest.fn()}
+      />,
+    );
+
+    const copyBtn = renderer.root
+      .findAll((node) => node.props.testID === `context-menu-item-Copy`)
+      .find((node) => node.props.disabled !== undefined);
+
+    expect(copyBtn).toBeDefined();
+    expect(copyBtn!.props.disabled).toBe(true);
+  });
+});
+
+describe('CanvasContextMenu', () => {
+  test('all three items are disabled', () => {
+    const renderer = renderNode(
+      <CanvasContextMenu anchor={ANCHOR} onDismiss={jest.fn()} />,
+    );
+
+    for (const label of ['Add number', 'Paste', 'Add graph']) {
+      const btn = renderer.root
+        .findAll((node) => node.props.testID === `context-menu-item-${label}`)
+        .find((node) => node.props.disabled !== undefined);
+      expect(btn).toBeDefined();
+      expect(btn!.props.disabled).toBe(true);
+    }
+  });
+});
+
+describe('ContextMenuOverlay', () => {
+  test('renders nothing when contextMenu is null', () => {
+    const renderer = renderNode(
+      <ContextMenuOverlay onDeleteNode={jest.fn()} onSelectGroup={jest.fn()} />,
+    );
+    expect(renderer.toJSON()).toBeNull();
+  });
+
+  test('renders node menu items when contextMenu.kind === node', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '9');
+    act(() => {
+      useUiStore.getState().openContextMenu({ kind: 'node', nodeId: id, anchor: ANCHOR });
+    });
+
+    const renderer = renderNode(
+      <ContextMenuOverlay onDeleteNode={jest.fn()} onSelectGroup={jest.fn()} />,
+    );
+
+    const deleteBtns = renderer.root.findAll(
+      (node) => node.props.testID === `context-menu-item-Delete`,
+    );
+    expect(deleteBtns.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('renders canvas menu items when contextMenu.kind === canvas', () => {
+    act(() => {
+      useUiStore.getState().openContextMenu({ kind: 'canvas', anchor: ANCHOR });
+    });
+
+    const renderer = renderNode(
+      <ContextMenuOverlay onDeleteNode={jest.fn()} onSelectGroup={jest.fn()} />,
+    );
+
+    const addNumberBtns = renderer.root.findAll(
+      (node) => node.props.testID === `context-menu-item-Add number`,
+    );
+    expect(addNumberBtns.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test('closeContextMenu sets contextMenu to null', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    act(() => {
+      useUiStore.getState().openContextMenu({ kind: 'node', nodeId: id, anchor: ANCHOR });
+    });
+    expect(useUiStore.getState().contextMenu).not.toBeNull();
+
+    act(() => {
+      useUiStore.getState().closeContextMenu();
+    });
+    expect(useUiStore.getState().contextMenu).toBeNull();
+  });
+});

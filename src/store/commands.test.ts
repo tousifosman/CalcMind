@@ -15,6 +15,7 @@ import {
   selectNode,
   editNumberNode,
   deselectNode,
+  selectGroup,
 } from './commands';
 import { createEmptyDocument } from '../model/factories';
 import { tokens } from '../ui/tokens';
@@ -27,7 +28,7 @@ function resetStore() {
     undoStack: [],
     redoStack: [],
   });
-  useUiStore.setState({ selectedNodeId: null, editingNodeId: null });
+  useUiStore.setState({ selectedNodeId: null, editingNodeId: null, groupSelectedIds: new Set() });
 }
 
 beforeEach(resetStore);
@@ -412,5 +413,44 @@ describe('selectNode / editNumberNode / deselectNode', () => {
     editNumberNode(id);
     editNumberNode(id);
     expect(useDocumentStore.getState().document.nodes[id]).toBeDefined();
+  });
+});
+
+describe('selectGroup', () => {
+  test('selecting a free node (no chain) creates a group of one', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '7');
+    selectGroup(id);
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([id]));
+    expect(useUiStore.getState().selectedNodeId).toBe(id);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+  });
+
+  test('selecting a chained node groups all chain members', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addOperatorNode({ x: 50, y: 0 }, '+');
+    const c = addNumberNode({ x: 84, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.ch = { id: 'ch', members: [a, b, c], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'ch';
+      draft.nodes[b].chainId = 'ch';
+      draft.nodes[c].chainId = 'ch';
+    });
+
+    selectGroup(b);
+
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([a, b, c]));
+    expect(useUiStore.getState().selectedNodeId).toBe(b);
+  });
+
+  test('calling selectGroup on a non-existent node is a no-op', () => {
+    selectGroup('ghost');
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+  });
+
+  test('selectGroup does not add an undo entry', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '5');
+    const before = useDocumentStore.getState().undoStack.length;
+    selectGroup(id);
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
   });
 });

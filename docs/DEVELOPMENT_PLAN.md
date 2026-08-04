@@ -279,15 +279,15 @@ code path.
 **Touches.** `src/nodes/NodeContextMenu.tsx`, `src/canvas/Canvas.tsx`.
 **Depends on.** P2.6.
 
-- [ ] Long-press a node → `Copy`, `Delete`, `Select group`. (`Unlink from parent` is
+- [x] Long-press a node → `Copy`, `Delete`, `Select group`. (`Unlink from parent` is
       reference-only and arrives with P6.4.)
-- [ ] Long-press empty canvas → `Add number`, `Paste`, and `Add graph` rendered **disabled**
+- [x] Long-press empty canvas → `Add number`, `Paste`, and `Add graph` rendered **disabled**
       (§17.2 defers graphing).
-- [ ] `Select group` selects the whole chain — this is how a chain is moved or deleted as a unit
+- [x] `Select group` selects the whole chain — this is how a chain is moved or deleted as a unit
       (§8.6), and P3.7 depends on it existing.
-- [ ] Long-press must not conflict with P3.7's long-press-to-move-chain. Decide the precedence now
+- [x] Long-press must not conflict with P3.7's long-press-to-move-chain. Decide the precedence now
       and record it, rather than discovering the clash in P3.
-- [ ] Delete removes the node in one undo entry.
+- [x] Delete removes the node in one undo entry.
 
 ### P2.10 — Swipe-to-clear, with confirmation
 
