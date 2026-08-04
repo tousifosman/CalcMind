@@ -590,9 +590,10 @@ caret is drawn. The user sees the outcome before committing.
 Bookkeeping on commit: a chain that drops to one member dissolves (member becomes free); an empty
 chain is deleted; a chain that loses its `=` also loses its result node.
 
-**[assumption]** Long-press to move a whole chain, plain drag to detach a member. The opposite
-mapping is defensible — validate with real use and flip if wrong. This is one line in
-`useNodeDrag`.
+Long-press (≥200 ms) then drag moves a whole chain; a plain drag detaches the member. The opposite
+mapping was tried interactively and rejected — see §17.1. `Select group` (§8.6) is the other
+move-chain route (no dwell required). An open context menu blocks move-chain so the 500 ms menu
+keeps precedence.
 
 ### 8.4 Spatial indexing
 
@@ -1114,16 +1115,20 @@ it unclear which parts were claims about the present and which were intentions.
 | 14 | Always-on pills | Taken from the supplied reference; makes structure permanently legible | The canvas reads as too busy with real content |
 | 15 | Swipe-to-clear requires confirmation | Tydlig's bare swipe wipes a document; too destructive for one stray gesture even with undo (§8.5) | Never |
 | 16 | Typing builds chains directly, not through P3's snapping | Typing always knows exactly which chain to extend (whichever the selected node belongs to), so it appends deterministically (`store/commands.ts`'s `appendMembersToChain`) instead of running §8.2-8.4's geometric candidate search, which exists to disambiguate a *dragged* node's several nearby neighbours (P2.8) | P3's chain layout pass changes how `Chain.anchor`/positions are derived and this stops matching it |
+| 17 | Plain drag detaches; long-press-then-drag moves chain | Detach/rearrange is the frequent edit and must not require a dwell; lifting a whole expression is deliberate. Opposite mapping tried interactively (P3.7); both work, this one won (§8.3, §17.1) | Real-device use shows accidental detaches dominate over accidental chain moves |
 
 ## 17. Open questions
 
 ### 17.1 Chain move vs member detach
 
-Still the one genuinely unresolved interaction (§8.3). The reference app's own copy says you can
-drag "numbers **and expressions**", so both gestures exist there and are presumably distinguished by
-grab target or dwell. Our proposal — plain drag detaches a member, long-press-then-drag moves the
-whole chain — is consistent with that but unverified. It is one line in `useNodeDrag`; decide it
-with a real device in hand rather than on paper.
+~~Still the one genuinely unresolved interaction (§8.3).~~ **Resolved (P3.7).** Plain drag
+detaches a member; long-press (≥200 ms) then drag moves the whole chain (anchor update). The
+opposite mapping was tried interactively (Playwright/CDP against the web build) and both
+gestures work mechanically; the shipped mapping won because detach/rearrange is the frequent
+edit and should not require a dwell, while lifting a whole expression is a deliberate act that
+fits long-press. `Select group` remains the dwell-free alternative (§8.6). Context menu at
+500 ms still wins over move-chain (P2.9). Flip point is `LONG_PRESS_MOVES_CHAIN` in
+`src/nodes/dragLifecycle.ts`.
 
 ### 17.2 Everything else
 2. ~~**Keypad model**~~ — **resolved** (§8.5). Tydlig's dismissible, non-fullscreen keypad with a

@@ -9,6 +9,10 @@ function useSharedValue(initial) {
   return { value: initial };
 }
 
+function makeMutable(initial) {
+  return { value: initial };
+}
+
 function useAnimatedStyle(styleFactory) {
   return styleFactory();
 }
@@ -21,6 +25,7 @@ module.exports = {
   __esModule: true,
   default: { View },
   useSharedValue,
+  makeMutable,
   useAnimatedStyle,
   runOnJS,
 };

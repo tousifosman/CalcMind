@@ -23,6 +23,7 @@ import {
   detachNode,
   commitSnapOutcome,
   moveFreeNode,
+  moveChain,
 } from './commands';
 import { createEmptyDocument } from '../model/factories';
 import { tokens } from '../ui/tokens';
@@ -942,6 +943,56 @@ describe('moveFreeNode', () => {
     useDocumentStore.setState({ undoStack: [], redoStack: [] });
 
     moveFreeNode(a, { x: 99, y: 99 });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+  });
+});
+
+describe('moveChain', () => {
+  test('updates anchor and reflows every member in one undo entry', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const op = addOperatorNode({ x: 0, y: 0 }, '+');
+    const b = addNumberNode({ x: 0, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.c1 = { id: 'c1', members: [a, op, b], anchor: { x: 100, y: 40 } };
+      draft.nodes[a].chainId = 'c1';
+      draft.nodes[op].chainId = 'c1';
+      draft.nodes[b].chainId = 'c1';
+      const positions = layoutChain(draft.chains.c1, draft.nodes, 'en-US');
+      for (const id of [a, op, b]) {
+        const pos = positions[id];
+        if (pos) draft.nodes[id].position = pos;
+      }
+    });
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    moveChain('c1', { x: 200, y: 80 });
+
+    const { document, undoStack } = useDocumentStore.getState();
+    expect(document.chains.c1.anchor).toEqual({ x: 200, y: 80 });
+    expect(document.nodes[a].position).toEqual({ x: 200, y: 80 });
+    expect(document.nodes[op].position.y).toBe(80);
+    expect(document.nodes[b].position.y).toBe(80);
+    expect(document.nodes[op].position.x).toBeGreaterThan(document.nodes[a].position.x);
+    expect(document.nodes[b].position.x).toBeGreaterThan(document.nodes[op].position.x);
+    expect(undoStack).toHaveLength(1);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.chains.c1.anchor).toEqual({ x: 100, y: 40 });
+    expect(useDocumentStore.getState().document.nodes[a].position).toEqual({ x: 100, y: 40 });
+  });
+
+  test('no-op when chain is missing or anchor is unchanged', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '3');
+    const b = addNumberNode({ x: 0, y: 0 }, '4');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.c1 = { id: 'c1', members: [a, b], anchor: { x: 10, y: 20 } };
+      draft.nodes[a].chainId = 'c1';
+      draft.nodes[b].chainId = 'c1';
+    });
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    moveChain('ghost', { x: 1, y: 2 });
+    moveChain('c1', { x: 10, y: 20 });
     expect(useDocumentStore.getState().undoStack).toHaveLength(0);
   });
 });

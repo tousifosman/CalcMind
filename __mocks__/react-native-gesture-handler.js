@@ -12,6 +12,7 @@ function makeGestureBuilder() {
     'minPointers',
     'maxPointers',
     'onStart',
+    'onBegin',
     'onUpdate',
     'onEnd',
     'onChange',

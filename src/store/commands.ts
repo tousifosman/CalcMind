@@ -459,6 +459,19 @@ export function moveFreeNode(nodeId: NodeId, position: Vec2): void {
   });
 }
 
+/** Reposition a whole chain by updating its `anchor`, then re-flowing members in the
+ *  same commit (§8.1, §8.2 MovingChain). One undo entry. Member `position` is the
+ *  layout cache; `anchor` + `members` remain the truth. */
+export function moveChain(chainId: ChainId, anchor: Vec2): void {
+  useDocumentStore.getState().applyCommand((draft) => {
+    const chain = draft.chains[chainId];
+    if (!chain) return;
+    if (chain.anchor.x === anchor.x && chain.anchor.y === anchor.y) return;
+    chain.anchor = { x: anchor.x, y: anchor.y };
+    reflowChain(draft, chainId);
+  });
+}
+
 /** Selects every node in the same chain as `nodeId` (§8.6, P2.9). Nodes that are
  *  not chain members — i.e. free nodes with `chainId === null` — count as a group
  *  of one. This is purely ephemeral UI state; the document is not changed. */

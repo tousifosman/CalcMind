@@ -34,4 +34,4 @@ overturned it.
 |---|---|
 | [2026-08-02](2026-08-02.md) | Repo bootstrap; Expo dropped for bare RN CLI; design work begins |
 | [2026-08-03](2026-08-03.md) | Design grounded in observed reference behaviour (three rounds); P0 foundations; P1 canvas pan/zoom |
-| [2026-08-04](2026-08-04.md) | P2.8–P2 exit; P3.1–P3.6 snapping (layout, bounds, candidates, mutations, drag, insertion feedback) |
+| [2026-08-04](2026-08-04.md) | P2.8–P2 exit; P3.1–P3.7 snapping (layout through insertion feedback; chain move vs detach closes §17.1) |
