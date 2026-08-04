@@ -348,10 +348,10 @@ order is the truth and is never re-derived from `x`).
 **Touches.** `src/chains/bounds.ts`.
 **Depends on.** P3.1.
 
-- [ ] `boundsOf(node)`, `verticalOverlap(a, b)`, `memberBoundaries(chain)`.
-- [ ] Neighbour lookup is O(n) and exposed through an interface whose **call sites will not change**
+- [x] `boundsOf(node)`, `verticalOverlap(a, b)`, `memberBoundaries(chain)`.
+- [x] Neighbour lookup is O(n) and exposed through an interface whose **call sites will not change**
       when a uniform spatial hash is inserted (§8.4). P7.6 depends on this holding.
-- [ ] Unit tested at exact threshold values, not only clearly-inside and clearly-outside cases.
+- [x] Unit tested at exact threshold values, not only clearly-inside and clearly-outside cases.
 
 ### P3.3 — Snap candidate resolution
 
