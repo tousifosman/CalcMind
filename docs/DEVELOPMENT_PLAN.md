@@ -71,7 +71,7 @@ flowchart LR
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
-| **P5** | Persistence | 8 | Ready (depends only on P4, done) |
+| **P5** | Persistence | 8 | In progress — P5.3 done; parallel with P6 |
 | **P6** | Linking | 8 | In progress — P6.1 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
@@ -755,12 +755,12 @@ flowchart LR
     P57 --> EXIT
     P58 --> EXIT
 
-    style P4EXIT fill:#8892A0,color:#fff
+    style P4EXIT fill:#22A75B,color:#fff
     style P31 fill:#22A75B,color:#fff
-    style P48 fill:#8892A0,color:#fff
+    style P48 fill:#22A75B,color:#fff
     style P51 fill:#8892A0,color:#fff
     style P52 fill:#8892A0,color:#fff
-    style P53 fill:#8892A0,color:#fff
+    style P53 fill:#22A75B,color:#fff
     style P54 fill:#8892A0,color:#fff
     style P55 fill:#8892A0,color:#fff
     style P56 fill:#8892A0,color:#fff
@@ -775,7 +775,7 @@ just says "depends only on P4" — but the plan sequences both behind P4's own p
 rather than jumping the queue the moment either task's box would otherwise look open, shown here
 as a gate from P4's tracking issue rather than an individual P4 subtask. `P5.5` is the one task
 that reaches outside the phase for real, task-level dependencies: `P3.1` (chain layout, already
-done) and `P4.8` (recompute on edit, not yet). Kept current by hand alongside the
+done) and `P4.8` (recompute on edit, also done). Kept current by hand alongside the
 acceptance-criteria boxes below — if a task's status here disagrees with its boxes, the boxes win
 and this diagram is stale.
 
@@ -816,12 +816,16 @@ decision #7.
 **Architecture.** §12.2 (interface and platform table), §12.3 (atomic writes, one `.bak`).
 **Touches.** `src/persistence/adapter.ts`, `adapter.native.ts`.
 
-- [ ] `StorageAdapter` exactly as declared in §12.2.
-- [ ] Native uses `@dr.pogodin/react-native-fs`, documents at
+- [x] `StorageAdapter` exactly as declared in §12.2.
+- [x] Native uses `@dr.pogodin/react-native-fs`, documents at
       `DocumentDirectoryPath/calcmind/<id>.calcmind.json`.
-- [ ] **Writes are atomic**: `.tmp` → fsync → rename over target. A crash mid-save leaves either
+- [x] **Writes are atomic**: `.tmp` → fsync → rename over target. A crash mid-save leaves either
       the old file or the new one, never a truncated one (§12.3).
-- [ ] The previous good file is kept as `.bak` — exactly one generation (§12.3).
+- [x] The previous good file is kept as `.bak` — exactly one generation (§12.3).
+
+`@dr.pogodin/react-native-fs` exposes no `fsync`; `writeFile`'s resolved promise is the flush
+barrier before rename (Android closes/flushes the stream; see journal). Shared behavioural
+contract tests live in `adapter.sharedTests.ts` for P5.4 to reuse against the web adapter.
 
 ### P5.4 — Web adapter
 
