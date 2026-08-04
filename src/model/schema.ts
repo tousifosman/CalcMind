@@ -57,6 +57,15 @@ const resultNodeSchema = z.object({
               'NotANumber',
               'CircularReference',
             ]),
+            // Optional; present when P6.3 DFS colouring named the cycle. Stripped on
+            // serialise with the rest of `derived`, so this is not a schema migration.
+            cycle: z
+              .object({
+                chainIds: z.array(z.string()),
+                chainLabels: z.array(z.string()),
+                closingReferenceNodeId: z.string(),
+              })
+              .optional(),
           }),
         ])
         .optional(),
@@ -92,6 +101,7 @@ export const viewportSchema = z.object({
   zoom: z.number(),
 });
 
+/** In-memory shape: `nodes` / `chains` as Records (§6). Not the on-disk form. */
 export const calcDocumentSchema = z.object({
   schemaVersion: z.number(),
   id: z.string(),
@@ -102,3 +112,22 @@ export const calcDocumentSchema = z.object({
   nodes: z.record(z.string(), calcNodeSchema),
   chains: z.record(z.string(), chainSchema),
 });
+
+/**
+ * On-disk / wire shape (§12.1): `nodes` and `chains` are arrays; `$schema` is
+ * optional (hand-edited files may omit it). Validated at the load trust
+ * boundary — never confuse this with {@link calcDocumentSchema}.
+ */
+export const serializedDocumentSchema = z.object({
+  $schema: z.string().optional(),
+  schemaVersion: z.number(),
+  id: z.string(),
+  name: z.string(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  viewport: viewportSchema,
+  nodes: z.array(calcNodeSchema),
+  chains: z.array(chainSchema),
+});
+
+export type SerializedDocumentParsed = z.infer<typeof serializedDocumentSchema>;

@@ -1,7 +1,7 @@
-// Reference cell (§8.7 / §11.2): shows another node's live value, or — when the
-// target is gone — a neutral struck-through cell with the last known value dimmed
-// (P6.4). Identity hue and connector styling are P6.5/P6.6; until then live refs
-// stay a neutral outlined pill (P4.9: "A reference with no hue yet is correct here").
+// Reference cell (§8.7 / §11.1 / §11.2): shows another node's live value, filled with
+// that value's identity hue so two cells sharing a hue are the same value wherever
+// they sit (P6.5). When the target is gone, a neutral struck-through cell keeps the
+// last known value dimmed (P6.4) — colour is spent only where an identity still exists.
 import React from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { NodeId } from '../model/types';
@@ -9,16 +9,18 @@ import { useNode } from '../store/selectors';
 import { useDocumentStore } from '../store/documentStore';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
-import { glyphColor, tokens } from '../ui/tokens';
+import { glyphColor, identityBorderFor, tokens } from '../ui/tokens';
 import { Cell, glyphTextStyle } from './Cell';
 import { referenceCellContent } from '../engine/reference';
+import { useReferenceIdentityHue } from './useIdentityHue';
 
-/** Interim no-hue palette — distinct from role fills so an unassigned reference is
- *  not mistaken for a number/result, and not an identityHue (those are P6.5). */
+/** No-identity palette — distinct from role fills so an uncoloured reference is
+ *  not mistaken for a number/result (dangling target, or hue not yet assigned). */
 const REFERENCE_NEUTRAL = { fill: '#4B5563', border: '#9CA3AF' } as const;
 
 /** Dangling palette: still neutral, but quieter so the struck-through value reads as
- *  "was a link" rather than a live cell (§11.2). */
+ *  "was a link" rather than a live cell (§11.2). Identity hue is withheld — the
+ *  source identity is gone. */
 const REFERENCE_DANGLING = { fill: '#6B7280', border: '#9CA3AF' } as const;
 
 /** Opacity for a dangling last-known value — same budget as §9 Stale results. */
@@ -31,18 +33,34 @@ interface ReferenceNodeProps {
 function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
   const node = useNode(id);
   const nodes = useDocumentStore((s) => s.document.nodes);
+  const identityHue = useReferenceIdentityHue(id);
   if (!node || node.kind !== 'reference') return null;
 
   const locale = getDeviceLocale();
   const content = referenceCellContent(node, nodes, locale);
-  const palette = content.mode === 'dangling' ? REFERENCE_DANGLING : REFERENCE_NEUTRAL;
+
+  let fill: string;
+  let border: string;
+  if (content.mode === 'dangling') {
+    fill = REFERENCE_DANGLING.fill;
+    border = REFERENCE_DANGLING.border;
+  } else if (identityHue) {
+    // Declaring cells draw a ring; references fill with the hue (§11.1). Border is
+    // a lightened twin of the fill (rolePalette pattern) so the cell stays bounded
+    // on the dark canvas — linking-model.svg paints both the same, which reads flat.
+    fill = identityHue;
+    border = identityBorderFor(identityHue);
+  } else {
+    fill = REFERENCE_NEUTRAL.fill;
+    border = REFERENCE_NEUTRAL.border;
+  }
 
   return (
     <Cell
       testID={`reference-node-${id}`}
       width={widthOf(node, locale, tokens.numeralFontSize, nodes)}
-      fill={palette.fill}
-      border={palette.border}
+      fill={fill}
+      border={border}
       label={node.label}
     >
       <Text

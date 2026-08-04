@@ -29,8 +29,12 @@ import {
 import { isDanglingReference, isRepointTarget } from '../engine/reference';
 import { getDeviceLocale } from '../ui/locale';
 import { Vec2 } from '../model/types';
+import { startAutosave } from './startAutosave';
 
 export function AppShell() {
+  // Debounced autosave + force-flush on background / pagehide (§12.3, P5.6).
+  useEffect(() => startAutosave(), []);
+
   // Hardware/web-keyboard dispatch (§8.5, P2.8), through the same `dispatchEditorCommand`
   // the on-screen keypad uses below. Web only: there is no hardware-keyboard equivalent on a
   // touch-only device. A number node being edited handles its own keys locally in

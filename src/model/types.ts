@@ -68,9 +68,25 @@ export interface ResultDerived {
   outcome?: ResultOutcome;
 }
 
+/** Cycle metadata on a `CircularReference` outcome (§11, §11.2). Cache-only — never
+ *  persisted; rebuilt by DFS colouring when the dependency graph is. */
+export interface CircularReferenceCycle {
+  /** Chain ids around the cycle (closing edge returns to `chainIds[0]`). */
+  chainIds: ChainId[];
+  /** Display names for those chains, same order — used to *name* the cycle. */
+  chainLabels: string[];
+  /** Reference node on the DFS back-edge; unlinking it breaks the cycle. */
+  closingReferenceNodeId: NodeId;
+}
+
 export type ResultOutcome =
   | { status: 'stale' }
-  | { status: 'error'; error: EngineErrorKind };
+  | {
+      status: 'error';
+      error: EngineErrorKind;
+      /** Set when graph-build DFS diagnosed the cycle (P6.3). */
+      cycle?: CircularReferenceCycle;
+    };
 
 /** The six error kinds §10.4 lists. Also the `error` discriminant on `ResultOutcome`. */
 export type EngineErrorKind =

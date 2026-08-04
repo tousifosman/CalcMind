@@ -1,7 +1,8 @@
 // Re-exports the reference display helpers from the engine. Layout (`widthOf`) and
 // the ReferenceNode view historically imported from here (P4.9); the §11.2 dangling
 // logic now lives in `engine/reference.ts` so graph deletes can stamp last-known
-// values without pulling UI modules into the engine.
+// values without pulling UI modules into the engine. Identity hue is assigned by
+// `engine/identity.ts` (P6.5) and applied in ReferenceNode.
 export {
   referenceDisplayText,
   referenceCellContent,

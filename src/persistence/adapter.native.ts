@@ -9,21 +9,26 @@
 // flushed on close); that completion is the durability barrier before rename.
 import {
   DocumentDirectoryPath,
+  TemporaryDirectoryPath,
   exists,
   mkdir,
   moveFile,
+  pickFile,
   readDir,
   readFile,
   stat,
   unlink,
   writeFile,
 } from '@dr.pogodin/react-native-fs';
+import { Platform, Share } from 'react-native';
 
 import type { DocumentMeta, StorageAdapter } from './adapter';
 import { assertSafeDocumentId, isSafeDocumentId } from './documentId';
+import { filenameForExport } from './exportFilename';
 
 export type { DocumentMeta, StorageAdapter };
 export { assertSafeDocumentId, isSafeDocumentId } from './documentId';
+export { filenameForExport } from './exportFilename';
 
 const DOC_EXT = '.calcmind.json';
 const TMP_SUFFIX = '.tmp';
@@ -140,10 +145,70 @@ async function readDocument(id: string): Promise<string> {
   return readFile(primaryPath(id), 'utf8');
 }
 
+async function readBackupDocument(id: string): Promise<string> {
+  return readFile(bakPath(id), 'utf8');
+}
+
 async function removeDocument(id: string): Promise<void> {
   await unlinkIfExists(primaryPath(id));
   await unlinkIfExists(bakPath(id));
   await unlinkIfExists(tmpPath(id));
+}
+
+/**
+ * Export via the OS share sheet (§12.2 / P5.8).
+ * iOS gets a `file://` URL to a temp `.calcmind.json`; Android's RN Share API
+ * only documents `message`/`title`, so the JSON goes as the share body there
+ * (no temp file).
+ */
+async function exportDocument(id: string): Promise<void> {
+  const json = await readDocument(id);
+  const filename = filenameForExport(id, json);
+
+  if (Platform.OS !== 'ios') {
+    await Share.share(
+      { message: json, title: filename },
+      { dialogTitle: filename },
+    );
+    return;
+  }
+
+  const tempPath = `${TemporaryDirectoryPath}/${filename}`;
+  await writeFile(tempPath, json, 'utf8');
+  try {
+    await Share.share(
+      { url: `file://${tempPath}`, title: filename },
+      { subject: filename },
+    );
+  } finally {
+    // Share.share resolves when the sheet dismisses. Most recipients have
+    // already copied the bytes by then; a few ("Save to Files", some Mail
+    // flows) may do a second async read afterward. We still unlink here —
+    // leaving temps around is worse for a calculator that may export often —
+    // and accept that those rare targets can fail closed.
+    await unlinkIfExists(tempPath);
+  }
+}
+
+/**
+ * File picker → raw JSON string. Cancel / empty selection → `null`.
+ * Does not validate — callers must run the P5.5 load pipeline (§12.3).
+ */
+async function importDocument(): Promise<string | null> {
+  let paths: string[];
+  try {
+    paths = await pickFile({
+      mimeTypes: ['application/json', 'text/plain', '*/*'],
+      pickerType: 'singleFile',
+    });
+  } catch {
+    // Platform cancel / dismiss is reported as rejection on some OS versions.
+    return null;
+  }
+  if (paths.length === 0) {
+    return null;
+  }
+  return readFile(paths[0], 'utf8');
 }
 
 export function createNativeStorageAdapter(): StorageAdapter {
@@ -152,6 +217,9 @@ export function createNativeStorageAdapter(): StorageAdapter {
     read: readDocument,
     write: atomicWrite,
     remove: removeDocument,
+    readBackup: readBackupDocument,
+    exportDocument,
+    importDocument,
   };
 }
 
