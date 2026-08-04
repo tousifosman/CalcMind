@@ -41,6 +41,7 @@ import {
   crossedDetachDistance,
   decideDragRelease,
   resolveNodeDragMode,
+  snapProbeChainId,
   type NodeDragMode,
 } from './dragLifecycle';
 
@@ -166,15 +167,16 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       const current = document.nodes[nodeId];
       if (!current) return;
 
-      // Once past DETACH_DISTANCE, probe as free so the vacated chain can become a
-      // candidate again — hysteresis (DETACH > SNAP) stops an immediate re-snap (§8.2).
-      // Results never probe as free (P6.7): own-chain stays excluded, and a miss
-      // cancels rather than detaching — R is not a free-floating node.
+      // Probe chainId: null once detached for ordinary members (§8.2 hysteresis);
+      // results keep theirs (P6.7 — see snapProbeChainId).
       const probe = {
         ...current,
         position,
-        chainId:
-          sess.detached && current.kind !== 'result' ? null : current.chainId,
+        chainId: snapProbeChainId({
+          storeChainId: current.chainId,
+          detached: sess.detached,
+          kind: current.kind,
+        }),
       };
       const locale = getDeviceLocale();
       const neighbours = makeSnappingNeighbours(document.chains, document.nodes, locale);
@@ -211,11 +213,13 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
 
       if (!sess) return;
 
+      const dragged = useDocumentStore.getState().document.nodes[nodeId];
       const decision = decideDragRelease({
         wasChained: sess.wasChained,
         detached: sess.detached,
         candidate,
         position,
+        isResult: dragged?.kind === 'result',
       });
 
       switch (decision.kind) {
@@ -223,13 +227,9 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
           // Result → reference substitution lives in commitSnapOutcome (P6.7 / §11).
           commitSnapOutcome(nodeId, decision.outcome, position);
           break;
-        case 'detach': {
-          // P6.7: a result dragged off with no candidate snaps back — never detaches.
-          const dragged = useDocumentStore.getState().document.nodes[nodeId];
-          if (dragged?.kind === 'result') break;
+        case 'detach':
           detachNode(nodeId, decision.position);
           break;
-        }
         case 'move':
           moveFreeNode(nodeId, decision.position);
           break;

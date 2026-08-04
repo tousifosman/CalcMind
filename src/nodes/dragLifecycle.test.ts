@@ -4,6 +4,7 @@ import {
   crossedDetachDistance,
   decideDragRelease,
   resolveNodeDragMode,
+  snapProbeChainId,
   worldDistance,
 } from './dragLifecycle';
 
@@ -77,6 +78,26 @@ describe('resolveNodeDragMode', () => {
   });
 });
 
+describe('snapProbeChainId (P6.7)', () => {
+  test('ordinary member nulls chainId once detached so vacated chain can re-candidate', () => {
+    expect(
+      snapProbeChainId({ storeChainId: 'c1', detached: true, kind: 'number' }),
+    ).toBeNull();
+    expect(
+      snapProbeChainId({ storeChainId: 'c1', detached: false, kind: 'number' }),
+    ).toBe('c1');
+  });
+
+  test('result keeps store chainId even when session-detached (own-chain stays excluded)', () => {
+    expect(
+      snapProbeChainId({ storeChainId: 'c1', detached: true, kind: 'result' }),
+    ).toBe('c1');
+    expect(
+      snapProbeChainId({ storeChainId: 'c1', detached: false, kind: 'result' }),
+    ).toBe('c1');
+  });
+});
+
 describe('decideDragRelease', () => {
   const position = { x: 200, y: 80 };
   const append = { kind: 'append' as const, chainId: 'c1' };
@@ -94,6 +115,30 @@ describe('decideDragRelease', () => {
     expect(
       decideDragRelease({ wasChained: true, detached: true, candidate: null, position }),
     ).toEqual({ kind: 'detach', position });
+  });
+
+  test('result + chained + detached + no candidate → cancel (P6.7, never free)', () => {
+    expect(
+      decideDragRelease({
+        wasChained: true,
+        detached: true,
+        candidate: null,
+        position,
+        isResult: true,
+      }),
+    ).toEqual({ kind: 'cancel' });
+  });
+
+  test('result + snap candidate still snaps (commit substitutes a reference)', () => {
+    expect(
+      decideDragRelease({
+        wasChained: true,
+        detached: true,
+        candidate: append,
+        position,
+        isResult: true,
+      }),
+    ).toEqual({ kind: 'snap', outcome: append });
   });
 
   test('chained + never detached + no candidate → cancel (snap back)', () => {
