@@ -177,7 +177,7 @@ describe('insertionFeedback: mid-drag gap + caret (§8.3)', () => {
       nodes,
       locale,
     );
-    expect(feedback.offsets).toEqual({ op: gap, b: gap });
+    expect(feedback.offsets).toEqual({ op: { x: gap, y: 0 }, b: { x: gap, y: 0 } });
     expect(feedback.offsets.a).toBeUndefined();
     expect(feedback.caret).toEqual({
       x: boundary,
@@ -217,9 +217,12 @@ describe('insertionFeedback: mid-drag gap + caret (§8.3)', () => {
     expect(feedback.caret?.y).toBe(40);
   });
 
-  test('newChain with dragged on the left: partner shifts right, caret at partner home', () => {
-    const partner = freeNumber('p', '5', 200);
-    const dragged = freeNumber('d', '7', 120);
+  test('newChain with dragged on the left: partner previews at live + gap, not home + gap', () => {
+    // Store home is far from the live drag point — the bug this catches used home and
+    // jumped on commit (PR #63 review). live = (120, 55); partner home = (200, 40).
+    const partner = freeNumber('p', '5', 200, 40);
+    const dragged = freeNumber('d', '7', 0, 0); // store home; live passed separately
+    const live = { x: 120, y: 55 };
     const nodes = { p: partner, d: dragged };
     const gap = widthOf(dragged, locale);
     const feedback = insertionFeedback(
@@ -228,9 +231,37 @@ describe('insertionFeedback: mid-drag gap + caret (§8.3)', () => {
       {},
       nodes,
       locale,
+      live,
     );
-    expect(feedback.offsets).toEqual({ p: gap });
-    expect(feedback.caret?.x).toBe(200);
+    expect(feedback.offsets).toEqual({
+      p: { x: live.x + gap - partner.position.x, y: live.y - partner.position.y },
+    });
+    expect(feedback.caret?.x).toBe(live.x + gap);
+    expect(feedback.caret?.y).toBe(live.y);
+  });
+
+  test('newChain dragged-left preview matches formNewChain commit geometry', () => {
+    // Cross-check: the partner's previewed world position equals what layout writes
+    // after commitSnapOutcome with the same live release point.
+    const partner = freeNumber('p', '5', 200);
+    const dragged = freeNumber('d', '7', 0);
+    const live = { x: 120, y: 40 };
+    const gap = widthOf(dragged, locale);
+    const feedback = insertionFeedback(
+      { kind: 'newChain', leftId: 'd', rightId: 'p' },
+      dragged,
+      {},
+      { p: partner, d: dragged },
+      locale,
+      live,
+    );
+    const previewedPartner = {
+      x: partner.position.x + feedback.offsets.p!.x,
+      y: partner.position.y + feedback.offsets.p!.y,
+    };
+    // formNewChain anchors at live and lays the right member at live.x + width(left).
+    expect(previewedPartner).toEqual({ x: live.x + gap, y: live.y });
+    expect(feedback.caret?.x).toBe(previewedPartner.x);
   });
 
   test('unknown chain id yields empty feedback rather than throwing', () => {

@@ -26,7 +26,7 @@ import {
 } from './commands';
 import { createEmptyDocument } from '../model/factories';
 import { tokens } from '../ui/tokens';
-import { layoutChain } from '../chains/layout';
+import { insertionFeedback, layoutChain } from '../chains/layout';
 import { widthOf } from '../chains/measure';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
@@ -852,6 +852,34 @@ describe('P3.4 chain mutations: prepend / append / insert / newChain / detach', 
     expect(chains[0]!.anchor).toEqual(release);
     expect(chains[0]!.members).toEqual([dragged, free]);
     expect(useDocumentStore.getState().document.nodes[dragged].position).toEqual(release);
+  });
+
+  test('newChain dragged-left: insertionFeedback preview matches post-commit partner position', () => {
+    // PR #63 review: preview used the partner's store home + gap, but commit anchors at
+    // the live release point — assert the two agree for the same inputs.
+    const dragged = addNumberNode({ x: 0, y: 0 }, '7');
+    const partner = addNumberNode({ x: 200, y: 40 }, '5');
+    const { document } = useDocumentStore.getState();
+    const live = { x: 120, y: 55 };
+    const outcome = { kind: 'newChain' as const, leftId: dragged, rightId: partner };
+
+    const feedback = insertionFeedback(
+      outcome,
+      document.nodes[dragged],
+      document.chains,
+      document.nodes,
+      'en-US',
+      live,
+    );
+    const previewed = {
+      x: document.nodes[partner].position.x + feedback.offsets[partner]!.x,
+      y: document.nodes[partner].position.y + feedback.offsets[partner]!.y,
+    };
+
+    commitSnapOutcome(dragged, outcome, live);
+
+    expect(useDocumentStore.getState().document.nodes[partner].position).toEqual(previewed);
+    expect(useDocumentStore.getState().document.nodes[dragged].position).toEqual(live);
   });
 
   test('commitSnapOutcome newChain leaves the stationary left node alone when dragging the right', () => {

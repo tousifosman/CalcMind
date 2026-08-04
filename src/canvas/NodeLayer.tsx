@@ -48,8 +48,8 @@ function PositionedNodeComponent({
   gapOffset,
 }: {
   id: NodeId;
-  /** Temporary world-space shift while a snap candidate holds (§8.3). 0 when idle. */
-  gapOffset: number;
+  /** Temporary world-space shift while a snap candidate holds (§8.3). Zero when idle. */
+  gapOffset: { x: number; y: number };
 }) {
   const node = useNode(id);
   const { gesture, animatedStyle } = useNodeDrag(id);
@@ -60,7 +60,10 @@ function PositionedNodeComponent({
       <Animated.View
         style={[
           styles.positioned,
-          { left: node.position.x + gapOffset, top: node.position.y },
+          {
+            left: node.position.x + gapOffset.x,
+            top: node.position.y + gapOffset.y,
+          },
           animatedStyle,
         ]}
         testID={`positioned-node-${id}`}
@@ -108,19 +111,28 @@ export function NodeLayer() {
 
   const feedback = useMemo(() => {
     if (!dragSnap) {
-      return { caret: null as InsertionCaret | null, offsets: {} as Record<NodeId, number> };
+      return {
+        caret: null as InsertionCaret | null,
+        offsets: {} as Record<NodeId, { x: number; y: number }>,
+      };
     }
     const { document } = useDocumentStore.getState();
     const dragged = document.nodes[dragSnap.nodeId];
     if (!dragged) {
-      return { caret: null as InsertionCaret | null, offsets: {} as Record<NodeId, number> };
+      return {
+        caret: null as InsertionCaret | null,
+        offsets: {} as Record<NodeId, { x: number; y: number }>,
+      };
     }
+    // Pass the live drag position so newChain-with-dragged-as-left previews against
+    // the release-point anchor formNewChain will commit (PR #63 review).
     return insertionFeedback(
       dragSnap.candidate,
       dragged,
       document.chains,
       document.nodes,
       getDeviceLocale(),
+      dragSnap.position,
     );
   }, [dragSnap]);
 
@@ -129,7 +141,9 @@ export function NodeLayer() {
       {nodeIds.map((id) => {
         // Never shift the node under the finger — its motion is the drag transform alone.
         const gapOffset =
-          dragSnap && id === dragSnap.nodeId ? 0 : (feedback.offsets[id] ?? 0);
+          dragSnap && id === dragSnap.nodeId
+            ? { x: 0, y: 0 }
+            : (feedback.offsets[id] ?? { x: 0, y: 0 });
         return <PositionedNode key={id} id={id} gapOffset={gapOffset} />;
       })}
       {feedback.caret ? <InsertionCaretView caret={feedback.caret} /> : null}

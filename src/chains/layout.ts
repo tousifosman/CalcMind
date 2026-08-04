@@ -53,9 +53,11 @@ export interface InsertionCaret {
  *  gap. Offsets are additive to the store's cached `position` — never written back. */
 export interface InsertionFeedback {
   caret: InsertionCaret | null;
-  /** `translateX` per node that must move to reveal the pending slot. Empty when
-   *  `candidate` is null so the gap closes with no residual offset (no visual jump). */
-  offsets: Record<NodeId, number>;
+  /** World-space delta per node that must move to reveal the pending slot. Empty when
+   *  `candidate` is null so the gap closes with no residual offset (no visual jump).
+   *  Usually `{ x: gap, y: 0 }`; `newChain` with the dragged node as left also carries a
+   *  `y` so the partner tracks the live release row (matching `formNewChain`'s anchor). */
+  offsets: Record<NodeId, Vec2>;
 }
 
 const EMPTY_FEEDBACK: InsertionFeedback = { caret: null, offsets: {} };
@@ -64,7 +66,6 @@ function chainWithoutDragged(chain: Chain, draggedId: NodeId): Chain {
   if (!chain.members.includes(draggedId)) return chain;
   return { ...chain, members: chain.members.filter((id) => id !== draggedId) };
 }
-
 
 function caretAt(x: number, y: number): InsertionCaret {
   return {
@@ -95,12 +96,12 @@ function shiftFromIndex(
   members: readonly NodeId[],
   index: number,
   gap: number,
-  offsets: Record<NodeId, number>,
+  offsets: Record<NodeId, Vec2>,
 ): void {
   for (let i = index; i < members.length; i += 1) {
     const id = members[i];
     if (id === undefined) continue;
-    offsets[id] = gap;
+    offsets[id] = { x: gap, y: 0 };
   }
 }
 
@@ -115,7 +116,8 @@ function shiftFromIndex(
  * - **insert(i)** — members at `i` and after shift right by `gap`; caret at the old
  *   boundary (left edge of the opened slot).
  * - **newChain** — stationary partner stays when it is left; when the dragged node is
- *   left, the partner shifts right so the slot appears beside it.
+ *   left, the partner previews at `livePosition + gap` (matching `formNewChain`'s
+ *   release-point anchor), not at its own store home.
  *
  * Returns empty feedback when `candidate` is null — caret and offsets both gone, so
  * dropping out of range closes the gap without a jump.
@@ -126,13 +128,18 @@ export function insertionFeedback(
   chains: Record<ChainId, Chain>,
   nodes: Record<NodeId, CalcNode>,
   locale: string,
+  /** Live world position of the dragged node this frame. Required for jump-free
+   *  `newChain` when the dragged node becomes leftmost — `formNewChain` anchors at
+   *  the release point, not the store's stale home. Falls back to `dragged.position`. */
+  livePosition?: Vec2,
 ): InsertionFeedback {
   if (!candidate) return EMPTY_FEEDBACK;
 
   const gap = widthOf(dragged, locale);
   if (gap <= 0) return EMPTY_FEEDBACK;
 
-  const offsets: Record<NodeId, number> = {};
+  const live = livePosition ?? dragged.position;
+  const offsets: Record<NodeId, Vec2> = {};
 
   switch (candidate.kind) {
     case 'prepend': {
@@ -186,10 +193,16 @@ export function insertionFeedback(
       if (!partner) return EMPTY_FEEDBACK;
 
       if (candidate.leftId === dragged.id) {
-        // Dragged will become leftmost: partner slides right to open the slot.
-        offsets[partnerId] = gap;
+        // Dragged becomes leftmost: formNewChain anchors at the live release point
+        // (P3.5), so the partner must preview at live + gap — not at its own home + gap.
+        // Using the store home here was the jump the review on PR #63 caught.
+        const partnerAt = { x: live.x + gap, y: live.y };
+        offsets[partnerId] = {
+          x: partnerAt.x - partner.position.x,
+          y: partnerAt.y - partner.position.y,
+        };
         return {
-          caret: caretAt(partner.position.x, partner.position.y),
+          caret: caretAt(partnerAt.x, partnerAt.y),
           offsets,
         };
       }
