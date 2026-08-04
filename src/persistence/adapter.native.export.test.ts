@@ -20,6 +20,7 @@ type FsMock = typeof RNFS & {
   __resetMemoryFs: () => void;
   __getFiles: () => Map<string, string>;
   __setNextPickPaths: (paths: string[]) => void;
+  __setPickFileReject: (message?: string) => void;
   TemporaryDirectoryPath: string;
 };
 
@@ -97,6 +98,12 @@ describe('native importDocument (P5.8)', () => {
   test('returns null when the picker yields no paths', async () => {
     const adapter = createNativeStorageAdapter();
     fs.__setNextPickPaths([]);
+    await expect(adapter.importDocument!()).resolves.toBeNull();
+  });
+
+  test('returns null when the picker rejects (cancel on some OS versions)', async () => {
+    const adapter = createNativeStorageAdapter();
+    fs.__setPickFileReject('user cancelled');
     await expect(adapter.importDocument!()).resolves.toBeNull();
   });
 });

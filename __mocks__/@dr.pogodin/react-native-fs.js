@@ -21,6 +21,8 @@ let failMoveMessage = 'simulated crash mid-save';
 
 /** @type {string[]} */
 let nextPickPaths = [];
+/** When set, the next pickFile call rejects with this message. */
+let pickFileRejectMessage = null;
 
 function resetMemoryFs() {
   files = new Map();
@@ -29,6 +31,7 @@ function resetMemoryFs() {
   moveCallCount = 0;
   failMoveMessage = 'simulated crash mid-save';
   nextPickPaths = [];
+  pickFileRejectMessage = null;
 }
 
 /** Fail the next moveFile (equivalent to `__setFailNthMove(1, message)`). */
@@ -174,7 +177,17 @@ function setNextPickPaths(paths) {
   nextPickPaths = Array.isArray(paths) ? paths.slice() : [];
 }
 
+function setPickFileReject(message) {
+  pickFileRejectMessage = message || 'user cancelled';
+}
+
 async function pickFile(_options) {
+  if (pickFileRejectMessage !== null) {
+    const message = pickFileRejectMessage;
+    pickFileRejectMessage = null;
+    ops.push({ op: 'pickFile', rejected: true });
+    throw new Error(message);
+  }
   const paths = nextPickPaths;
   nextPickPaths = [];
   ops.push({ op: 'pickFile', paths });
@@ -204,5 +217,6 @@ module.exports = {
   __setFailNextMove: setFailNextMove,
   __setFailNthMove: setFailNthMove,
   __setNextPickPaths: setNextPickPaths,
+  __setPickFileReject: setPickFileReject,
   __DOC_ROOT: DOC_ROOT,
 };

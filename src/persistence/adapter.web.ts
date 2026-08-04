@@ -16,9 +16,11 @@ import { createStore, del, get, keys, set } from 'idb-keyval';
 
 import type { DocumentMeta, StorageAdapter } from './adapter';
 import { assertSafeDocumentId, isSafeDocumentId } from './documentId';
+import { filenameForExport } from './exportFilename';
 
 export type { DocumentMeta, StorageAdapter };
 export { assertSafeDocumentId, isSafeDocumentId } from './documentId';
+export { filenameForExport } from './exportFilename';
 
 /** Injectable key/value surface so tests can run without IndexedDB. */
 export type DocumentKeyVal = {
@@ -119,23 +121,6 @@ function utf8ByteLength(text: string): number {
   return new (browser().TextEncoder)().encode(text).length;
 }
 
-function filenameForExport(id: string, json: string): string {
-  let base = id;
-  try {
-    const parsed = JSON.parse(json) as { name?: unknown };
-    if (typeof parsed.name === 'string' && parsed.name.trim().length > 0) {
-      base = parsed.name
-        .trim()
-        .replace(/[^\w\- ]+/g, '_')
-        .replace(/\s+/g, ' ')
-        .slice(0, 80);
-    }
-  } catch {
-    // Keep id — export must still work for corrupt-but-readable primaries.
-  }
-  return `${base}.calcmind.json`;
-}
-
 /** Default Blob download via a temporary `<a download>`. */
 export function downloadJsonViaAnchor(filename: string, json: string): void {
   const g = browser();
@@ -196,29 +181,36 @@ export async function pickJsonTextViaBrowser(): Promise<string | null> {
     input.type = 'file';
     input.accept = '.json,.calcmind.json,application/json';
     input.style.display = 'none';
-    const cleanup = () => {
-      input.remove();
-    };
-    input.addEventListener('change', () => {
-      const file = input.files?.[0];
-      cleanup();
-      if (!file) {
-        resolve(null);
+    let settled = false;
+    const finish = (value: string | null) => {
+      if (settled) {
         return;
       }
-      file.text().then(resolve, () => resolve(null));
-    });
-    // Best-effort cancel: if focus returns with no change, treat as cancel.
-    // Some browsers never fire this; callers already accept `null`.
+      settled = true;
+      g.removeEventListener('focus', onFocus);
+      input.remove();
+      resolve(value);
+    };
     const onFocus = () => {
+      // Best-effort cancel: focus returns with no selection after the dialog
+      // closes. Some browsers never fire this; callers already accept `null`.
       g.setTimeout(() => {
         if (!input.files?.length) {
-          cleanup();
-          g.removeEventListener('focus', onFocus);
-          resolve(null);
+          finish(null);
         }
       }, 300);
     };
+    input.addEventListener('change', () => {
+      const file = input.files?.[0];
+      if (!file) {
+        finish(null);
+        return;
+      }
+      file.text().then(
+        text => finish(text),
+        () => finish(null),
+      );
+    });
     g.addEventListener('focus', onFocus);
     g.document.body.appendChild(input);
     input.click();

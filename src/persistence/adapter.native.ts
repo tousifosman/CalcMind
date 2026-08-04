@@ -24,9 +24,11 @@ import { Platform, Share } from 'react-native';
 
 import type { DocumentMeta, StorageAdapter } from './adapter';
 import { assertSafeDocumentId, isSafeDocumentId } from './documentId';
+import { filenameForExport } from './exportFilename';
 
 export type { DocumentMeta, StorageAdapter };
 export { assertSafeDocumentId, isSafeDocumentId } from './documentId';
+export { filenameForExport } from './exportFilename';
 
 const DOC_EXT = '.calcmind.json';
 const TMP_SUFFIX = '.tmp';
@@ -149,23 +151,6 @@ async function removeDocument(id: string): Promise<void> {
   await unlinkIfExists(tmpPath(id));
 }
 
-function exportFilename(id: string, json: string): string {
-  let base = id;
-  try {
-    const parsed = JSON.parse(json) as { name?: unknown };
-    if (typeof parsed.name === 'string' && parsed.name.trim().length > 0) {
-      base = parsed.name
-        .trim()
-        .replace(/[^\w\- ]+/g, '_')
-        .replace(/\s+/g, ' ')
-        .slice(0, 80);
-    }
-  } catch {
-    // Keep id.
-  }
-  return `${base}.calcmind.json`;
-}
-
 /**
  * Export via the OS share sheet (§12.2 / P5.8).
  * iOS gets a `file://` URL to a temp `.calcmind.json`; Android's RN Share API
@@ -173,7 +158,7 @@ function exportFilename(id: string, json: string): string {
  */
 async function exportDocument(id: string): Promise<void> {
   const json = await readDocument(id);
-  const filename = exportFilename(id, json);
+  const filename = filenameForExport(id, json);
   const tempPath = `${TemporaryDirectoryPath}/${filename}`;
   await writeFile(tempPath, json, 'utf8');
   try {
@@ -198,10 +183,16 @@ async function exportDocument(id: string): Promise<void> {
  * Does not validate — callers must run the P5.5 load pipeline (§12.3).
  */
 async function importDocument(): Promise<string | null> {
-  const paths = await pickFile({
-    mimeTypes: ['application/json', 'text/plain', '*/*'],
-    pickerType: 'singleFile',
-  });
+  let paths: string[];
+  try {
+    paths = await pickFile({
+      mimeTypes: ['application/json', 'text/plain', '*/*'],
+      pickerType: 'singleFile',
+    });
+  } catch {
+    // Platform cancel / dismiss is reported as rejection on some OS versions.
+    return null;
+  }
   if (paths.length === 0) {
     return null;
   }
