@@ -61,6 +61,7 @@ flowchart LR
     style P1 fill:#22A75B,color:#fff
     style P2 fill:#22A75B,color:#fff
     style P3 fill:#22A75B,color:#fff
+    style P4 fill:#22A75B,color:#fff
 ```
 
 | Phase | Goal | Tasks | State |
@@ -69,7 +70,7 @@ flowchart LR
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
-| **P4** | Engine | 9 | **9/9** — P4.1–P4.9 done; phase exit check next |
+| ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | **P5** | Persistence | 8 | Blocked on P4 |
 | **P6** | Linking | 8 | Blocked on P4, parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
@@ -702,7 +703,16 @@ punctuated).
 > balanced parens, unbalanced reads `Incomplete`; editing an input updates the result; every error
 > state in §10.4 renders; result node rejects edits.
 
-- [ ] All of the above demonstrated by hand, and `0.1 + 0.2 = 0.3` checked on the real keypad.
+- [x] All of the above demonstrated by hand, and `0.1 + 0.2 = 0.3` checked on the real keypad.
+
+Demonstrated live with Playwright + Chromium against the real dev server (not type-checked only —
+`docs/journal/2026-08-03.md` revision 8). `1221 + 3 - 20 = 1204`, editing `1221 → 1300` recomputes
+to `1283`, `5 ÷ 0 =` renders "Division by zero" distinguishably, `0.1 + 0.2 = 0.3` exactly, an
+unbalanced paren stays `Incomplete` (no result node), and the result cell rejects a digit press.
+Found and fixed one real bug in the process: `2 × (3 + 4) =` — the phase exit check's own example
+— evaluated to `7`, not `14`. See `docs/journal/2026-08-04.md` for the root cause (opening a paren
+right after an operator discarded the pending empty operand *and* fell through to "nothing
+selected", silently starting a second, disconnected chain) and the fix in `src/keypad/keymap.ts`.
 
 ---
 

@@ -179,6 +179,32 @@ describe('dispatchEditorCommand: completing a full chain by typing (§8.5, P2.8 
     const selectedId = useUiStore.getState().selectedNodeId!;
     expect(nodes()[selectedId]).toMatchObject({ kind: 'operator', op: '+', chainId: null });
   });
+
+  test('2 × (3 + 4) = continues one chain and evaluates to 14 (§10.2 decision #4)', () => {
+    // Regression test for a bug caught live during the P4 phase exit check: opening a
+    // paren right after an operator (before any digit lands in its auto-created empty
+    // placeholder) discarded the placeholder *and* fell through to "nothing selected",
+    // silently starting a second, disconnected chain anchored back at the last tap point.
+    // `2 ×` was then stranded as an orphaned Incomplete chain and `=` only ever saw
+    // `(3 + 4)`, producing 7 instead of 14.
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'operator', op: '×' });
+    dispatchEditorCommand({ region: 'paren', side: 'open' });
+    dispatchEditorCommand({ region: 'digit', value: '3' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '4' });
+    dispatchEditorCommand({ region: 'paren', side: 'close' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const doc = useDocumentStore.getState().document;
+    const chainIds = Object.keys(doc.chains);
+    expect(chainIds).toHaveLength(1); // not two - the paren must continue the '2 ×' chain
+    const chain = doc.chains[chainIds[0]];
+    const kinds = chain.members.map((id) => doc.nodes[id].kind);
+    expect(kinds).toEqual(['number', 'operator', 'paren', 'number', 'operator', 'number', 'paren', 'equals', 'result']);
+    const result = doc.nodes[chain.members[chain.members.length - 1]];
+    expect(result).toMatchObject({ kind: 'result', derived: { display: '14' } });
+  });
 });
 
 describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () => {
