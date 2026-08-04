@@ -1245,4 +1245,33 @@ describe('P4.8 recompute on edit', () => {
       derived: { display: '5' },
     });
   });
+
+  test('clearing then retyping an operand drops and recreates the result (keypad path)', () => {
+    // Keypad backspace sets raw to "" (Incomplete → no result), then digits rebuild it.
+    const a = addNumberNode({ x: 0, y: 0 }, '5');
+    const div = addOperatorNode({ x: 40, y: 0 }, '÷');
+    const b = addNumberNode({ x: 80, y: 0 }, '3');
+    formNewChain(a, div);
+    const chainId = useDocumentStore.getState().document.nodes[a]!.chainId!;
+    appendToChain(b, chainId);
+    appendEqualsNode(b);
+    expect(
+      Object.values(useDocumentStore.getState().document.nodes).some((n) => n.kind === 'result'),
+    ).toBe(true);
+
+    setNodeRaw(a, '');
+    expect(
+      Object.values(useDocumentStore.getState().document.nodes).filter((n) => n.kind === 'result'),
+    ).toHaveLength(0);
+
+    setNodeRaw(a, '8');
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    );
+    expect(result).toMatchObject({
+      kind: 'result',
+      sourceChainId: chainId,
+      derived: { display: '2.66666666667' },
+    });
+  });
 });
