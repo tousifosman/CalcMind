@@ -3,6 +3,10 @@
 // This is the ONLY place a locale separator exists anywhere in the codebase. Everything else -
 // storage, the engine, NumberNode.raw - uses the canonical form from numeric.ts: '.' and no
 // grouping, so a document written in one locale opens correctly in another.
+//
+// `formatComputedValue` is the result-cell half of the same boundary: Decimal → display
+// string with §10.3's significant-digit and scientific-notation rules, then locale.
+import Decimal from 'decimal.js';
 import { isCanonicalRaw, splitRaw } from './numeric';
 
 /** Forces Latin digits (0-9) regardless of locale. Grouping and the decimal separator still vary
@@ -115,4 +119,63 @@ export function parseUserInput(text: string, locale: string): string {
     throw new Error(`parseUserInput: not a number in locale ${locale}: ${JSON.stringify(text)}`);
   }
   return normalised;
+}
+
+const SCIENTIFIC_THRESHOLD_HIGH = new Decimal('1e12');
+const SCIENTIFIC_THRESHOLD_LOW = new Decimal('1e-6');
+const RESULT_SIGNIFICANT_DIGITS = 12;
+
+/**
+ * Value → string on the result cell (§10.3). Up to 12 significant digits with trailing
+ * zeros stripped; scientific notation when `|x| ≥ 1e12` or `0 < |x| < 1e-6`. Locale
+ * separators are applied here and nowhere else; the Decimal itself stays canonical.
+ */
+export function formatComputedValue(value: Decimal, locale: string): string {
+  if (value.isNaN() || !value.isFinite()) {
+    throw new Error('formatComputedValue: refusing to format a non-finite value');
+  }
+  if (value.isZero()) {
+    return formatForDisplay('0', locale);
+  }
+
+  const abs = value.abs();
+  const useScientific =
+    abs.greaterThanOrEqualTo(SCIENTIFIC_THRESHOLD_HIGH) ||
+    abs.lessThan(SCIENTIFIC_THRESHOLD_LOW);
+
+  const significant = value.toSignificantDigits(RESULT_SIGNIFICANT_DIGITS);
+
+  if (!useScientific) {
+    // toFixed keeps a plain decimal form near the 1e-6 boundary where toString would
+    // switch to exponential on its own (e.g. 1e-7). Trailing zeros are already gone
+    // after toSignificantDigits.
+    const canonical = significant.toFixed();
+    return formatForDisplay(canonical, locale);
+  }
+
+  // Mantissa × 10^exp. decimal.js's toExponential uses a capital E sometimes; normalise
+  // to a lowercase `e` so parseComputedDisplay has one form to undo.
+  const expForm = significant.toExponential().replace(/E/, 'e');
+  const match = /^(-?\d+(?:\.\d+)?)e([+-]?\d+)$/.exec(expForm);
+  if (!match) {
+    throw new Error(`formatComputedValue: unexpected exponential form ${expForm}`);
+  }
+  const [, mantissa, exponent] = match;
+  // Locale applies to the mantissa only; the exponent stays ASCII digits with sign.
+  return `${formatForDisplay(mantissa, locale)}e${exponent}`;
+}
+
+/**
+ * Undo `formatComputedValue` for property tests and any caller that needs the Decimal
+ * back. Accepts both plain locale-formatted decimals and the scientific form this file
+ * emits (`1,23e+12` under de-DE).
+ */
+export function parseComputedDisplay(text: string, locale: string): Decimal {
+  const sci = /^(.+?)e([+-]?\d+)$/i.exec(text);
+  if (sci) {
+    const mantissa = parseUserInput(sci[1], locale);
+    const exponent = Number(sci[2]);
+    return new Decimal(mantissa).times(new Decimal(10).pow(exponent));
+  }
+  return new Decimal(parseUserInput(text, locale));
 }
