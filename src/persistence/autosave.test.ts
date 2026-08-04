@@ -133,6 +133,40 @@ describe('createAutosave', () => {
     expect(writes).toHaveLength(1);
   });
 
+  test('a rejecting write restores dirty so a later flush retries', async () => {
+    jest.useRealTimers();
+    let doc = createEmptyDocument('Fail then succeed');
+    const writes: string[] = [];
+    let shouldFail = true;
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const controller = createAutosave({
+      getDocument: () => doc,
+      write: async (_id, json) => {
+        writes.push(json);
+        if (shouldFail) {
+          shouldFail = false;
+          throw new Error('disk full');
+        }
+      },
+      onSaved: () => {},
+      now: () => 't',
+    });
+
+    controller.markDirty();
+    await expect(controller.flush()).rejects.toThrow('disk full');
+    expect(controller.isDirty()).toBe(true);
+    expect(writes).toHaveLength(1);
+    expect(warn).toHaveBeenCalled();
+
+    await controller.flush();
+    expect(writes).toHaveLength(2);
+    expect(controller.isDirty()).toBe(false);
+
+    warn.mockRestore();
+    controller.dispose();
+  });
+
   test('concurrent markDirty during a write re-arms a follow-up save', async () => {
     // Real timers: this test gates on promises, not the debounce clock.
     jest.useRealTimers();

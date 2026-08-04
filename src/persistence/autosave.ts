@@ -82,10 +82,24 @@ export function createAutosave(deps: AutosaveDeps): AutosaveController {
     if (disposed || !dirty) return;
     const doc = deps.getDocument();
     // Clear before await so concurrent markDirty during the write re-arms.
+    // On rejection we restore dirty (unless a concurrent markDirty already did)
+    // so the next flush / lifecycle force-flush retries — otherwise a failed
+    // write permanently drops the edit and kill-safety is void.
     dirty = false;
     const json = serializeDocument(doc);
     const savedAt = now();
-    await deps.write(doc.id, json);
+    try {
+      await deps.write(doc.id, json);
+    } catch (err) {
+      if (!disposed) {
+        dirty = true;
+        schedule();
+        // Automatic callers (fireFlush) swallow the rejection; log so a failed
+        // save is not silent. A UI "save failed" signal is future work.
+        console.warn('autosave: write failed; will retry', err);
+      }
+      throw err;
+    }
     if (!disposed) {
       deps.onSaved(savedAt);
     }
