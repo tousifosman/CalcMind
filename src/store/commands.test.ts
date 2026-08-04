@@ -25,6 +25,7 @@ import {
 } from './commands';
 import { createEmptyDocument } from '../model/factories';
 import { tokens } from '../ui/tokens';
+import { layoutChain } from '../chains/layout';
 import { widthOf } from '../chains/measure';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
@@ -499,6 +500,14 @@ describe('P3.4 chain mutations: prepend / append / insert / newChain / detach', 
       draft.chains.c1 = { id: 'c1', members: ids, anchor: { ...anchor } };
       for (const id of ids) {
         draft.nodes[id].chainId = 'c1';
+      }
+      // Member `position` is a cache of anchor+members (§8.1). Seed it so tests that
+      // assert "existing members stay put" compare against a laid-out baseline, not the
+      // {0,0} from addNumberNode.
+      const positions = layoutChain(draft.chains.c1, draft.nodes, 'en-US');
+      for (const id of ids) {
+        const pos = positions[id];
+        if (pos) draft.nodes[id].position = pos;
       }
     });
     // Clear the add-node undo entries so each mutation test starts with a known stack depth.
