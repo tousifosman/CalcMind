@@ -2,7 +2,7 @@
 // frame; the document store is written only on release via P3.4 commands (§11.4).
 // Snap candidates are recomputed on the JS thread each update and published to
 // `uiStore.dragSnap` for the insertion caret (P3.6) — ephemeral, outside undo.
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { Gesture } from 'react-native-gesture-handler';
 import {
   runOnJS,
@@ -57,20 +57,22 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
   const node = useNode(nodeId);
   const editingThis = useUiStore((state) => state.editingNodeId === nodeId);
 
-  const dragX = useSharedValue(node?.position.x ?? 0);
-  const dragY = useSharedValue(node?.position.y ?? 0);
-  const startX = useSharedValue(node?.position.x ?? 0);
-  const startY = useSharedValue(node?.position.y ?? 0);
+  const dragX = useSharedValue(0);
+  const dragY = useSharedValue(0);
+  const startX = useSharedValue(0);
+  const startY = useSharedValue(0);
   const dragging = useSharedValue(0);
 
-  // Keep start/drag shared values aligned with the store position while idle so
-  // onStart → onUpdate has no JS-thread race on the home coordinates.
-  if (node && dragging.value === 0) {
+  // Sync home coordinates from the store while idle. Done in an effect (not during
+  // render) — Reanimated strict mode forbids reading/writing `.value` while React
+  // is rendering, and that path also raced onStart against the first onUpdate.
+  useEffect(() => {
+    if (!node || dragging.value !== 0) return;
     startX.value = node.position.x;
     startY.value = node.position.y;
     dragX.value = node.position.x;
     dragY.value = node.position.y;
-  }
+  }, [node, node?.position.x, node?.position.y, dragging, startX, startY, dragX, dragY]);
 
   const session = useRef<{
     home: Vec2;
@@ -86,9 +88,14 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       wasChained: current.chainId !== null,
       detached: false,
     };
+    // Re-seed from the store at press time so a stale effect sync can't skew the delta.
+    startX.value = current.position.x;
+    startY.value = current.position.y;
+    dragX.value = current.position.x;
+    dragY.value = current.position.y;
     dragging.value = 1;
     publishDragSnap(nodeId, current.position, null);
-  }, [nodeId, dragging]);
+  }, [nodeId, dragging, startX, startY, dragX, dragY]);
 
   const updateDrag = useCallback(
     (worldX: number, worldY: number) => {
@@ -165,6 +172,9 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
     })
     .onUpdate((e) => {
       'worklet';
+      // translationX/Y are screen pixels (Playwright confirmed: at zoom 0.25 a 20px
+      // screen drag moved the node ~14 world units without `/zoom`, and ~screen/zoom
+      // with it). Convert to world so SNAP_DISTANCE stays zoom-invariant (§7).
       const z = zoom.value === 0 ? 1 : zoom.value;
       const nextX = startX.value + e.translationX / z;
       const nextY = startY.value + e.translationY / z;
@@ -186,8 +196,10 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
     });
 
   const animatedStyle = useAnimatedStyle(() => {
+    // Always set transform explicitly — returning `{}` leaves the previous translate
+    // stuck on the view after release (seen in Playwright: left updated, matrix remained).
     if (!dragging.value) {
-      return { zIndex: 0 };
+      return { zIndex: 0, transform: [{ translateX: 0 }, { translateY: 0 }] };
     }
     return {
       zIndex: 1000,
