@@ -6,15 +6,22 @@
 //
 // §10.4 / §9 presentation: successful values render normally; `stale` keeps the previous value
 // dimmed rather than flashing empty; engine errors render as explanations from
-// `explainEngineError`, never as a bare glyph (§11.2).
+// `explainEngineError`, never as a bare glyph (§11.2). `CircularReference` names the cycle and
+// offers Unlink on the DFS closing edge (P6.3).
 import React from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
+import { unlinkReference } from '../store/commands';
 import { rolePalette, glyphColor } from '../ui/tokens';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
-import { resultCellContent, RESULT_ERROR_FONT_SIZE } from '../engine/errors';
+import {
+  CIRCULAR_UNLINK_LABEL,
+  explainCircularReference,
+  resultCellContent,
+  RESULT_ERROR_FONT_SIZE,
+} from '../engine/errors';
 import { Cell, glyphTextStyle } from './Cell';
 
 /** Opacity for a §9 Stale result — previous value stays readable but clearly not current. */
@@ -32,6 +39,11 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
   const palette = rolePalette.result;
   const content = resultCellContent(node.derived);
 
+  const isCircular =
+    content.mode === 'error' &&
+    content.error === 'CircularReference' &&
+    content.cycle !== undefined;
+
   const textStyle =
     content.mode === 'error'
       ? [styles.errorGlyph, { color: glyphColor }]
@@ -48,14 +60,36 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
       border={palette.border}
       label={node.label}
     >
-      <Text
-        testID={`result-node-${id}-content`}
-        accessibilityLabel={content.text === '' ? undefined : content.text}
-        style={textStyle}
-        numberOfLines={1}
-      >
-        {content.text}
-      </Text>
+      {isCircular && content.cycle ? (
+        <View style={styles.circularRow} testID={`result-node-${id}-circular`}>
+          <Text
+            testID={`result-node-${id}-content`}
+            accessibilityLabel={explainCircularReference(content.cycle.chainLabels)}
+            style={textStyle}
+            numberOfLines={1}
+          >
+            {explainCircularReference(content.cycle.chainLabels)}
+          </Text>
+          <Pressable
+            testID={`result-node-${id}-unlink`}
+            accessibilityLabel={CIRCULAR_UNLINK_LABEL}
+            accessibilityRole="button"
+            onPress={() => unlinkReference(content.cycle!.closingReferenceNodeId)}
+            hitSlop={8}
+          >
+            <Text style={[styles.errorGlyph, styles.unlink]}>{CIRCULAR_UNLINK_LABEL}</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <Text
+          testID={`result-node-${id}-content`}
+          accessibilityLabel={content.text === '' ? undefined : content.text}
+          style={textStyle}
+          numberOfLines={1}
+        >
+          {content.text}
+        </Text>
+      )}
     </Cell>
   );
 }
@@ -67,5 +101,15 @@ const styles = StyleSheet.create({
     fontSize: RESULT_ERROR_FONT_SIZE,
     fontWeight: '800',
     marginTop: 0,
+  },
+  circularRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  unlink: {
+    marginLeft: 8,
+    textDecorationLine: 'underline',
+    opacity: 0.9,
   },
 });

@@ -57,6 +57,15 @@ const resultNodeSchema = z.object({
               'NotANumber',
               'CircularReference',
             ]),
+            // Optional; present when P6.3 DFS colouring named the cycle. Stripped on
+            // serialise with the rest of `derived`, so this is not a schema migration.
+            cycle: z
+              .object({
+                chainIds: z.array(z.string()),
+                chainLabels: z.array(z.string()),
+                closingReferenceNodeId: z.string(),
+              })
+              .optional(),
           }),
         ])
         .optional(),
