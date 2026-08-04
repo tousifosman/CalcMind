@@ -1156,11 +1156,15 @@ describe('P4.8 recompute on edit', () => {
     setNodeRaw(a, '1300');
 
     const doc = useDocumentStore.getState().document;
-    expect(doc.nodes[resultId]).toMatchObject({
+    const updated = doc.nodes[resultId]!;
+    expect(updated).toMatchObject({
       id: resultId,
+      kind: 'result',
       derived: { display: '1,303' },
     });
-    expect(doc.nodes[resultId]!.kind === 'result' && doc.nodes[resultId].derived?.outcome).toBeUndefined();
+    if (updated.kind === 'result') {
+      expect(updated.derived?.outcome).toBeUndefined();
+    }
   });
 
   test('editing one chain does not re-evaluate an untouched Evaluated chain', () => {
@@ -1191,7 +1195,11 @@ describe('P4.8 recompute on edit', () => {
 
       const r2Before = Object.values(useDocumentStore.getState().document.nodes).find(
         (n) => n.kind === 'result' && n.sourceChainId === c2,
-      )!;
+      );
+      expect(r2Before?.kind).toBe('result');
+      if (!r2Before || r2Before.kind !== 'result') {
+        throw new Error('expected result on c2');
+      }
       const r2Derived = { ...r2Before.derived! };
 
       evaluated.length = 0;
