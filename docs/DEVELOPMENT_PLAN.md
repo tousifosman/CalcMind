@@ -16,10 +16,10 @@ is stale: fix it.
    are ordered so dependencies point backwards.
 3. Read the architecture sections the task cites — in full, not by keyword search — before writing
    anything.
-4. Build it. Check it against the task's acceptance criteria, then tick the boxes. Once every box
-   on a task is ticked, cross the task out too: strike through its heading (`### ~~P2.1 — ...~~`)
-   and, if its phase has a mermaid dependency diagram below, strike through that task's label
-   there as well. All of this — code, boxes, and both strikethroughs — lands **in the same commit**.
+4. Build it. Check it against the task's acceptance criteria, then tick the boxes **in the same
+   commit as the code**. Once every box on a task is ticked, also flip its mermaid node (if its
+   phase has a dependency diagram) to the green "done" fill in that same commit — the diagram is
+   read for status by colour alone; headings are never struck through.
 5. Write your journal entry.
 
 Each phase ends with a **Phase exit check** quoting §15's original acceptance criteria verbatim.
@@ -117,7 +117,7 @@ Nothing in this phase evaluates anything. A chain of nodes is inert until P4. Re
 arithmetic in early: the validation and precedence rules in §9 and §10.2 are subtler than they
 look, and a provisional version will have to be deleted rather than extended.
 
-### ~~P2.1 — Locale-aware number display and input parsing~~
+### P2.1 — Locale-aware number display and input parsing
 
 **Objective.** The display/storage boundary from §10.3, as pure functions, before anything renders
 a number. This goes first because it is the one thing in P2 that corrupts documents if retrofitted
@@ -140,7 +140,7 @@ a number. This goes first because it is the one thing in P2 that corrupts docume
 - Grouping for integers beyond `Number.MAX_SAFE_INTEGER` degrades to ungrouped digits rather than
   risk float64 altering what's on screen. See `docs/journal/2026-08-03.md` for why.
 
-### ~~P2.2 — Text measurement and node width~~
+### P2.2 — Text measurement and node width
 
 **Objective.** `widthOf(node)` per §8.1, memoised. Needed for node sizing now and reused verbatim
 by P3's chain layout, which is why it is not folded into the view components.
@@ -160,7 +160,7 @@ by P3's chain layout, which is why it is not folded into the view components.
   a first guess like the identity palette (§11.1), not a measurement. See
   `docs/journal/2026-08-03.md` for why and what would replace it.
 
-### ~~P2.3 — Node CRUD commands~~
+### P2.3 — Node CRUD commands
 
 **Objective.** Create, edit and delete nodes through the command layer, so every mutation is
 undoable and the P3/P4 commands have a pattern to follow.
@@ -179,7 +179,7 @@ undoable and the P3/P4 commands have a pattern to follow.
       timestamp trap that made this test pass only by coincidence.
 - [x] Undo/redo test per command.
 
-### ~~P2.4 — Node views, one per kind~~
+### P2.4 — Node views, one per kind
 
 **Objective.** Render each node kind to the visual reference.
 **Architecture.** §6 (kinds), §11.3 (plain `View`s with `borderRadius` — no SVG in v1), §1.2
@@ -201,7 +201,7 @@ undoable and the P3/P4 commands have a pattern to follow.
       changing does not re-render its siblings (§11.4).
 - [x] A component test per kind, plus one asserting the result node rejects edits (§14).
 
-### ~~P2.5 — Node layer inside the canvas~~
+### P2.5 — Node layer inside the canvas
 
 **Objective.** Put nodes on the canvas at their world coordinates.
 **Architecture.** §7 (the transform), §8.1 (`position` is the uniform field hit testing and
@@ -218,7 +218,7 @@ rendering read), §11.4 (re-render scope).
       re-render the others (§11.4).
 - [x] Verified in a browser at minimum, middle and maximum zoom — not type-checked only.
 
-### ~~P2.6 — Selection and in-place number editing~~
+### P2.6 — Selection and in-place number editing
 
 **Objective.** Tap empty canvas → a number node already in edit mode. Tap a node → select it.
 **Architecture.** §8.6 (selection), §8.5 (keys act on the selected node), §13 (selection is not
@@ -238,7 +238,7 @@ journal addendum for why), `src/store/commands.ts`, `src/nodes/NumberNode.tsx`,
       and creates nothing. Verify by dragging the canvas from empty space and confirming no node
       appears.
 
-### ~~P2.7 — Keypad~~
+### P2.7 — Keypad
 
 **Objective.** The keypad from §8.5 — not full-screen, dismissible, operators visually separated
 from digits.
@@ -256,7 +256,7 @@ from digits.
       (§10.2 extension path, §17.2), so they must read as not-yet rather than silently missing.
 - [x] Keypad visibility is ephemeral state, outside undo history.
 
-### ~~P2.8 — Input dispatch: keypad and hardware keyboard~~
+### P2.8 — Input dispatch: keypad and hardware keyboard
 
 **Objective.** Make keys do things, from the on-screen keypad and a real keyboard, through one
 code path.
@@ -276,7 +276,7 @@ code path.
       placeholder behaviour that users would have to unlearn.
 - [x] Verified with a real keyboard in a browser, completing a full chain by typing.
 
-### ~~P2.9 — Long-press context menus~~
+### P2.9 — Long-press context menus
 
 **Objective.** The §8.6 menus, which are how `Delete` and `Select group` are reached.
 **Architecture.** §8.6 (both menus and their items), §1.3 (observed in the reference app).
@@ -293,7 +293,7 @@ code path.
       and record it, rather than discovering the clash in P3.
 - [x] Delete removes the node in one undo entry.
 
-### ~~P2.10 — Swipe-to-clear, with confirmation~~
+### P2.10 — Swipe-to-clear, with confirmation
 
 **Objective.** The reference app's swipe-across-backspace clear, gated behind a confirm.
 **Architecture.** §8.5, decision #15 (a bare swipe wiping a document is too destructive for one
@@ -330,16 +330,16 @@ A threshold compared against screen pixels is a bug, and it will only show up at
 
 ```mermaid
 flowchart LR
-    P22["~~P2.2~~<br/>~~Text measurement~~<br/>#10"]
-    P29["~~P2.9~~<br/>~~Context menus~~<br/>#17"]
-    P31["~~P3.1~~<br/>~~Chain layout~~<br/>#37"]
-    P32["~~P3.2~~<br/>~~Bounds + queries~~<br/>#38"]
-    P33["~~P3.3~~<br/>~~Snap resolution~~<br/>#39"]
-    P34["~~P3.4~~<br/>~~Chain mutations~~<br/>#40"]
-    P35["~~P3.5~~<br/>~~Drag gesture~~<br/>#41"]
-    P36["~~P3.6~~<br/>~~Insertion feedback~~<br/>#42"]
-    P37["~~P3.7~~<br/>~~Move vs. detach~~<br/>#43"]
-    EXIT(["~~Phase exit check~~<br/>#44"])
+    P22["P2.2<br/>Text measurement<br/>#10"]
+    P29["P2.9<br/>Context menus<br/>#17"]
+    P31["P3.1<br/>Chain layout<br/>#37"]
+    P32["P3.2<br/>Bounds + queries<br/>#38"]
+    P33["P3.3<br/>Snap resolution<br/>#39"]
+    P34["P3.4<br/>Chain mutations<br/>#40"]
+    P35["P3.5<br/>Drag gesture<br/>#41"]
+    P36["P3.6<br/>Insertion feedback<br/>#42"]
+    P37["P3.7<br/>Move vs. detach<br/>#43"]
+    EXIT(["Phase exit check<br/>#44"])
 
     P22 --> P31
     P31 --> P32
@@ -367,12 +367,10 @@ flowchart LR
 ```
 
 Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
-gate. A done node's label is also struck through (`~~P3.1~~`), not just filled green — the fill
-is easy to miss scanning a wide diagram. Kept current by hand alongside the acceptance-criteria
-boxes below — if a task's status here disagrees with its boxes, the boxes win and this diagram is
-stale.
+gate. Kept current by hand alongside the acceptance-criteria boxes below — if a task's status
+here disagrees with its boxes, the boxes win and this diagram is stale.
 
-### ~~P3.1 — Chain layout pass~~
+### P3.1 — Chain layout pass
 
 **Objective.** Lay a chain's members out flush, left to right, from its anchor.
 **Architecture.** §8.1 (the algorithm and what `position` means for a member), §6.1 (`members`
@@ -388,7 +386,7 @@ order is the truth and is never re-derived from `x`).
 - [x] Test that reordering `members` reorders the layout, and that **identical `x` values never
       reorder anything** — the §6.1 guarantee that a rendering bug cannot change a user's answer.
 
-### ~~P3.2 — Node bounds and neighbour queries~~
+### P3.2 — Node bounds and neighbour queries
 
 **Objective.** The geometry snapping needs, behind an interface that can later hide a spatial hash.
 **Architecture.** §8.3 (what gets compared), §8.4 (O(n) now; hash later behind the same interface).
@@ -400,7 +398,7 @@ order is the truth and is never re-derived from `x`).
       when a uniform spatial hash is inserted (§8.4). P7.6 depends on this holding.
 - [x] Unit tested at exact threshold values, not only clearly-inside and clearly-outside cases.
 
-### ~~P3.3 — Snap candidate resolution~~
+### P3.3 — Snap candidate resolution
 
 **Objective.** Given a dragged node, decide the single best snap outcome for this frame.
 **Architecture.** §8.2 (`SNAP_DISTANCE = 28`, `SNAP_VERTICAL = 48`, `DETACH_DISTANCE = 44`), §8.3
@@ -417,7 +415,7 @@ order is the truth and is never re-derived from `x`).
       `DETACH_DISTANCE > SNAP_DISTANCE` (§8.2), a member dragged just past detach must **not**
       immediately re-snap into the slot it just left.
 
-### ~~P3.4 — Chain mutation commands~~
+### P3.4 — Chain mutation commands
 
 **Objective.** Commit a snap outcome, with all the bookkeeping §8.3 requires.
 **Architecture.** §8.3 ("bookkeeping on commit"), §13.
@@ -432,7 +430,7 @@ order is the truth and is never re-derived from `x`).
 - [x] Detach sets `chainId: null` and writes the node's authoritative `position`.
 - [x] Layout re-runs **in the same commit** as the mutation, never as a follow-up effect.
 
-### ~~P3.5 — Node drag gesture~~
+### P3.5 — Node drag gesture
 
 **Objective.** The §8.2 drag lifecycle, at 60fps.
 **Architecture.** §8.2 (the state machine), §11.4 (worklets; commit only on release).
@@ -448,7 +446,7 @@ order is the truth and is never re-derived from `x`).
       press on empty canvas pans the canvas.
 - [x] Verified interactively at zoom 0.25 **and** 4 — snapping must feel the same at both.
 
-### ~~P3.6 — Insertion feedback~~
+### P3.6 — Insertion feedback
 
 **Objective.** Let the user see the outcome before committing to it.
 **Architecture.** §8.3 ("the user sees the outcome before committing").
@@ -460,7 +458,7 @@ order is the truth and is never re-derived from `x`).
 - [x] Both disappear when no candidate is in range, and the gap closes without a visual jump.
 - [x] Runs on the UI thread — no store write per frame.
 
-### ~~P3.7 — Chain move vs member detach~~
+### P3.7 — Chain move vs member detach
 
 **Objective.** Settle §17.1, the one genuinely open interaction in the design.
 **Architecture.** §8.2 (`MovingChain`), §8.3, §17.1, §8.6 (`Select group` is the
@@ -502,17 +500,17 @@ reason it is testable. Enforced by the definition of done above.
 
 ```mermaid
 flowchart LR
-    P3EXIT(["~~P3 phase exit~~<br/>#44"])
-    P21["~~P2.1~~<br/>~~Locale display~~<br/>#9"]
-    P24["~~P2.4~~<br/>~~Node views~~<br/>#12"]
-    P28["~~P2.8~~<br/>~~Input dispatch~~<br/>#16"]
-    P34["~~P3.4~~<br/>~~Chain mutations~~<br/>#40"]
-    P41["~~P4.1~~<br/>~~Tokeniser~~<br/>#49"]
-    P42["~~P4.2~~<br/>~~Sequence validation~~<br/>#50"]
-    P43["~~P4.3~~<br/>~~Parser~~<br/>#51"]
-    P44["~~P4.4~~<br/>~~Evaluator~~<br/>#52"]
-    P45["~~P4.5~~<br/>~~Display formatter~~<br/>#53"]
-    P46["~~P4.6~~<br/>~~Error rendering~~<br/>#54"]
+    P3EXIT(["P3 phase exit<br/>#44"])
+    P21["P2.1<br/>Locale display<br/>#9"]
+    P24["P2.4<br/>Node views<br/>#12"]
+    P28["P2.8<br/>Input dispatch<br/>#16"]
+    P34["P3.4<br/>Chain mutations<br/>#40"]
+    P41["P4.1<br/>Tokeniser<br/>#49"]
+    P42["P4.2<br/>Sequence validation<br/>#50"]
+    P43["P4.3<br/>Parser<br/>#51"]
+    P44["P4.4<br/>Evaluator<br/>#52"]
+    P45["P4.5<br/>Display formatter<br/>#53"]
+    P46["P4.6<br/>Error rendering<br/>#54"]
     P47["P4.7<br/>Result lifecycle<br/>#55"]
     P48["P4.8<br/>Recompute on edit<br/>#56"]
     P49["P4.9<br/>Continuation<br/>#57"]
@@ -553,15 +551,14 @@ flowchart LR
 ```
 
 Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
-gate. A done node's label is also struck through, not just filled green. `P4.1` carries no
-*task*-level dependency of its own (§10.1's pipeline just needs
+gate. `P4.1` carries no *task*-level dependency of its own (§10.1's pipeline just needs
 `chain.members`, which already exists), but the plan sequences the whole phase behind P3 as the
 **critical path** — shown here as a gate from P3's own phase-exit check rather than jumping the
 queue the moment P4.1's box would otherwise look open. Kept current by hand alongside the
 acceptance-criteria boxes below — if a task's status here disagrees with its boxes, the boxes win
 and this diagram is stale.
 
-### ~~P4.1 — Tokeniser~~
+### P4.1 — Tokeniser
 
 **Objective.** Turn `chain.members` into a token stream the parser can consume.
 **Architecture.** §10.1 (the pipeline: drop `=` and the result node).
@@ -572,7 +569,7 @@ and this diagram is stale.
 - [x] Number tokens carry canonical `raw`; a partial `"3."` tokenises without throwing.
 - [x] Table-driven tests (§14).
 
-### ~~P4.2 — Sequence validation and chain state~~
+### P4.2 — Sequence validation and chain state
 
 **Objective.** Classify a chain into exactly one §9 state.
 **Architecture.** §9 (the state machine and all its rules), §10.2 (parens must balance).
@@ -591,7 +588,7 @@ and this diagram is stale.
 - [x] `Invalid` **deletes nothing** — it marks the offending boundary with a red hairline (§9).
 - [x] Table-driven tests covering every transition in the §9 diagram.
 
-### ~~P4.3 — Parser~~
+### P4.3 — Parser
 
 **Objective.** Tokens → AST, by precedence climbing.
 **Architecture.** §10.2 (grammar, associativity, the narrow implicit-multiplication rule, and the
@@ -607,7 +604,7 @@ extension path).
       without restructuring (§10.2 extension path). Do **not** implement them now.
 - [x] Tests include `2 + 3 × 4 = 14` and `2 × (3 + 4) = 14`.
 
-### ~~P4.4 — Evaluator~~
+### P4.4 — Evaluator
 
 **Objective.** AST → value, exactly.
 **Architecture.** §10.3 (decimal.js at precision 34), §10.4 (errors are values, decision #3).
@@ -620,7 +617,7 @@ extension path).
 - [x] Overflow → `Overflow`; non-numeric → `NotANumber`.
 - [x] **Nothing throws across a module boundary** (§10.4).
 
-### ~~P4.5 — Display formatter~~
+### P4.5 — Display formatter
 
 **Objective.** Value → the string on the result cell.
 **Architecture.** §10.3 (display rules and the locale split).
@@ -633,7 +630,7 @@ extension path).
 - [x] Boundary tests at exactly `1e12` and `1e-6`, and either side of both (§14).
 - [x] Property test: the formatter never emits something it cannot re-parse (§14).
 
-### ~~P4.6 — Error rendering~~
+### P4.6 — Error rendering
 
 **Objective.** Make every §10.4 state visible on the result cell.
 **Architecture.** §10.4 (the six errors), §9 (`Stale` behaviour), §11.2 (errors are explained, not
