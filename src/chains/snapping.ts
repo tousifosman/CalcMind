@@ -14,6 +14,7 @@ import {
   type SnappingNeighbours,
 } from './bounds';
 import { widthOf } from './measure';
+import { tokens } from '../ui/tokens';
 
 export type SnapOutcome =
   | { kind: 'prepend'; chainId: ChainId }
@@ -38,7 +39,7 @@ function chainExtent(
     const member = nodes[memberId];
     if (!member) continue;
     any = true;
-    width += widthOf(member, locale);
+    width += widthOf(member, locale, tokens.numeralFontSize, nodes);
   }
   if (!any) return null;
   return { left: chain.anchor.x, right: chain.anchor.x + width };

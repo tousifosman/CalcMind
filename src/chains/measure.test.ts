@@ -144,8 +144,18 @@ describe('widthOf: cache invalidation on raw change', () => {
   });
 });
 
-describe('widthOf: reference nodes are out of scope until P6', () => {
-  test('throws rather than silently measuring nothing', () => {
-    expect(() => widthOf(referenceNode(), 'en-US')).toThrow();
+describe('widthOf: reference nodes (P4.9)', () => {
+  test('sizes against the target result display when nodes are provided', () => {
+    const target = resultNode('1,204');
+    const ref = referenceNode();
+    ref.targetNodeId = target.id;
+    const nodes = { [target.id]: target, [ref.id]: ref };
+    expect(widthOf(ref, 'en-US', tokens.numeralFontSize, nodes)).toBe(
+      widthOf(target, 'en-US'),
+    );
+  });
+
+  test('without a nodes map, falls back to the minimum cell width', () => {
+    expect(widthOf(referenceNode(), 'en-US')).toBe(tokens.nodeHeight);
   });
 });

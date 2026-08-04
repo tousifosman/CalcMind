@@ -102,7 +102,9 @@ export function recomputeChain(
   const chain = draft.chains[chainId];
   if (!chain) return;
 
-  const computed = computeChain(chain, draft.nodes, locale);
+  // Pass draft.chains so reference nodes resolve live (P4.9). Omitting it makes
+  // every reference in a dirty Evaluated chain degrade to NotANumber (PR #72).
+  const computed = computeChain(chain, draft.nodes, locale, draft.chains);
   const existing = resultNodesForChain(draft, chainId);
 
   if (computed === null) {

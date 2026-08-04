@@ -15,8 +15,8 @@ export function isEngineError(value: EvalResult): value is EngineError {
   return !(value instanceof Decimal);
 }
 
-/** Optional resolver for reference nodes. Until P6 wires the graph, callers may omit it
- *  — unresolved references become `NotANumber`. */
+/** Optional resolver for reference nodes. `computeChain` supplies one when given a
+ *  chains map (P4.9); callers may omit it — unresolved references become `NotANumber`. */
 export type ReferenceResolver = (targetNodeId: NodeId) => EvalResult;
 
 /**
@@ -102,7 +102,9 @@ function applyBinary(
   return result;
 }
 
-function normaliseDecimal(value: Decimal): EvalResult {
+/** Shared Decimal → EvalResult gate (NaN / non-finite). Exported so reference
+ *  resolution (P4.9) cannot drift from the number-literal path. */
+export function normaliseDecimal(value: Decimal): EvalResult {
   if (value.isNaN()) {
     return engineError('NotANumber');
   }

@@ -21,6 +21,7 @@ import { OperatorNode } from '../nodes/OperatorNode';
 import { ParenNode } from '../nodes/ParenNode';
 import { EqualsNode } from '../nodes/EqualsNode';
 import { ResultNode } from '../nodes/ResultNode';
+import { ReferenceNode } from '../nodes/ReferenceNode';
 import { useNodeDrag } from '../nodes/useNodeDrag';
 import { getDeviceLocale } from '../ui/locale';
 import { insertionCaretColor } from '../ui/tokens';
@@ -38,8 +39,7 @@ function renderByKind(id: NodeId, kind: NodeKind): React.ReactElement | null {
     case 'result':
       return <ResultNode id={id} />;
     case 'reference':
-      // Not created before P6 (§6) - nothing to render yet.
-      return null;
+      return <ReferenceNode id={id} />;
   }
 }
 

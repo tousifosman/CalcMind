@@ -12,6 +12,7 @@ import {
   ParenSide,
   EqualsNode,
   ResultNode,
+  ReferenceNode,
 } from './types';
 
 export function createNodeId(): NodeId {
@@ -96,5 +97,18 @@ export function createResultNode(position: Vec2, sourceChainId: ChainId): Result
     chainId: null,
     createdAt: Date.now(),
     sourceChainId,
+  };
+}
+
+/** Reference to another node's live value (§6, §8.7). Created by continuation (P4.9);
+ *  identity hue and dangling recovery arrive with P6. */
+export function createReferenceNode(position: Vec2, targetNodeId: NodeId): ReferenceNode {
+  return {
+    id: createNodeId(),
+    kind: 'reference',
+    position,
+    chainId: null,
+    createdAt: Date.now(),
+    targetNodeId,
   };
 }
