@@ -14,6 +14,7 @@ import {
   appendParenNode,
   appendEqualsNode,
   appendOperatorAndNumber,
+  continueFromResult,
   setNodeRaw,
   deleteNode,
   selectNode,
@@ -146,11 +147,16 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     return;
   }
 
-  // TODO(P4.9, §8.7): pressing an operator (or any other structural/edit key) with a
-  // result selected is reserved for continuation - creating a new chain that references
-  // the result, not editing it in place. That mechanism doesn't exist yet, so this is a
-  // deliberate no-op rather than a placeholder edit users would have to unlearn.
-  if (selectedNode?.kind === 'result') return;
+  // §8.7 Continuation (P4.9): an operator with a result selected starts a new chain
+  // referencing it. Other keys still no-op — the result is read-only and must not be
+  // edited in place.
+  if (selectedNode?.kind === 'result') {
+    if (command.region === 'operator') {
+      const { operatorId } = continueFromResult(selectedNode.id, command.op);
+      selectNode(operatorId);
+    }
+    return;
+  }
 
   const caretPoint = ui.lastInteractionPoint;
 

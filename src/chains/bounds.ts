@@ -27,8 +27,15 @@ function horizontalBounds(left: number, width: number): Pick<Bounds, 'left' | 'r
   return { left, right: left + width };
 }
 
-export function boundsOf(node: CalcNode, locale: string): Bounds {
-  const { left, right } = horizontalBounds(node.position.x, widthOf(node, locale));
+export function boundsOf(
+  node: CalcNode,
+  locale: string,
+  nodes?: Record<NodeId, CalcNode>,
+): Bounds {
+  const { left, right } = horizontalBounds(
+    node.position.x,
+    widthOf(node, locale, tokens.numeralFontSize, nodes),
+  );
   return {
     left,
     right,
@@ -54,7 +61,7 @@ export function memberBoundaries(
   for (let index = 0; index < chain.members.length - 1; index += 1) {
     const member = nodes[chain.members[index]];
     if (!member) continue;
-    x += widthOf(member, locale);
+    x += widthOf(member, locale, tokens.numeralFontSize, nodes);
     boundaries.push({ index: index + 1, x });
   }
 
@@ -69,7 +76,7 @@ function chainBounds(chain: Chain, nodes: Record<NodeId, CalcNode>, locale: stri
   for (const memberId of chain.members) {
     const member = nodes[memberId];
     if (!member) continue;
-    width += widthOf(member, locale);
+    width += widthOf(member, locale, tokens.numeralFontSize, nodes);
   }
 
   const { left, right } = horizontalBounds(chain.anchor.x, width);

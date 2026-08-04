@@ -15,8 +15,8 @@ export function isEngineError(value: EvalResult): value is EngineError {
   return !(value instanceof Decimal);
 }
 
-/** Optional resolver for reference nodes. Until P6 wires the graph, callers may omit it
- *  — unresolved references become `NotANumber`. */
+/** Optional resolver for reference nodes. `computeChain` supplies one when given a
+ *  chains map (P4.9); callers may omit it — unresolved references become `NotANumber`. */
 export type ReferenceResolver = (targetNodeId: NodeId) => EvalResult;
 
 /**

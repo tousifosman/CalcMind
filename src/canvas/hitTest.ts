@@ -7,23 +7,25 @@ import { CalcNode, Vec2 } from '../model/types';
 import { tokens } from '../ui/tokens';
 import { widthOf } from '../chains/measure';
 
-function containsPoint(node: CalcNode, point: Vec2, locale: string): boolean {
-  const width = widthOf(node, locale);
+function containsPoint(
+  node: CalcNode,
+  point: Vec2,
+  locale: string,
+  nodes: Record<string, CalcNode>,
+): boolean {
+  const width = widthOf(node, locale, tokens.numeralFontSize, nodes);
   const { x, y } = node.position;
   return point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + tokens.nodeHeight;
 }
 
-/** Returns the node under `point` (world coordinates), or `null` for empty canvas. Reference
- *  nodes aren't created before P6 (§6) and `widthOf` throws for that kind, so they're skipped
- *  here rather than letting a tap near one crash. */
+/** Returns the node under `point` (world coordinates), or `null` for empty canvas. */
 export function hitTestNode(
   nodes: Record<string, CalcNode>,
   point: Vec2,
   locale: string,
 ): CalcNode | null {
   for (const node of Object.values(nodes)) {
-    if (node.kind === 'reference') continue;
-    if (containsPoint(node, point, locale)) return node;
+    if (containsPoint(node, point, locale, nodes)) return node;
   }
   return null;
 }

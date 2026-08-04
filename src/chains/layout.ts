@@ -35,7 +35,7 @@ export function layoutChain(
     const member = nodes[memberId];
     if (!member) continue;
     positions[memberId] = { x, y: chain.anchor.y };
-    x += widthOf(member, locale);
+    x += widthOf(member, locale, tokens.numeralFontSize, nodes);
   }
   return positions;
 }
@@ -85,7 +85,7 @@ function chainRight(
   for (const memberId of chain.members) {
     const member = nodes[memberId];
     if (!member) continue;
-    x += widthOf(member, locale);
+    x += widthOf(member, locale, tokens.numeralFontSize, nodes);
   }
   return x;
 }
@@ -135,7 +135,7 @@ export function insertionFeedback(
 ): InsertionFeedback {
   if (!candidate) return EMPTY_FEEDBACK;
 
-  const gap = widthOf(dragged, locale);
+  const gap = widthOf(dragged, locale, tokens.numeralFontSize, nodes);
   if (gap <= 0) return EMPTY_FEEDBACK;
 
   const live = livePosition ?? dragged.position;
@@ -171,7 +171,7 @@ export function insertionFeedback(
       for (let i = 0; i < index; i += 1) {
         const member = nodes[chain.members[i]];
         if (!member) continue;
-        boundaryX += widthOf(member, locale);
+        boundaryX += widthOf(member, locale, tokens.numeralFontSize, nodes);
       }
       if (index === 0) {
         // Same geometry as prepend: gap opens on the left, members stay.
@@ -208,7 +208,7 @@ export function insertionFeedback(
       }
       // Partner stays left; caret at its right edge where the dragged node will land.
       return {
-        caret: caretAt(partner.position.x + widthOf(partner, locale), partner.position.y),
+        caret: caretAt(partner.position.x + widthOf(partner, locale, tokens.numeralFontSize, nodes), partner.position.y),
         offsets,
       };
     }

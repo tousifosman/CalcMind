@@ -1,6 +1,6 @@
 import { useDocumentStore } from '../store/documentStore';
 import { useUiStore } from '../store/uiStore';
-import { addNumberNode, addOperatorNode, addParenNode, selectNode, editNumberNode } from '../store/commands';
+import { addNumberNode, addOperatorNode, addParenNode, selectNode, editNumberNode, setNodeRaw, deleteNode, appendEqualsNode } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
 import { commandFromHardwareKey, dispatchEditorCommand } from './keymap';
 
@@ -181,8 +181,44 @@ describe('dispatchEditorCommand: completing a full chain by typing (§8.5, P2.8 
   });
 });
 
-describe('dispatchEditorCommand: continuation on a result is a no-op until P4.9 (§8.7)', () => {
-  test('operator, digit, paren and equals all no-op with a result selected', () => {
+describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () => {
+  test('operator with a result selected creates [reference→R, ⊕] below-right and selects the operator', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'digit', value: '0' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '5' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const afterEquals = useDocumentStore.getState().document;
+    const result = Object.values(afterEquals.nodes).find((n) => n.kind === 'result');
+    expect(result).toBeDefined();
+    selectNode(result!.id);
+
+    dispatchEditorCommand({ region: 'operator', op: '×' });
+
+    const doc = useDocumentStore.getState().document;
+    const refs = Object.values(doc.nodes).filter((n) => n.kind === 'reference');
+    expect(refs).toHaveLength(1);
+    const ref = refs[0]!;
+    expect(ref).toMatchObject({ kind: 'reference', targetNodeId: result!.id });
+
+    const contChain = doc.chains[ref.chainId!]!;
+    expect(contChain).toBeDefined();
+    expect(contChain.members).toHaveLength(2);
+    expect(doc.nodes[contChain.members[0]!]!.kind).toBe('reference');
+    expect(doc.nodes[contChain.members[1]!]!).toMatchObject({ kind: 'operator', op: '×' });
+
+    expect(contChain.anchor).toEqual({
+      x: result!.position.x + 32,
+      y: result!.position.y + 96,
+    });
+
+    const selectedId = useUiStore.getState().selectedNodeId;
+    expect(selectedId).toBe(contChain.members[1]);
+    expect(doc.nodes[result!.id]!.kind).toBe('result');
+  });
+
+  test('digit / paren / equals with a result selected still no-op (result is read-only)', () => {
     const chainId = 'c_result_test';
     const resultId = 'n_result_test';
     useDocumentStore.getState().applyCommand((draft) => {
@@ -199,7 +235,6 @@ describe('dispatchEditorCommand: continuation on a result is a no-op until P4.9 
     selectNode(resultId);
     const before = useDocumentStore.getState().undoStack.length;
 
-    dispatchEditorCommand({ region: 'operator', op: '+' });
     dispatchEditorCommand({ region: 'digit', value: '1' });
     dispatchEditorCommand({ region: 'paren', side: 'open' });
     dispatchEditorCommand({ region: 'equals' });
@@ -226,6 +261,53 @@ describe('dispatchEditorCommand: continuation on a result is a no-op until P4.9 
 
     expect(nodes()[resultId]).toBeUndefined();
     expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
+
+  test('full keystroke path: continue, type operand, = uses live reference value', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'digit', value: '0' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '5' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const result = Object.values(useDocumentStore.getState().document.nodes).find((n) => n.kind === 'result')!;
+    selectNode(result.id);
+    dispatchEditorCommand({ region: 'operator', op: '×' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const doc = useDocumentStore.getState().document;
+    const contResult = Object.values(doc.nodes).find(
+      (n) => n.kind === 'result' && n.id !== result.id,
+    );
+    expect(contResult).toMatchObject({
+      kind: 'result',
+      derived: { display: '30' },
+    });
+
+    // Editing the source input must change what a later recompute of the continuation
+    // sees — the reference is live, not a frozen copy (P4.8/P6.2 auto-cascade comes later).
+    const ten = Object.values(doc.nodes).find((n) => n.kind === 'number' && n.raw === '10')!;
+    setNodeRaw(ten.id, '20');
+
+    const contEquals = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'equals' && n.chainId === contResult!.chainId,
+    )!;
+    deleteNode(contEquals.id);
+    const op = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'operator' && n.chainId === contResult!.chainId,
+    )!;
+    // After deleting =, the continuation result is gone; find the number operand and re-equals.
+    const two = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'number' && n.raw === '2' && n.chainId === op.chainId,
+    )!;
+    appendEqualsNode(two.id);
+
+    const refreshed = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result' && n.chainId === op.chainId,
+    );
+    expect(refreshed?.kind).toBe('result');
+    expect(refreshed && refreshed.kind === 'result' ? refreshed.derived?.display : undefined).toBe('50');
   });
 });
 

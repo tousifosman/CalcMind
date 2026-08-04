@@ -1,5 +1,5 @@
 import { hitTestNode } from './hitTest';
-import { createNumberNode, createOperatorNode } from '../model/factories';
+import { createNumberNode, createOperatorNode, createReferenceNode } from '../model/factories';
 import { tokens } from '../ui/tokens';
 import type { CalcNode } from '../model/types';
 
@@ -37,10 +37,10 @@ describe('hitTestNode', () => {
     );
   });
 
-  test('skips reference nodes rather than throwing', () => {
-    const reference = { ...createOperatorNode({ x: 0, y: 0 }, '+'), kind: 'reference' as const, targetNodeId: 'n_x' };
+  test('hits reference nodes (P4.9) without throwing', () => {
+    const reference = createReferenceNode({ x: 0, y: 0 }, 'n_x');
     const nodes = byId(reference);
     expect(() => hitTestNode(nodes, { x: 0, y: 0 }, 'en-US')).not.toThrow();
-    expect(hitTestNode(nodes, { x: 0, y: 0 }, 'en-US')).toBeNull();
+    expect(hitTestNode(nodes, { x: 0, y: 0 }, 'en-US')).toBe(reference);
   });
 });

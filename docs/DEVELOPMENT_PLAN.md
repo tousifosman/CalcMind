@@ -69,7 +69,7 @@ flowchart LR
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
-| **P4** | Engine | 9 | **7/9** — P4.1–P4.7 done; P4.8–P4.9 next |
+| **P4** | Engine | 9 | **8/9** — P4.1–P4.7, P4.9 done; P4.8 next |
 | **P5** | Persistence | 8 | Blocked on P4 |
 | **P6** | Linking | 8 | Blocked on P4, parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
@@ -547,7 +547,7 @@ flowchart LR
     style P46 fill:#22A75B,color:#fff
     style P47 fill:#22A75B,color:#fff
     style P48 fill:#8892A0,color:#fff
-    style P49 fill:#8892A0,color:#fff
+    style P49 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
@@ -682,19 +682,19 @@ punctuated).
 **Objective.** Result selected + operator → a new chain seeded with a reference to it.
 **Architecture.** §8.7 (the exact behaviour, and why it is the single most important interaction),
 §11.1 (the connector is drawn in the source's hue).
-**Touches.** `src/store/commands.ts`, `src/keypad/keymap.ts`.
+**Touches.** `src/store/commands.ts`, `src/keypad/keymap.ts`, `src/engine/compute.ts`, `src/chains/measure.ts`, `src/nodes/ReferenceNode.tsx`.
 **Depends on.** P4.7, P2.8.
 
 > §15's caveat, which is why this is in P4 and not P6: continuation is the *primary* way users
 > create links, so if P6 slips, the app ships as a canvas of unrelated sums and loses the point.
 
-- [ ] With result `R` selected, pressing operator `⊕` creates a chain below-right of `R` containing
+- [x] With result `R` selected, pressing operator `⊕` creates a chain below-right of `R` containing
       `[ reference→R , ⊕ ]` and selects it, so the next digits land in a fresh number node (§8.7).
-- [ ] Pressing an operator with a result selected **never edits the result** — this replaces the
+- [x] Pressing an operator with a result selected **never edits the result** — this replaces the
       P2.8 no-op.
-- [ ] The reference resolves to `R`'s live value; editing `R`'s inputs updates the new chain.
-- [ ] Connector and hue are P6.5/P6.6. A reference with no hue yet is correct here.
-- [ ] Integration test covering the whole keystroke path.
+- [x] The reference resolves to `R`'s live value; editing `R`'s inputs updates the new chain.
+- [x] Connector and hue are P6.5/P6.6. A reference with no hue yet is correct here.
+- [x] Integration test covering the whole keystroke path.
 
 ### Phase exit check — P4
 

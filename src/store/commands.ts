@@ -14,6 +14,7 @@ import {
   createParenNode,
   createEqualsNode,
   createResultNode,
+  createReferenceNode,
   createChainId,
 } from '../model/factories';
 import { CalcDocument, CalcNode, Chain, ChainId, NodeId, OperatorSymbol, ParenSide, Vec2 } from '../model/types';
@@ -21,6 +22,7 @@ import { layoutChain } from '../chains/layout';
 import { widthOf } from '../chains/measure';
 import type { SnapOutcome } from '../chains/snapping';
 import { getDeviceLocale } from '../ui/locale';
+import { tokens } from '../ui/tokens';
 import { computeChain } from '../engine/compute';
 
 export function renameDocument(name: string): void {
@@ -119,7 +121,7 @@ function ensureResultNodeForChain(draft: CalcDocument, chainId: ChainId): void {
   }
 
   const locale = getDeviceLocale();
-  const computed = computeChain(chain, draft.nodes, locale);
+  const computed = computeChain(chain, draft.nodes, locale, draft.chains);
   if (computed === null) {
     // Not Evaluated (Incomplete / Invalid / Valid without going through `=` — but we
     // only call this when `=` is present, so Incomplete/Invalid). No result yet (§9).
@@ -262,6 +264,55 @@ export function appendOperatorAndNumber(
   return { operatorId: operatorNode.id, numberId: numberNode.id };
 }
 
+/** World offset of a continuation chain from its source result (§8.7).
+ *  Proportions taken from `docs/assets/linking-model.svg`: roughly half a cell right and
+ *  one-and-a-half cells down from the result's top-left. */
+export const CONTINUATION_OFFSET = {
+  x: tokens.nodeHeight * 0.5,
+  y: tokens.nodeHeight * 1.5,
+} as const;
+
+/**
+ * §8.7 Continuation: with result `R` selected, operator `⊕` creates a new chain
+ * below-right of `R` containing `[ reference→R , ⊕ ]`. Returns the new operator id so
+ * the dispatcher can select it — the next digit then lands in a fresh number via the
+ * normal append path. Never edits `R`.
+ */
+export function continueFromResult(
+  resultNodeId: NodeId,
+  op: OperatorSymbol,
+): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId } {
+  const result = useDocumentStore.getState().document.nodes[resultNodeId];
+  if (!result || result.kind !== 'result') {
+    throw new Error(
+      `continueFromResult: node ${resultNodeId} is not a result (got ${result?.kind ?? 'missing'})`,
+    );
+  }
+
+  const reference = createReferenceNode({ x: 0, y: 0 }, resultNodeId);
+  const operator = createOperatorNode({ x: 0, y: 0 }, op);
+  const chainId = createChainId();
+  const anchor = {
+    x: result.position.x + CONTINUATION_OFFSET.x,
+    y: result.position.y + CONTINUATION_OFFSET.y,
+  };
+
+  useDocumentStore.getState().applyCommand((draft) => {
+    reference.chainId = chainId;
+    operator.chainId = chainId;
+    draft.nodes[reference.id] = reference;
+    draft.nodes[operator.id] = operator;
+    draft.chains[chainId] = {
+      id: chainId,
+      anchor,
+      members: [reference.id, operator.id],
+    };
+    reflowChain(draft, chainId);
+  });
+
+  return { chainId, referenceId: reference.id, operatorId: operator.id };
+}
+
 /** setNodeRaw coalescing window (§13): keystrokes to the same node within this
  *  many ms merge into the undo entry already on top of the stack, rather than
  *  each landing as its own entry. */
@@ -373,7 +424,7 @@ export function prependToChain(nodeId: NodeId, chainId: ChainId): void {
     if (!draft.chains[chainId]) return;
     const locale = getDeviceLocale();
     chain.anchor = {
-      x: chain.anchor.x - widthOf(node, locale),
+      x: chain.anchor.x - widthOf(node, locale, tokens.numeralFontSize, draft.nodes),
       y: chain.anchor.y,
     };
     node.chainId = chainId;
@@ -415,7 +466,7 @@ export function insertIntoChain(nodeId: NodeId, chainId: ChainId, index: number)
     if (clamped === 0) {
       const locale = getDeviceLocale();
       chain.anchor = {
-        x: chain.anchor.x - widthOf(node, locale),
+        x: chain.anchor.x - widthOf(node, locale, tokens.numeralFontSize, draft.nodes),
         y: chain.anchor.y,
       };
     }

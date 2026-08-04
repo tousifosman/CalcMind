@@ -9,6 +9,8 @@ import {
   appendParenNode,
   appendEqualsNode,
   appendOperatorAndNumber,
+  continueFromResult,
+  CONTINUATION_OFFSET,
   setNodeRaw,
   deleteNode,
   clearDocument,
@@ -1131,5 +1133,35 @@ describe('P4.7 result node lifecycle', () => {
       (n) => n.kind === 'result',
     );
     expect(results).toHaveLength(0);
+  });
+});
+
+describe('continueFromResult (P4.9, §8.7)', () => {
+  test('builds [reference→R, ⊕] below-right of R in one undo entry', () => {
+    const a = addNumberNode({ x: 10, y: 20 }, '7');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find((n) => n.kind === 'result')!;
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    const { chainId, referenceId, operatorId } = continueFromResult(result.id, '+');
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId]);
+    expect(doc.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: result.id,
+      chainId,
+    });
+    expect(doc.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '+', chainId });
+    expect(doc.chains[chainId]!.anchor).toEqual({
+      x: result.position.x + CONTINUATION_OFFSET.x,
+      y: result.position.y + CONTINUATION_OFFSET.y,
+    });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+  });
+
+  test('rejects a non-result target', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    expect(() => continueFromResult(a, '+')).toThrow(/not a result/);
   });
 });
