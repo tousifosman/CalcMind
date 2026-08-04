@@ -1,6 +1,12 @@
 import fc from 'fast-check';
 import Decimal from 'decimal.js';
-import { formatForDisplay, parseUserInput, decimalSeparatorFor } from './format';
+import {
+  formatForDisplay,
+  parseUserInput,
+  decimalSeparatorFor,
+  formatComputedValue,
+  parseComputedDisplay,
+} from './format';
 
 describe('decimalSeparatorFor', () => {
   test('en-US uses a period', () => {
@@ -116,5 +122,85 @@ describe('grouping beyond Number.MAX_SAFE_INTEGER', () => {
   test('every digit still round-trips through parseUserInput', () => {
     const raw = `-${'1'.repeat(20)}.5`;
     expect(parseUserInput(formatForDisplay(raw, 'de-DE'), 'de-DE')).toBe(raw);
+  });
+});
+
+describe('formatComputedValue', () => {
+  test('strips trailing zeros and keeps up to 12 significant digits', () => {
+    expect(formatComputedValue(new Decimal('1.2300'), 'en-US')).toBe('1.23');
+    expect(formatComputedValue(new Decimal('123456.789012345'), 'en-US')).toBe('123,456.789012');
+  });
+
+  test.each([
+    // Exactly at the high boundary → scientific (|x| ≥ 1e12)
+    { value: '1e12', locale: 'en-US', expected: '1e+12' },
+    // Just below → plain
+    { value: '999999999999', locale: 'en-US', expected: '999,999,999,999' },
+    // Just above
+    { value: '1.00000000001e12', locale: 'en-US', expected: '1.00000000001e+12' },
+    // Exactly at the low boundary → plain (0 < |x| < 1e-6 is the scientific rule)
+    { value: '1e-6', locale: 'en-US', expected: '0.000001' },
+    // Just below → scientific
+    { value: '9.9e-7', locale: 'en-US', expected: '9.9e-7' },
+    // Just above low boundary → plain
+    { value: '1.1e-6', locale: 'en-US', expected: '0.0000011' },
+  ])('boundary $value → $expected', ({ value, locale, expected }) => {
+    expect(formatComputedValue(new Decimal(value), locale)).toBe(expected);
+  });
+
+  test('scientific decision follows the rounded magnitude, not the pre-round abs', () => {
+    // 999999999999.9 is < 1e12 pre-round, but toSignificantDigits(12) rounds it up to
+    // exactly 1e12 — must format as scientific, not a 13-digit plain number.
+    expect(formatComputedValue(new Decimal('999999999999.9'), 'en-US')).toBe('1e+12');
+    // Mirror on the low end: pre-round < 1e-6, rounds up to exactly 1e-6 → plain,
+    // matching the boundary test for exact 1e-6.
+    expect(formatComputedValue(new Decimal('0.0000009999999999996'), 'en-US')).toBe(
+      '0.000001',
+    );
+  });
+
+  test('applies locale separators on the mantissa (and only here)', () => {
+    expect(formatComputedValue(new Decimal('1234.5'), 'de-DE')).toBe('1.234,5');
+    expect(formatComputedValue(new Decimal('1.23e+15'), 'de-DE')).toBe('1,23e+15');
+  });
+
+  test('zero is "0"', () => {
+    expect(formatComputedValue(new Decimal(0), 'en-US')).toBe('0');
+    expect(formatComputedValue(new Decimal('-0'), 'de-DE')).toBe('0');
+  });
+
+  test('negative values keep the sign', () => {
+    expect(formatComputedValue(new Decimal('-1.5e12'), 'en-US')).toBe('-1.5e+12');
+    expect(formatComputedValue(new Decimal('-0.0000005'), 'en-US')).toBe('-5e-7');
+  });
+
+  test('the formatter never emits something parseComputedDisplay rejects', () => {
+    const locales = ['en-US', 'de-DE', 'fr-FR'];
+    const values = fc
+      .tuple(fc.boolean(), fc.integer({ min: -20, max: 20 }), fc.integer({ min: 1, max: 999999999 }))
+      .map(([neg, exp, mantissa]) => {
+        const base = new Decimal(mantissa).times(new Decimal(10).pow(exp - 8));
+        return neg ? base.negated() : base;
+      });
+
+    fc.assert(
+      fc.property(values, fc.constantFrom(...locales), (value, locale) => {
+        if (value.isZero()) {
+          expect(parseComputedDisplay(formatComputedValue(value, locale), locale).isZero()).toBe(
+            true,
+          );
+          return;
+        }
+        const displayed = formatComputedValue(value, locale);
+        expect(() => parseComputedDisplay(displayed, locale)).not.toThrow();
+        const roundTripped = parseComputedDisplay(displayed, locale);
+        // 12 significant digits — compare at that precision.
+        expect(
+          roundTripped
+            .toSignificantDigits(12)
+            .equals(value.toSignificantDigits(12)),
+        ).toBe(true);
+      }),
+    );
   });
 });

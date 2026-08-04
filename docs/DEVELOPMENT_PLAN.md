@@ -67,7 +67,7 @@ flowchart LR
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
-| **P4** | Engine | 9 | Next — **critical path** |
+| **P4** | Engine | 9 | **5/9** — P4.1–P4.5 done; P4.6–P4.9 next |
 | **P5** | Persistence | 8 | Blocked on P4 |
 | **P6** | Linking | 8 | Blocked on P4, parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
@@ -531,18 +531,18 @@ flowchart LR
     P48 --> EXIT
     P49 --> EXIT
 
-    style P3EXIT fill:#8892A0,color:#fff
+    style P3EXIT fill:#22A75B,color:#fff
     style P21 fill:#22A75B,color:#fff
     style P24 fill:#22A75B,color:#fff
     style P28 fill:#22A75B,color:#fff
     style P34 fill:#22A75B,color:#fff
-    style P41 fill:#8892A0,color:#fff
-    style P42 fill:#8892A0,color:#fff
-    style P43 fill:#8892A0,color:#fff
-    style P44 fill:#8892A0,color:#fff
-    style P45 fill:#8892A0,color:#fff
-    style P46 fill:#8892A0,color:#fff
-    style P47 fill:#8892A0,color:#fff
+    style P41 fill:#22A75B,color:#fff
+    style P42 fill:#22A75B,color:#fff
+    style P43 fill:#22A75B,color:#fff
+    style P44 fill:#22A75B,color:#fff
+    style P45 fill:#22A75B,color:#fff
+    style P46 fill:#F0A020,color:#fff
+    style P47 fill:#F0A020,color:#fff
     style P48 fill:#8892A0,color:#fff
     style P49 fill:#8892A0,color:#fff
     style EXIT fill:#7030A0,color:#fff
@@ -562,10 +562,10 @@ and this diagram is stale.
 **Architecture.** §10.1 (the pipeline: drop `=` and the result node).
 **Touches.** `src/engine/tokenize.ts`.
 
-- [ ] Reads `chain.members` **in stored order** — never sorted by position (§6.1).
-- [ ] Drops the `=` and the result node; keeps numbers, operators, parens and references.
-- [ ] Number tokens carry canonical `raw`; a partial `"3."` tokenises without throwing.
-- [ ] Table-driven tests (§14).
+- [x] Reads `chain.members` **in stored order** — never sorted by position (§6.1).
+- [x] Drops the `=` and the result node; keeps numbers, operators, parens and references.
+- [x] Number tokens carry canonical `raw`; a partial `"3."` tokenises without throwing.
+- [x] Table-driven tests (§14).
 
 ### P4.2 — Sequence validation and chain state
 
@@ -574,17 +574,17 @@ and this diagram is stale.
 **Touches.** `src/engine/validate.ts`, `src/engine/errors.ts`.
 **Depends on.** P4.1.
 
-- [ ] Returns exactly one of `Empty` / `Incomplete` / `Valid` / `Invalid` / `Evaluated` / `Stale` /
+- [x] Returns exactly one of `Empty` / `Incomplete` / `Valid` / `Invalid` / `Evaluated` / `Stale` /
       `ErrorState`.
-- [ ] A trailing operator is `Incomplete`, renders normally, and produces no result — this is the
+- [x] A trailing operator is `Incomplete`, renders normally, and produces no result — this is the
       normal state of a formula being typed, not an error (§9).
-- [ ] Two adjacent **numbers** → `Invalid`. Not implicit multiplication, not concatenation (§9,
+- [x] Two adjacent **numbers** → `Invalid`. Not implicit multiplication, not concatenation (§9,
       decision #4).
-- [ ] Two adjacent operators, or any node to the right of the result → `Invalid`.
-- [ ] **Unbalanced parens → `Incomplete`, not `Invalid`** (§10.2). An unclosed paren is normal
+- [x] Two adjacent operators, or any node to the right of the result → `Invalid`.
+- [x] **Unbalanced parens → `Incomplete`, not `Invalid`** (§10.2). An unclosed paren is normal
       mid-typing and must not be punished.
-- [ ] `Invalid` **deletes nothing** — it marks the offending boundary with a red hairline (§9).
-- [ ] Table-driven tests covering every transition in the §9 diagram.
+- [x] `Invalid` **deletes nothing** — it marks the offending boundary with a red hairline (§9).
+- [x] Table-driven tests covering every transition in the §9 diagram.
 
 ### P4.3 — Parser
 
@@ -594,13 +594,13 @@ extension path).
 **Touches.** `src/engine/parse.ts`.
 **Depends on.** P4.2.
 
-- [ ] Implements the §10.2 grammar. Left-associative; `× ÷` bind tighter than `+ -`.
-- [ ] **Implicit multiplication only before `(`**: `10000 ( 1 + 0.04 )` is a product, while two
+- [x] Implements the §10.2 grammar. Left-associative; `× ÷` bind tighter than `+ -`.
+- [x] **Implicit multiplication only before `(`**: `10000 ( 1 + 0.04 )` is a product, while two
       adjacent numbers stay invalid (§10.2, decision #4).
-- [ ] Negative numbers come from `NumberNode.raw` (`"-5"`), **not** a unary operator node (§10.2).
-- [ ] Structured so `^`, prefix/postfix operators and function application can be added later
+- [x] Negative numbers come from `NumberNode.raw` (`"-5"`), **not** a unary operator node (§10.2).
+- [x] Structured so `^`, prefix/postfix operators and function application can be added later
       without restructuring (§10.2 extension path). Do **not** implement them now.
-- [ ] Tests include `2 + 3 × 4 = 14` and `2 × (3 + 4) = 14`.
+- [x] Tests include `2 + 3 × 4 = 14` and `2 × (3 + 4) = 14`.
 
 ### P4.4 — Evaluator
 
@@ -609,11 +609,11 @@ extension path).
 **Touches.** `src/engine/evaluate.ts`.
 **Depends on.** P4.3.
 
-- [ ] All arithmetic in `decimal.js` at precision 34. `0.1 + 0.2` is exactly `0.3` (§14) — this is
+- [x] All arithmetic in `decimal.js` at precision 34. `0.1 + 0.2` is exactly `0.3` (§14) — this is
       the reason for the dependency (decision #3).
-- [ ] Division by zero returns a `DivideByZero` **value** — never `Infinity` (§10.3).
-- [ ] Overflow → `Overflow`; non-numeric → `NotANumber`.
-- [ ] **Nothing throws across a module boundary** (§10.4).
+- [x] Division by zero returns a `DivideByZero` **value** — never `Infinity` (§10.3).
+- [x] Overflow → `Overflow`; non-numeric → `NotANumber`.
+- [x] **Nothing throws across a module boundary** (§10.4).
 
 ### P4.5 — Display formatter
 
@@ -622,11 +622,11 @@ extension path).
 **Touches.** `src/engine/format.ts`.
 **Depends on.** P4.4, P2.1.
 
-- [ ] Up to 12 significant digits, trailing zeros stripped.
-- [ ] Scientific notation when `|x| ≥ 1e12` or `0 < |x| < 1e-6`.
-- [ ] Locale separators are applied here and nowhere else; stored values stay canonical (§10.3).
-- [ ] Boundary tests at exactly `1e12` and `1e-6`, and either side of both (§14).
-- [ ] Property test: the formatter never emits something it cannot re-parse (§14).
+- [x] Up to 12 significant digits, trailing zeros stripped.
+- [x] Scientific notation when `|x| ≥ 1e12` or `0 < |x| < 1e-6`.
+- [x] Locale separators are applied here and nowhere else; stored values stay canonical (§10.3).
+- [x] Boundary tests at exactly `1e12` and `1e-6`, and either side of both (§14).
+- [x] Property test: the formatter never emits something it cannot re-parse (§14).
 
 ### P4.6 — Error rendering
 
