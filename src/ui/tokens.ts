@@ -45,16 +45,17 @@ export const insertionCaretColor = '#F3F4F6';
  *  1-unit dots at (1,0) and (3,2), coloured resultDotColor. See §1.2 and §11.3. */
 export const resultDotColor = '#FFD1CF';
 
-/** Identity hues (§11.1 / P6.5): assigned at render time to a value that is referenced or
- *  labelled. Never persisted — see §11.1 and decision 12. Chosen to stay distinguishable
- *  from the structural palette above and from each other; NOT yet checked for
- *  deuteranopia/protanopia (§17.2, open question 6 / P6.8) — validate before this list
- *  is treated as load-bearing for distinguishing links. */
+/** Identity hues (§11.1 / P6.5 / P6.8): assigned at render time to a value that is
+ *  referenced or labelled. Never persisted — decision 12. Validated for
+ *  deuteranopia/protanopia against adjacent swatches and the structural role
+ *  fills (§1.2) — see `paletteAccessibility.ts` and the P6.8 journal entry.
+ *  Replaces the pre-check first guess (`#2F6BFF`, `#22A75B`, `#E0479E`,
+ *  `#00B8D9`, `#8E6E53`, `#5B4CC4`). */
 export const identityHues = [
   '#2F6BFF',
-  '#22A75B',
-  '#E0479E',
+  '#0D8A4A',
+  '#880E4F',
   '#00B8D9',
-  '#8E6E53',
-  '#5B4CC4',
+  '#B8860B',
+  '#560BAD',
 ] as const;
