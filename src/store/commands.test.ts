@@ -1,4 +1,5 @@
 import { useDocumentStore } from './documentStore';
+import { useUiStore } from './uiStore';
 import {
   addNumberNode,
   addOperatorNode,
@@ -7,6 +8,9 @@ import {
   setNodeRaw,
   deleteNode,
   clearDocument,
+  selectNode,
+  editNumberNode,
+  deselectNode,
 } from './commands';
 import { createEmptyDocument } from '../model/factories';
 
@@ -16,6 +20,7 @@ function resetStore() {
     undoStack: [],
     redoStack: [],
   });
+  useUiStore.setState({ selectedNodeId: null, editingNodeId: null });
 }
 
 beforeEach(resetStore);
@@ -251,5 +256,63 @@ describe('clearDocument', () => {
     const before = useDocumentStore.getState().undoStack.length;
     clearDocument();
     expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+  });
+});
+
+describe('selectNode / editNumberNode / deselectNode', () => {
+  test('selectNode selects without entering edit mode', () => {
+    const id = addOperatorNode({ x: 0, y: 0 }, '+');
+    selectNode(id);
+    expect(useUiStore.getState().selectedNodeId).toBe(id);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+  });
+
+  test('editNumberNode selects and edits the same node', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '');
+    editNumberNode(id);
+    expect(useUiStore.getState().selectedNodeId).toBe(id);
+    expect(useUiStore.getState().editingNodeId).toBe(id);
+  });
+
+  test('deselectNode clears both', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '5');
+    editNumberNode(id);
+    deselectNode();
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+  });
+
+  test('moving selection away from an empty in-progress number discards it', () => {
+    const empty = addNumberNode({ x: 0, y: 0 }, '');
+    editNumberNode(empty);
+    const other = addNumberNode({ x: 50, y: 0 }, '9');
+
+    selectNode(other);
+
+    expect(useDocumentStore.getState().document.nodes[empty]).toBeUndefined();
+    expect(useUiStore.getState().selectedNodeId).toBe(other);
+  });
+
+  test('deselecting discards an empty in-progress number', () => {
+    const empty = addNumberNode({ x: 0, y: 0 }, '');
+    editNumberNode(empty);
+
+    deselectNode();
+
+    expect(useDocumentStore.getState().document.nodes[empty]).toBeUndefined();
+  });
+
+  test('a non-empty in-progress number survives moving the selection away', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '3');
+    editNumberNode(id);
+    deselectNode();
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '3' });
+  });
+
+  test('re-selecting the node currently being edited does not delete it', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '');
+    editNumberNode(id);
+    editNumberNode(id);
+    expect(useDocumentStore.getState().document.nodes[id]).toBeDefined();
   });
 });

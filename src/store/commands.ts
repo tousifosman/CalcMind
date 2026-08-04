@@ -5,6 +5,7 @@
 // Chain mutations (snap, drag, detach...) land in P3 once the layout pass
 // exists to give them something to act on.
 import { useDocumentStore } from './documentStore';
+import { useUiStore } from './uiStore';
 import {
   createNumberNode,
   createOperatorNode,
@@ -136,4 +137,44 @@ export function deleteNode(nodeId: NodeId): void {
       }
     }
   });
+}
+
+// Selection (§8.6, §13, P2.6). `uiStore` holds selectedNodeId/editingNodeId as bare ephemeral
+// state and has no document to consult; these wrappers are what add the one piece of domain
+// behaviour selection needs - discarding a number node that's being abandoned mid-edit with
+// nothing typed into it yet, so committing an empty raw removes it rather than leaving a
+// blank cell on the canvas. Every path that moves the selection (tap empty canvas, tap
+// another node, Escape) should go through these rather than uiStore's setters directly.
+
+/** `keepId` is the node about to become selected/edited, if any, so re-selecting the node
+ *  that's already being edited doesn't delete it out from under itself. */
+function discardIfAbandoned(keepId: NodeId | null): void {
+  const editingId = useUiStore.getState().editingNodeId;
+  if (!editingId || editingId === keepId) return;
+  const node = useDocumentStore.getState().document.nodes[editingId];
+  if (node && node.kind === 'number' && node.raw === '') {
+    deleteNode(editingId);
+  }
+}
+
+/** Selects any node kind without entering edit mode - the target for keypad input once
+ *  P2.8 wires that up, but not itself a text field (§8.6). */
+export function selectNode(nodeId: NodeId): void {
+  discardIfAbandoned(nodeId);
+  useUiStore.getState().setEditingNode(null);
+  useUiStore.getState().setSelectedNode(nodeId);
+}
+
+/** Selects a number node and opens its in-place text editor (§8.6, P2.6). */
+export function editNumberNode(nodeId: NodeId): void {
+  discardIfAbandoned(nodeId);
+  useUiStore.getState().setSelectedNode(nodeId);
+  useUiStore.getState().setEditingNode(nodeId);
+}
+
+/** Clears selection and, if the node being edited is an empty number, discards it (§8.6). */
+export function deselectNode(): void {
+  discardIfAbandoned(null);
+  useUiStore.getState().setSelectedNode(null);
+  useUiStore.getState().setEditingNode(null);
 }

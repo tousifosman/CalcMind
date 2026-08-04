@@ -617,7 +617,9 @@ operators are visually separated from digits.
   caret/last-tap point.
 - **Continuation shortcut (§8.7).** With a result selected, pressing an operator does *not* edit
   the result — it starts a new chain that references it.
-- Tapping empty canvas toggles the keypad.
+- Tapping empty canvas creates a number node there, in edit mode, and shows the keypad if it
+  was hidden (§8.6) — superseding the placeholder from when nothing was on the canvas yet to
+  tap on. Dismissing the keypad is the mode strip's chevron key.
 - Hardware and web keyboards map to the same commands: digits, `+ - * /` → `+ − × ÷`,
   `Enter` → `=`, `Backspace`, `Escape` deselects, arrows move selection along a chain.
 - **Swipe across backspace clears the document** (Tydlig's gesture). Ours requires a confirm —
@@ -625,7 +627,11 @@ operators are visually separated from digits.
 
 ### 8.6 Selection and context menus
 
-- Tap selects a node; the selected node is the target for keypad input.
+- Tap selects a node; the selected node is the target for keypad input. Tapping a number node
+  additionally opens it for in-place text editing (caret, digits, decimal, backspace) — every
+  other kind is selected but not itself a text field.
+- `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
+  nothing typed) discards it rather than leaving a blank cell on the canvas.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, and for a reference `Unlink from parent`.
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
