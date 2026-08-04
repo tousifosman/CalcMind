@@ -71,8 +71,13 @@ flowchart LR
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
+<<<<<<< HEAD
 | **P5** | Persistence | 8 | In progress — P5.3 done; parallel with P6 |
 | **P6** | Linking | 8 | In progress — P6.1 done; parallel with P5 |
+=======
+| **P5** | Persistence | 8 | In progress — P5.1 and P5.3 done |
+| **P6** | Linking | 8 | Ready (depends only on P4, parallel with P5) |
+>>>>>>> origin/main
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -758,7 +763,7 @@ flowchart LR
     style P4EXIT fill:#22A75B,color:#fff
     style P31 fill:#22A75B,color:#fff
     style P48 fill:#22A75B,color:#fff
-    style P51 fill:#8892A0,color:#fff
+    style P51 fill:#22A75B,color:#fff
     style P52 fill:#8892A0,color:#fff
     style P53 fill:#22A75B,color:#fff
     style P54 fill:#8892A0,color:#fff
@@ -775,7 +780,7 @@ just says "depends only on P4" — but the plan sequences both behind P4's own p
 rather than jumping the queue the moment either task's box would otherwise look open, shown here
 as a gate from P4's tracking issue rather than an individual P4 subtask. `P5.5` is the one task
 that reaches outside the phase for real, task-level dependencies: `P3.1` (chain layout, already
-done) and `P4.8` (recompute on edit, also done). Kept current by hand alongside the
+done) and `P4.8` (recompute on edit, already done). Kept current by hand alongside the
 acceptance-criteria boxes below — if a task's status here disagrees with its boxes, the boxes win
 and this diagram is stale.
 
@@ -785,13 +790,13 @@ and this diagram is stale.
 **Architecture.** §12.1 (the format and all four notes beneath it), decision #5.
 **Touches.** `src/persistence/serialize.ts`.
 
-- [ ] `nodes` and `chains` serialise as **arrays** in stable id order, while staying `Record`s in
+- [x] `nodes` and `chains` serialise as **arrays** in stable id order, while staying `Record`s in
       memory — so files diff cleanly in git (§12.1).
-- [ ] Keys are sorted, so two identical documents produce **byte-identical** files.
-- [ ] `derived` is stripped on write (§12.3).
-- [ ] Member `position` is written for self-describingness but is ignored for members on load,
+- [x] Keys are sorted, so two identical documents produce **byte-identical** files.
+- [x] `derived` is stripped on write (§12.3).
+- [x] Member `position` is written for self-describingness but is ignored for members on load,
       which re-runs layout instead (§12.1).
-- [ ] Round-trip test: document → JSON → document is equal; serialisation is byte-stable across
+- [x] Round-trip test: document → JSON → document is equal; serialisation is byte-stable across
       runs (§14).
 
 ### P5.2 — Load-boundary validation

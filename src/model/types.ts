@@ -52,8 +52,9 @@ export interface ParenNode extends NodeBase {
 export interface ResultNode extends NodeBase {
   kind: 'result';
   sourceChainId: ChainId;
-  /** CACHE ONLY — never trusted. Recomputed on load; lets us paint before the
-   *  engine has run and makes saved files human-readable. Engine output always wins. */
+  /** CACHE ONLY — never trusted, never written. Recomputed on load and after every
+   *  edit; the serialiser strips it (§12.3). A file that still carries one (hand-edit)
+   *  is overwritten by the engine, which always wins. */
   derived?: ResultDerived;
 }
 
