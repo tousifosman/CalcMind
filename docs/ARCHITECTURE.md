@@ -936,7 +936,7 @@ the result texture may as well use it too.
 | 60fps drag | Reanimated worklets; store commit only on release |
 | Re-render scope | Per-node Zustand selectors + `React.memo`; a node re-renders only when its own slice changes |
 | Snap search | O(n) to ~500 nodes; spatial hash beyond (§8.4) |
-| Evaluation | Dirty-set only; never a full document sweep |
+| Evaluation | Dirty-set only; never a full *evaluation* sweep. Cycle bookkeeping (P6.3) builds the reference graph and, only when the dirty set touches a cycle or is clearing a `CircularReference`, scans result outcomes to recover/refresh circular paints — it does not re-evaluate untouched chains. |
 | Text measurement | Memoised per `(raw, fontSize)` |
 
 ---

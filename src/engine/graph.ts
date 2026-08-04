@@ -442,11 +442,16 @@ function writeChainDerived(
  * Paint one Evaluated chain `CircularReference`, naming the cycle and recording
  * the closing reference so ResultNode can offer Unlink (§11.2). Non-Evaluated
  * chains drop any leftover result — same rule as a failed recompute.
+ *
+ * `chainLabels` must be snapshotted before any cycle member is blanked — this
+ * path writes `display: ''`, so computing labels here (or per-member after a
+ * sibling was painted) would fall through to raw chain ids.
  */
 export function markChainCircular(
   draft: CalcDocument,
   chainId: ChainId,
   cycle: DependencyCycle,
+  chainLabels: readonly string[],
 ): void {
   const chain = draft.chains[chainId];
   if (!chain) return;
@@ -461,7 +466,7 @@ export function markChainCircular(
 
   const cycleMeta: CircularReferenceCycle = {
     chainIds: [...cycle.chainIds],
-    chainLabels: cycle.chainIds.map((id) => chainCycleLabel(draft, id)),
+    chainLabels: [...chainLabels],
     closingReferenceNodeId: cycle.closingEdge.referenceNodeId,
   };
 
@@ -519,12 +524,14 @@ export function recomputeChain(
 /**
  * Mark the dirty closure of `seed` stale, then recompute each chain in order.
  * One call is the whole §11 mark→evaluate step for the seeds given — never a
- * full document sweep (§11.4).
+ * full *evaluation* sweep (§11.4). Cycle bookkeeping may read all result
+ * outcomes (see §11.4); it does not re-evaluate untouched chains.
  *
  * Cycle handling (P6.3): build the graph, DFS-colour cycles, expand the dirty
  * set to every member of any cycle that touches it (and to any chain still
- * showing `CircularReference` that is no longer cyclic after an unlink), then
- * paint cyclic chains without evaluating them so the rest of the document keeps
+ * showing `CircularReference` — recover if no longer cyclic, refresh if it
+ * still is so a partial unlink re-names the remaining cycle), then paint
+ * cyclic chains without evaluating them so the rest of the document keeps
  * working.
  */
 export function recomputeFromSeeds(
@@ -533,6 +540,10 @@ export function recomputeFromSeeds(
   locale: string,
 ): void {
   const graph = buildDependencyGraph(draft);
+  // First DFS-discovered cycle wins per chain. A vertex in two cycles
+  // (A↔B and A↔C) only names/Unlinks one at a time; the CircularReference
+  // refresh below re-paints survivors after a partial unlink so the other
+  // cycle surfaces on the next turn rather than leaving stale metadata.
   const cycleByChain = new Map<ChainId, DependencyCycle>();
   for (const cycle of graph.cycles) {
     for (const id of cycle.chainIds) {
@@ -543,34 +554,64 @@ export function recomputeFromSeeds(
   const dirtySet = new Set(dirtyClosure(draft, seed));
 
   // Creating a cycle by editing one member must paint *every* member (§11).
+  let dirtyTouchesCycle = false;
   for (const cycle of graph.cycles) {
     if (cycle.chainIds.some((id) => dirtySet.has(id))) {
+      dirtyTouchesCycle = true;
       for (const id of cycle.chainIds) dirtySet.add(id);
     }
   }
 
-  // Breaking a cycle (unlink) leaves former members with a stale CircularReference
-  // outcome; pull them into this turn so they re-evaluate as a DAG again.
-  for (const node of Object.values(draft.nodes)) {
-    if (node.kind !== 'result') continue;
-    const outcome = node.derived?.outcome;
-    if (
-      outcome?.status === 'error' &&
-      outcome.error === 'CircularReference' &&
-      !cycleByChain.has(node.sourceChainId)
-    ) {
-      dirtySet.add(node.sourceChainId);
+  // Seed looks like a cycle break when a dirty chain still shows CircularReference
+  // (unlink deletes the ref, then finalises that chain — its result is still painted
+  // circular until this turn clears or refreshes it).
+  let seedLooksLikeCycleBreak = false;
+  for (const id of dirtySet) {
+    for (const result of resultNodesForChain(draft, id)) {
+      const outcome = result.derived?.outcome;
+      if (outcome?.status === 'error' && outcome.error === 'CircularReference') {
+        seedLooksLikeCycleBreak = true;
+        break;
+      }
+    }
+    if (seedLooksLikeCycleBreak) break;
+  }
+
+  // Pull every CircularReference result into this turn: recover members no
+  // longer cyclic, refresh ones that still are (multi-cycle / renamed labels).
+  // Skipped on the common keystroke path so we do not walk the node map when
+  // nothing cycle-related is in play (§11.4). `graph.cycles.length > 0` alone
+  // is not enough reason — that would re-dirty cycle members on every edit.
+  if (dirtyTouchesCycle || seedLooksLikeCycleBreak) {
+    for (const node of Object.values(draft.nodes)) {
+      if (node.kind !== 'result') continue;
+      const outcome = node.derived?.outcome;
+      if (outcome?.status === 'error' && outcome.error === 'CircularReference') {
+        dirtySet.add(node.sourceChainId);
+      }
     }
   }
 
   const dirty = [...dirtySet].filter((id) => draft.chains[id] !== undefined);
   if (dirty.length === 0) return;
 
+  // Snapshot names once per cycle before any member is blanked (§11.2).
+  const labelsByCycle = new Map<DependencyCycle, readonly string[]>();
+  for (const cycle of graph.cycles) {
+    labelsByCycle.set(
+      cycle,
+      cycle.chainIds.map((id) => chainCycleLabel(draft, id)),
+    );
+  }
+
   markChainsStale(draft, dirty);
   for (const chainId of dirty) {
     const cycle = cycleByChain.get(chainId);
     if (cycle) {
-      markChainCircular(draft, chainId, cycle);
+      const labels =
+        labelsByCycle.get(cycle) ??
+        cycle.chainIds.map((id) => chainCycleLabel(draft, id));
+      markChainCircular(draft, chainId, cycle, labels);
     } else {
       recomputeChain(draft, chainId, locale);
     }

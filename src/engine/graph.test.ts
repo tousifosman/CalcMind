@@ -372,6 +372,14 @@ describe('recomputeFromSeeds cycle colouring (P6.3)', () => {
     const rbOutcome = rb.derived?.outcome;
     expect(raOutcome?.status === 'error' && raOutcome.cycle).toBeTruthy();
     expect(rbOutcome?.status === 'error' && rbOutcome.cycle).toBeTruthy();
+    // Sibling cells must agree on the named cycle — labels are snapshotted
+    // before any member is blanked (review: order-dependent chain-id leak).
+    if (raOutcome?.status === 'error' && rbOutcome?.status === 'error') {
+      expect(raOutcome.cycle?.chainLabels).toEqual(rbOutcome.cycle?.chainLabels);
+      expect(raOutcome.cycle?.chainLabels.every((l) => l !== 'a' && l !== 'b')).toBe(
+        true,
+      );
+    }
 
     // Independent chain: never re-evaluated, prior display intact.
     const evaluated = computeChainMock.mock.calls.map(([chain]) => chain.id);
@@ -480,7 +488,8 @@ describe('recomputeFromSeeds cycle colouring (P6.3)', () => {
       },
     });
     const cycle = buildDependencyGraph(doc).cycles[0]!;
-    markChainCircular(doc, 'a', cycle);
+    const labels = cycle.chainIds.map((id) => chainCycleLabel(doc, id));
+    markChainCircular(doc, 'a', cycle, labels);
     const outcome = (doc.nodes.ra as ResultNode).derived?.outcome;
     expect(outcome).toMatchObject({
       status: 'error',
@@ -492,6 +501,35 @@ describe('recomputeFromSeeds cycle colouring (P6.3)', () => {
       );
       expect(outcome.cycle?.closingReferenceNodeId).toBe(cycle.closingEdge.referenceNodeId);
     }
+  });
+
+  test('sibling cycle members share identical chainLabels after recompute', () => {
+    // Pure ref=result chains — the regression case where blanking the first
+    // member's display would make the second fall through to a raw chain id.
+    const doc = docWithChains({
+      a: {
+        members: [
+          reference('refA', 'rb', 'a'),
+          equals('ea', 'a'),
+          result('ra', 'a', '7'),
+        ],
+      },
+      b: {
+        members: [
+          reference('refB', 'ra', 'b'),
+          equals('eb', 'b'),
+          result('rb', 'b', '7'),
+        ],
+      },
+    });
+    recomputeFromSeeds(doc, ['b'], 'en-US');
+    const raOut = (doc.nodes.ra as ResultNode).derived?.outcome;
+    const rbOut = (doc.nodes.rb as ResultNode).derived?.outcome;
+    expect(raOut?.status).toBe('error');
+    expect(rbOut?.status).toBe('error');
+    if (raOut?.status !== 'error' || rbOut?.status !== 'error') return;
+    expect(raOut.cycle?.chainLabels).toEqual(rbOut.cycle?.chainLabels);
+    expect(raOut.cycle?.chainLabels).toEqual(['7', '7']);
   });
 });
 
