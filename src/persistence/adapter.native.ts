@@ -20,8 +20,10 @@ import {
 } from '@dr.pogodin/react-native-fs';
 
 import type { DocumentMeta, StorageAdapter } from './adapter';
+import { assertSafeDocumentId, isSafeDocumentId } from './documentId';
 
 export type { DocumentMeta, StorageAdapter };
+export { assertSafeDocumentId, isSafeDocumentId } from './documentId';
 
 const DOC_EXT = '.calcmind.json';
 const TMP_SUFFIX = '.tmp';
@@ -33,6 +35,7 @@ export function documentsDirectory(): string {
 }
 
 export function primaryPath(id: string): string {
+  assertSafeDocumentId(id);
   return `${documentsDirectory()}/${id}${DOC_EXT}`;
 }
 
@@ -70,6 +73,12 @@ async function unlinkIfExists(path: string): Promise<void> {
  *   2. await writeFile (flush barrier — no fsync API on this library)
  *   3. if primary exists, rotate it to `<primary>.bak` (replacing any older .bak)
  *   4. rename `.tmp` over primary
+ *
+ * Crash window between steps 3 and 4: primary is briefly *absent* (content is
+ * already at `.bak`, new bytes at `.tmp`). That is not "old file or new file" —
+ * §12.3's load flowchart recovers via `.bak` when the primary can't be read.
+ * P5.5 must treat "primary missing" the same as "primary corrupt" for that
+ * fallback; `read()` here stays primary-only per the §12.2 interface.
  */
 async function atomicWrite(id: string, json: string): Promise<void> {
   await ensureDocumentsDir();
@@ -84,8 +93,8 @@ async function atomicWrite(id: string, json: string): Promise<void> {
     await moveFile(primary, bak);
   }
 
-  // Destination must not exist for moveFile on either platform.
-  await unlinkIfExists(primary);
+  // After a successful rotate, `primary` is already gone; on first write it
+  // never existed. moveFile requires a free destination either way.
   await moveFile(tmp, primary);
 }
 
@@ -94,9 +103,11 @@ async function listDocuments(): Promise<DocumentMeta[]> {
   const entries = await readDir(documentsDirectory());
   const metas: DocumentMeta[] = [];
 
+  // One full read+parse per document for name/updatedAt. Fine at current
+  // scale; a metadata index would be the lever if list becomes hot.
   for (const entry of entries) {
     const id = idFromPrimaryFileName(entry.name);
-    if (id === null) {
+    if (id === null || !isSafeDocumentId(id)) {
       continue;
     }
     const path = primaryPath(id);

@@ -10,17 +10,33 @@ let files = new Map();
 /** Ordered log of mutating ops for atomicity assertions. */
 let ops = [];
 
-/** When set, the next moveFile call rejects (simulates crash mid-save). */
-let failNextMove = null;
+/**
+ * When set to a positive n, the n-th moveFile call (1-based, since last reset
+ * or arm) rejects. Lets tests hit both the primary→.bak and .tmp→primary
+ * crash windows.
+ */
+let failMoveAt = null;
+let moveCallCount = 0;
+let failMoveMessage = 'simulated crash mid-save';
 
 function resetMemoryFs() {
   files = new Map();
   ops = [];
-  failNextMove = null;
+  failMoveAt = null;
+  moveCallCount = 0;
+  failMoveMessage = 'simulated crash mid-save';
 }
 
+/** Fail the next moveFile (equivalent to `__setFailNthMove(1, message)`). */
 function setFailNextMove(message) {
-  failNextMove = message || 'simulated crash mid-save';
+  setFailNthMove(1, message);
+}
+
+/** Fail the n-th subsequent moveFile call (1-based). */
+function setFailNthMove(n, message) {
+  failMoveAt = n;
+  moveCallCount = 0;
+  failMoveMessage = message || 'simulated crash mid-save';
 }
 
 function getOps() {
@@ -64,10 +80,10 @@ const api = {
   },
 
   async moveFile(from, into) {
-    if (failNextMove) {
-      const message = failNextMove;
-      failNextMove = null;
-      throw new Error(message);
+    moveCallCount += 1;
+    if (failMoveAt !== null && moveCallCount === failMoveAt) {
+      failMoveAt = null;
+      throw new Error(failMoveMessage);
     }
     if (!files.has(from)) {
       const err = new Error(`ENOENT: no such file or directory, rename '${from}'`);
@@ -169,5 +185,6 @@ module.exports = {
   __getOps: getOps,
   __getFiles: getFiles,
   __setFailNextMove: setFailNextMove,
+  __setFailNthMove: setFailNthMove,
   __DOC_ROOT: DOC_ROOT,
 };

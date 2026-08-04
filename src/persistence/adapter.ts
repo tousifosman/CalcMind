@@ -25,6 +25,16 @@ export interface StorageAdapter {
   importDocument?(): Promise<string | null>;
 }
 
+/**
+ * Document ids become path segments (native) and IndexedDB keys (web). See
+ * `documentId.ts` — re-exported here so callers of the §12.2 contract find them
+ * next to `StorageAdapter`.
+ */
+export {
+  assertSafeDocumentId,
+  isSafeDocumentId,
+} from './documentId';
+
 function unresolved(): never {
   throw new Error(
     'persistence: StorageAdapter platform module was not resolved (expected adapter.native.ts or adapter.web.ts)',

@@ -2,9 +2,11 @@ jest.mock('@dr.pogodin/react-native-fs');
 
 import * as RNFS from '@dr.pogodin/react-native-fs';
 import {
+  assertSafeDocumentId,
   bakPath,
   createNativeStorageAdapter,
   idFromPrimaryFileName,
+  isSafeDocumentId,
   primaryPath,
   tmpPath,
 } from './adapter.native';
@@ -21,6 +23,7 @@ type FsMock = typeof RNFS & {
   }>;
   __getFiles: () => Map<string, string>;
   __setFailNextMove: (message?: string) => void;
+  __setFailNthMove: (n: number, message?: string) => void;
 };
 
 const fs = RNFS as FsMock;
@@ -54,6 +57,16 @@ describe('native paths (§12.2)', () => {
     expect(idFromPrimaryFileName('doc_a.calcmind.json.tmp')).toBeNull();
     expect(idFromPrimaryFileName('doc_a.calcmind.json.bak')).toBeNull();
     expect(idFromPrimaryFileName('readme.txt')).toBeNull();
+  });
+
+  test('path helpers reject unsafe document ids', () => {
+    expect(isSafeDocumentId('doc_V1StGXR8Z5jdHi6B')).toBe(true);
+    expect(isSafeDocumentId('../etc')).toBe(false);
+    expect(isSafeDocumentId('a/b')).toBe(false);
+    expect(isSafeDocumentId('')).toBe(false);
+    expect(() => assertSafeDocumentId('doc_ok')).not.toThrow();
+    expect(() => primaryPath('../escape')).toThrow(/unsafe document id/);
+    expect(() => primaryPath('a/b')).toThrow(/unsafe document id/);
   });
 });
 
@@ -142,6 +155,24 @@ describe('native atomic write (§12.3)', () => {
 
     const files = fs.__getFiles();
     expect(files.get(primaryPath('doc_1'))).toBe('{"n":1}');
+    expect(files.get(tmpPath('doc_1'))).toBe('{"n":2}');
+  });
+
+  test('crash after primary→.bak leaves no primary (P5.5 recovers via .bak)', async () => {
+    const adapter = createNativeStorageAdapter();
+    await adapter.write('doc_1', '{"n":1}');
+
+    // Second moveFile in the overwrite is .tmp → primary. Failing it leaves
+    // primary absent, old bytes at .bak, new bytes at .tmp — the window P5.5's
+    // load path must treat like a missing/corrupt primary.
+    fs.__setFailNthMove(2, 'simulated crash after bak rotate');
+    await expect(adapter.write('doc_1', '{"n":2}')).rejects.toThrow(
+      'simulated crash after bak rotate',
+    );
+
+    const files = fs.__getFiles();
+    expect(files.has(primaryPath('doc_1'))).toBe(false);
+    expect(files.get(bakPath('doc_1'))).toBe('{"n":1}');
     expect(files.get(tmpPath('doc_1'))).toBe('{"n":2}');
   });
 
