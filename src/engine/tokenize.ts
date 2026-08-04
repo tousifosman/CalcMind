@@ -52,6 +52,12 @@ export function isExpressionNode(
 /**
  * Turn a chain's members into the token stream the parser consumes. Order is
  * `chain.members` as stored (§6.1) — never recovered from `position.x`.
+ *
+ * A missing member throws, deliberately, unlike `layoutChain` which skips. Layout is a
+ * render-side read pass that must stay lenient over transient inconsistency; the engine
+ * is a correctness boundary — a dangling member id is data corruption, and failing fast
+ * here is preferable to silently evaluating a truncated formula. `store/commands.ts` is
+ * expected to keep `members` consistent in the same commit as any delete.
  */
 export function tokenize(chain: Chain, nodes: Record<NodeId, CalcNode>): Token[] {
   const tokens: Token[] = [];

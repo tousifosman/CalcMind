@@ -148,6 +148,17 @@ describe('formatComputedValue', () => {
     expect(formatComputedValue(new Decimal(value), locale)).toBe(expected);
   });
 
+  test('scientific decision follows the rounded magnitude, not the pre-round abs', () => {
+    // 999999999999.9 is < 1e12 pre-round, but toSignificantDigits(12) rounds it up to
+    // exactly 1e12 — must format as scientific, not a 13-digit plain number.
+    expect(formatComputedValue(new Decimal('999999999999.9'), 'en-US')).toBe('1e+12');
+    // Mirror on the low end: pre-round < 1e-6, rounds up to exactly 1e-6 → plain,
+    // matching the boundary test for exact 1e-6.
+    expect(formatComputedValue(new Decimal('0.0000009999999999996'), 'en-US')).toBe(
+      '0.000001',
+    );
+  });
+
   test('applies locale separators on the mantissa (and only here)', () => {
     expect(formatComputedValue(new Decimal('1234.5'), 'de-DE')).toBe('1.234,5');
     expect(formatComputedValue(new Decimal('1.23e+15'), 'de-DE')).toBe('1,23e+15');

@@ -129,6 +129,11 @@ const RESULT_SIGNIFICANT_DIGITS = 12;
  * Value → string on the result cell (§10.3). Up to 12 significant digits with trailing
  * zeros stripped; scientific notation when `|x| ≥ 1e12` or `0 < |x| < 1e-6`. Locale
  * separators are applied here and nowhere else; the Decimal itself stays canonical.
+ *
+ * The scientific decision is made on the *rounded* magnitude, not the pre-round value:
+ * `999999999999.9` rounds to exactly `1e12` under 12 sig digs, and must format as
+ * scientific — deciding from the pre-round abs would emit a 13-digit plain number that
+ * contradicts the boundary rule for the digits actually shown.
  */
 export function formatComputedValue(value: Decimal, locale: string): string {
   if (value.isNaN() || !value.isFinite()) {
@@ -138,12 +143,16 @@ export function formatComputedValue(value: Decimal, locale: string): string {
     return formatForDisplay('0', locale);
   }
 
-  const abs = value.abs();
+  const significant = value.toSignificantDigits(RESULT_SIGNIFICANT_DIGITS);
+  if (significant.isZero()) {
+    // Underflow under 12 sig digs — treat as zero rather than scientific of a tiny residual.
+    return formatForDisplay('0', locale);
+  }
+
+  const abs = significant.abs();
   const useScientific =
     abs.greaterThanOrEqualTo(SCIENTIFIC_THRESHOLD_HIGH) ||
     abs.lessThan(SCIENTIFIC_THRESHOLD_LOW);
-
-  const significant = value.toSignificantDigits(RESULT_SIGNIFICANT_DIGITS);
 
   if (!useScientific) {
     // toFixed keeps a plain decimal form near the 1e-6 boundary where toString would
