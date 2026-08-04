@@ -22,6 +22,7 @@ import {
   formNewChain,
   detachNode,
   commitSnapOutcome,
+  moveFreeNode,
 } from './commands';
 import { createEmptyDocument } from '../model/factories';
 import { tokens } from '../ui/tokens';
@@ -825,5 +826,33 @@ describe('P3.4 chain mutations: prepend / append / insert / newChain / detach', 
     detachNode(id, { x: 9, y: 9 });
     expect(useDocumentStore.getState().undoStack).toHaveLength(0);
     expect(useDocumentStore.getState().document.nodes[id].position).toEqual({ x: 1, y: 2 });
+  });
+});
+
+describe('moveFreeNode', () => {
+  test('repositions a free node in one undo entry', () => {
+    const id = addNumberNode({ x: 10, y: 20 }, '1');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    moveFreeNode(id, { x: 50, y: 60 });
+
+    expect(useDocumentStore.getState().document.nodes[id].position).toEqual({ x: 50, y: 60 });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[id].position).toEqual({ x: 10, y: 20 });
+  });
+
+  test('does not move a chained member', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addNumberNode({ x: 0, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.c1 = { id: 'c1', members: [a, b], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'c1';
+      draft.nodes[b].chainId = 'c1';
+    });
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    moveFreeNode(a, { x: 99, y: 99 });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
   });
 });

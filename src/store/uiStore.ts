@@ -4,11 +4,22 @@
 // bullet requires keypad visibility to sit outside undo history.
 import { create } from 'zustand';
 import { NodeId, Vec2 } from '../model/types';
+import type { SnapOutcome } from '../chains/snapping';
 
 /** Discriminated union for the two menu variants (§8.6). */
 export type ContextMenu =
   | { kind: 'node'; nodeId: NodeId; anchor: Vec2 }
   | { kind: 'canvas'; anchor: Vec2 };
+
+/** Live drag feedback for P3.5 / P3.6. Ephemeral: recomputed every frame from shared
+ *  values, never written into the document or undo history (§11.4, §13). */
+export interface DragSnapState {
+  nodeId: NodeId;
+  /** World-space top-left of the dragged node this frame. */
+  position: Vec2;
+  /** Nearest §8.3 candidate, or null when nothing is in range. P3.6 reads this for the caret. */
+  candidate: SnapOutcome | null;
+}
 
 export interface UiState {
   keypadVisible: boolean;
@@ -55,6 +66,11 @@ export interface UiState {
   groupSelectedIds: ReadonlySet<NodeId>;
   setGroupSelected: (ids: ReadonlySet<NodeId>) => void;
   clearGroupSelected: () => void;
+
+  /** In-progress node drag (§8.2, P3.5). Null when idle. Updated every drag frame for
+   *  the insertion caret (P3.6); cleared on release before any document commit. */
+  dragSnap: DragSnapState | null;
+  setDragSnap: (state: DragSnapState | null) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -82,4 +98,7 @@ export const useUiStore = create<UiState>((set) => ({
   groupSelectedIds: new Set(),
   setGroupSelected: (ids) => set({ groupSelectedIds: ids }),
   clearGroupSelected: () => set({ groupSelectedIds: new Set() }),
+
+  dragSnap: null,
+  setDragSnap: (dragSnap) => set({ dragSnap }),
 }));
