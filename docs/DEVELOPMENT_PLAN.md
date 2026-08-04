@@ -355,11 +355,11 @@ flowchart LR
     style P29 fill:#22A75B,color:#fff
     style P31 fill:#22A75B,color:#fff
     style P32 fill:#22A75B,color:#fff
-    style P33 fill:#FFBF28,color:#fff
-    style P34 fill:#8892A0,color:#fff
-    style P35 fill:#8892A0,color:#fff
-    style P36 fill:#8892A0,color:#fff
-    style P37 fill:#8892A0,color:#fff
+    style P33 fill:#22A75B,color:#fff
+    style P34 fill:#22A75B,color:#fff
+    style P35 fill:#22A75B,color:#fff
+    style P36 fill:#FFBF28,color:#fff
+    style P37 fill:#FFBF28,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
@@ -488,6 +488,66 @@ other route).
 
 The engine is pure functions over plain data and must stay free of React (§14) — that is the whole
 reason it is testable. Enforced by the definition of done above.
+
+```mermaid
+flowchart LR
+    P3EXIT(["P3 phase exit<br/>#44"])
+    P21["P2.1<br/>Locale display<br/>#9"]
+    P24["P2.4<br/>Node views<br/>#12"]
+    P28["P2.8<br/>Input dispatch<br/>#16"]
+    P34["P3.4<br/>Chain mutations<br/>#40"]
+    P41["P4.1<br/>Tokeniser<br/>#49"]
+    P42["P4.2<br/>Sequence validation<br/>#50"]
+    P43["P4.3<br/>Parser<br/>#51"]
+    P44["P4.4<br/>Evaluator<br/>#52"]
+    P45["P4.5<br/>Display formatter<br/>#53"]
+    P46["P4.6<br/>Error rendering<br/>#54"]
+    P47["P4.7<br/>Result lifecycle<br/>#55"]
+    P48["P4.8<br/>Recompute on edit<br/>#56"]
+    P49["P4.9<br/>Continuation<br/>#57"]
+    EXIT(["Phase exit check<br/>#58"])
+
+    P3EXIT --> P41
+    P41 --> P42
+    P42 --> P43
+    P43 --> P44
+    P44 --> P45
+    P21 --> P45
+    P45 --> P46
+    P24 --> P46
+    P45 --> P47
+    P34 --> P47
+    P47 --> P48
+    P47 --> P49
+    P28 --> P49
+    P46 --> EXIT
+    P48 --> EXIT
+    P49 --> EXIT
+
+    style P3EXIT fill:#8892A0,color:#fff
+    style P21 fill:#22A75B,color:#fff
+    style P24 fill:#22A75B,color:#fff
+    style P28 fill:#22A75B,color:#fff
+    style P34 fill:#22A75B,color:#fff
+    style P41 fill:#8892A0,color:#fff
+    style P42 fill:#8892A0,color:#fff
+    style P43 fill:#8892A0,color:#fff
+    style P44 fill:#8892A0,color:#fff
+    style P45 fill:#8892A0,color:#fff
+    style P46 fill:#8892A0,color:#fff
+    style P47 fill:#8892A0,color:#fff
+    style P48 fill:#8892A0,color:#fff
+    style P49 fill:#8892A0,color:#fff
+    style EXIT fill:#7030A0,color:#fff
+```
+
+Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
+gate. `P4.1` carries no *task*-level dependency of its own (§10.1's pipeline just needs
+`chain.members`, which already exists), but the plan sequences the whole phase behind P3 as the
+**critical path** — shown here as a gate from P3's own phase-exit check rather than jumping the
+queue the moment P4.1's box would otherwise look open. Kept current by hand alongside the
+acceptance-criteria boxes below — if a task's status here disagrees with its boxes, the boxes win
+and this diagram is stale.
 
 ### P4.1 — Tokeniser
 
