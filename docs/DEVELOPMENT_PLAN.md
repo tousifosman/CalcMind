@@ -72,7 +72,7 @@ flowchart LR
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | **P5** | Persistence | 8 | In progress — P5.1–P5.3, P5.5, P5.7 done; P5.4 / P5.6 / P5.8 remain |
-| **P6** | Linking | 8 | In progress — P6.1–P6.3, P6.5, P6.8 done; parallel with P5 |
+| **P6** | Linking | 8 | In progress — P6.1–P6.3, P6.5, P6.7, P6.8 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -959,7 +959,7 @@ flowchart LR
     style P64 fill:#E8A838,color:#fff
     style P65 fill:#22A75B,color:#fff
     style P66 fill:#E8A838,color:#fff
-    style P67 fill:#E8A838,color:#fff
+    style P67 fill:#22A75B,color:#fff
     style P68 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
@@ -968,9 +968,9 @@ Green = done, amber = ready to start, grey = blocked on a dependency, purple = t
 gate. `P4.8` (recompute on edit) is done, so `P6.1` is no longer gated on a cross-phase
 dependency — everything else here is downstream of it. `P2.9` and `P3.5` are already-done
 prerequisites for `P6.4` and `P6.7` respectively, shown as separate external nodes rather than
-folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. `P6.2`
-and `P6.3` are done on `main`; `P6.5` unblocked `P6.6` and `P6.8` and both hue tasks are now
-done (`P6.6` still open for connector drawing). Kept
+folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. `P6.2`,
+`P6.3`, `P6.5`, `P6.7`, and `P6.8` are done; `P6.6` remains open for connector drawing and
+`P6.4` for dangling-reference UI. Kept
 current by hand alongside the acceptance-criteria boxes below — if a task's status here disagrees
 with its boxes, the boxes win and this diagram is stale.
 
@@ -1069,14 +1069,14 @@ sharing the canvas transform), decision #13.
 ### P6.7 — Drag a result into a chain
 
 **Objective.** The second way to create a reference.
-**Architecture.** §11 (dragging a result into another chain creates a reference), §8.3.
+**Architecture.** §11 (dragging a result into another chain creates a reference), §8.3, §8.7.
 **Touches.** `src/nodes/useNodeDrag.ts`, `src/store/commands.ts`.
 **Depends on.** P6.1, P3.5.
 
-- [ ] Dragging a result node into another chain inserts a **reference** to it — not a copy of its
+- [x] Dragging a result node into another chain inserts a **reference** to it — not a copy of its
       value, and not the result node itself.
-- [ ] The source chain keeps its own result.
-- [ ] Snapping behaves exactly as for any other node (§8.3) — no special case in `snapping.ts`.
+- [x] The source chain keeps its own result.
+- [x] Snapping behaves exactly as for any other node (§8.3) — no special case in `snapping.ts`.
 
 ### P6.8 — Palette accessibility validation
 

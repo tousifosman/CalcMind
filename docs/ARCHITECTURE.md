@@ -690,6 +690,11 @@ This is the single most important interaction in the app: it turns "I have an an
 now I keep working with it" in one keystroke, and it is what produces the linked trees that make
 the canvas worth having.
 
+**The other path is drag-to-link (§11).** Dragging result `R` onto another chain (or onto a free
+node to form a new chain) uses the same §8.3 snap outcomes — no special case in `snapping.ts` —
+but the commit inserts a fresh **reference** to `R` rather than moving `R`. The source chain keeps
+its result; a miss (no candidate) cancels so `R` never becomes a free node.
+
 ### 8.8 Value slider
 
 Selecting a number raises a slider in a popover anchored beneath its cell, with the range endpoints
@@ -865,6 +870,8 @@ flowchart TD
   `CircularReference`; the rest of the document keeps working.
 - Deleting a node that references are pointing at leaves those references in a
   `DanglingReference` state rather than cascading deletes into the user's other work.
+- References are created two ways: continuation (§8.7) and **dragging a result** into another
+  chain (same §8.3 snap outcomes; the commit inserts a reference and leaves the result in place).
 
 `src/engine/graph.ts` owns the cascade: `buildDependencyGraph` / `topologicalOrder`
 (vertices are chains; edges keyed `(sourceNodeId, referenceNodeId)`, §11.1), and

@@ -100,8 +100,9 @@ export function createResultNode(position: Vec2, sourceChainId: ChainId): Result
   };
 }
 
-/** Reference to another node's live value (§6, §8.7). Created by continuation (P4.9);
- *  identity hue from `engine/identity.ts` (P6.5); dangling recovery is P6.4. */
+/** Reference to another node's live value (§6, §8.7). Created by continuation (P4.9)
+ *  or by dragging a result into a chain (P6.7); identity hue from `engine/identity.ts`
+ *  (P6.5); dangling recovery is P6.4. */
 export function createReferenceNode(position: Vec2, targetNodeId: NodeId): ReferenceNode {
   return {
     id: createNodeId(),

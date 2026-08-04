@@ -2,7 +2,7 @@
 // can be table-tested without a gesture runtime (jest mocks RNGH — see journal 2026-08-03).
 import { DETACH_DISTANCE } from '../chains/bounds';
 import type { SnapOutcome } from '../chains/snapping';
-import type { Vec2 } from '../model/types';
+import type { ChainId, NodeKind, Vec2 } from '../model/types';
 
 /** §8.2 MovingChain threshold (ms). Compared against time from touch-down (`onBegin`)
  *  to pan activation (`onStart`, after `minDistance` is crossed) — so it mixes still
@@ -71,12 +71,30 @@ export function resolveNodeDragMode(args: {
   return heldLong ? 'detachMember' : 'moveChain';
 }
 
+/**
+ * `chainId` written onto the mid-drag snap probe (§8.2 / P6.7).
+ *
+ * Ordinary members null out once past `DETACH_DISTANCE` so the vacated chain can
+ * become a neighbour again (hysteresis stops an immediate re-snap). Results keep
+ * their store `chainId` even when "detached" in the session — own-chain stays
+ * excluded from candidates, and a miss cancels rather than freeing R.
+ */
+export function snapProbeChainId(args: {
+  storeChainId: ChainId | null;
+  detached: boolean;
+  kind: NodeKind;
+}): ChainId | null {
+  if (args.detached && args.kind !== 'result') return null;
+  return args.storeChainId;
+}
+
 /** Map end-of-drag geometry onto a single commit action for free / detachMember modes.
  *  `moveChain` commits are handled by the gesture (anchor = homeAnchor + delta) and
  *  never go through snap/detach.
  *
  *  - A snap candidate always wins (P3.3 already applied hysteresis / nearest).
- *  - A chained member that crossed detach with no candidate becomes free at `position`.
+ *  - A chained member that crossed detach with no candidate becomes free at `position`,
+ *    except a **result** (P6.7): miss cancels so the source chain keeps R.
  *  - A free node with no candidate just moves.
  *  - A chained member that never crossed detach and has no candidate cancels: the
  *    finger releases and the node stays in its chain (no store write). */
@@ -85,11 +103,14 @@ export function decideDragRelease(args: {
   detached: boolean;
   candidate: SnapOutcome | null;
   position: Vec2;
+  /** P6.7: results are never free-floating — a miss cancels instead of detaching. */
+  isResult?: boolean;
 }): DragReleaseDecision {
   if (args.candidate) {
     return { kind: 'snap', outcome: args.candidate };
   }
   if (args.wasChained && args.detached) {
+    if (args.isResult) return { kind: 'cancel' };
     return { kind: 'detach', position: args.position };
   }
   if (!args.wasChained) {
