@@ -361,12 +361,12 @@ order is the truth and is never re-derived from `x`).
 **Touches.** `src/chains/snapping.ts`.
 **Depends on.** P3.2.
 
-- [ ] Pure function returning one of `PREPEND` / `APPEND` / `INSERT_AT(chain, i)` /
+- [x] Pure function returning one of `PREPEND` / `APPEND` / `INSERT_AT(chain, i)` /
       `NEW_CHAIN[a, b]` / none. **The nearest candidate wins** (§8.3).
-- [ ] Implements §8.3's rules for chains *and* for free nodes, including which side a new chain
+- [x] Implements §8.3's rules for chains *and* for free nodes, including which side a new chain
       orders its two members on.
-- [ ] Thresholds are named constants in world units, imported — never inlined at a comparison.
-- [ ] Table-driven tests at each threshold boundary, including the hysteresis case: because
+- [x] Thresholds are named constants in world units, imported — never inlined at a comparison.
+- [x] Table-driven tests at each threshold boundary, including the hysteresis case: because
       `DETACH_DISTANCE > SNAP_DISTANCE` (§8.2), a member dragged just past detach must **not**
       immediately re-snap into the slot it just left.
 
