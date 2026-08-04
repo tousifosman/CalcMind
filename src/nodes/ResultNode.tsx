@@ -3,14 +3,26 @@
 // dot texture is decorative, deferred to P7.3 (decision #9). Read-only-ness itself is enforced
 // where every mutation has to pass regardless of which view is on screen: `setNodeRaw`
 // (store/commands.ts) throws rather than silently no-opping when the target isn't a number node.
+//
+// §10.4 / §9 presentation: successful values render normally; `stale` keeps the previous value
+// dimmed rather than flashing empty; engine errors render as explanations from
+// `explainEngineError`, never as a bare glyph (§11.2).
 import React from 'react';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
 import { rolePalette, glyphColor } from '../ui/tokens';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
+import { resultCellContent } from '../engine/errors';
 import { Cell, glyphTextStyle } from './Cell';
+
+/** Opacity for a §9 Stale result — previous value stays readable but clearly not current. */
+export const STALE_RESULT_OPACITY = 0.45;
+
+/** Slightly smaller than numeral glyphs so a multi-word explanation fits the cell without
+ *  looking like a number that failed to parse. Still weight 800 so it reads as cell content. */
+const ERROR_FONT_SIZE = 16;
 
 interface ResultNodeProps {
   id: NodeId;
@@ -22,6 +34,15 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
 
   const locale = getDeviceLocale();
   const palette = rolePalette.result;
+  const content = resultCellContent(node.derived);
+
+  const textStyle =
+    content.mode === 'error'
+      ? [styles.errorGlyph, { color: glyphColor }]
+      : [
+          glyphTextStyle,
+          { color: glyphColor, opacity: content.mode === 'stale' ? STALE_RESULT_OPACITY : 1 },
+        ];
 
   return (
     <Cell
@@ -31,11 +52,25 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
       border={palette.border}
       label={node.label}
     >
-      <Text style={[glyphTextStyle, { color: glyphColor }]} numberOfLines={1}>
-        {node.derived?.display ?? ''}
+      <Text
+        testID={`result-node-${id}-content`}
+        accessibilityLabel={content.text === '' ? undefined : content.text}
+        style={textStyle}
+        numberOfLines={1}
+      >
+        {content.text}
       </Text>
     </Cell>
   );
 }
 
 export const ResultNode = React.memo(ResultNodeComponent);
+
+const styles = StyleSheet.create({
+  errorGlyph: {
+    fontSize: ERROR_FONT_SIZE,
+    fontWeight: '800',
+    marginTop: 0,
+    paddingHorizontal: 4,
+  },
+});

@@ -75,6 +75,18 @@ describe('widthOf: the nodeHeight floor', () => {
     const width = widthOf(resultNode('123456789012'), 'en-US');
     expect(width).toBeGreaterThan(tokens.nodeHeight);
   });
+
+  test('a result in an error outcome sizes against the explanation, not the cached display', () => {
+    const node = resultNode('1');
+    node.derived = {
+      display: '1',
+      computedAt: '2026-08-04T00:00:00.000Z',
+      outcome: { status: 'error', error: 'DivideByZero' },
+    };
+    const errorWidth = widthOf(node, 'en-US');
+    const shortValueWidth = widthOf(resultNode('1'), 'en-US');
+    expect(errorWidth).toBeGreaterThan(shortValueWidth);
+  });
 });
 
 describe('widthOf: measures the displayed string, not the raw one', () => {

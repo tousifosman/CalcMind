@@ -468,8 +468,31 @@ export interface ResultNode extends NodeBase {
   sourceChainId: ChainId;
   /** CACHE ONLY — never trusted. Recomputed on load; lets us paint before the
    *  engine has run and makes saved files human-readable. Engine output always wins. */
-  derived?: { display: string; computedAt: string };
+  derived?: ResultDerived;
 }
+
+/** What the result cell last painted (§9, §10.4). `display` holds the numeric string for a
+ *  successful value (and the previous value kept under `stale`); an `error` outcome is
+ *  rendered as an explanation, never as `display` and never as a bare glyph (§11.2). */
+export interface ResultDerived {
+  display: string;
+  computedAt: string;
+  /** Absent → successful value. Written by the recompute lifecycle (P4.7–P4.8). */
+  outcome?: ResultOutcome;
+}
+
+export type ResultOutcome =
+  | { status: 'stale' }
+  | { status: 'error'; error: EngineErrorKind };
+
+/** The six error kinds §10.4 lists. */
+export type EngineErrorKind =
+  | 'Incomplete'
+  | 'InvalidSequence'
+  | 'DivideByZero'
+  | 'Overflow'
+  | 'NotANumber'
+  | 'CircularReference';
 
 /** Phase 6. Declared in v1 of the schema so adding linking is not a breaking migration. */
 export interface ReferenceNode extends NodeBase {

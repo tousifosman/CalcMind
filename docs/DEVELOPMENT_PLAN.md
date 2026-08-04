@@ -67,7 +67,7 @@ flowchart LR
 | ~~**P1**~~ | ~~Canvas pan/zoom~~ | — | **Done** — `08de0fc` |
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
-| **P4** | Engine | 9 | **5/9** — P4.1–P4.5 done; P4.6–P4.9 next |
+| **P4** | Engine | 9 | **6/9** — P4.1–P4.6 done; P4.7–P4.9 next |
 | **P5** | Persistence | 8 | Blocked on P4 |
 | **P6** | Linking | 8 | Blocked on P4, parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
@@ -541,7 +541,7 @@ flowchart LR
     style P43 fill:#22A75B,color:#fff
     style P44 fill:#22A75B,color:#fff
     style P45 fill:#22A75B,color:#fff
-    style P46 fill:#F0A020,color:#fff
+    style P46 fill:#22A75B,color:#fff
     style P47 fill:#F0A020,color:#fff
     style P48 fill:#8892A0,color:#fff
     style P49 fill:#8892A0,color:#fff
@@ -636,12 +636,12 @@ punctuated).
 **Touches.** `src/nodes/ResultNode.tsx`, `src/engine/errors.ts`.
 **Depends on.** P4.5, P2.4.
 
-- [ ] `Incomplete`, `InvalidSequence`, `DivideByZero`, `Overflow`, `NotANumber` each render
+- [x] `Incomplete`, `InvalidSequence`, `DivideByZero`, `Overflow`, `NotANumber` each render
       distinguishably. `CircularReference` needs the graph and lands with P6.3.
-- [ ] A `Stale` result keeps showing its previous value **dimmed** rather than flashing empty (§9).
-- [ ] No error is rendered as a bare glyph — §11.2 is the design's sharpest criticism of the
+- [x] A `Stale` result keeps showing its previous value **dimmed** rather than flashing empty (§9).
+- [x] No error is rendered as a bare glyph — §11.2 is the design's sharpest criticism of the
       reference app and applies to engine errors, not just broken links.
-- [ ] A component test per state.
+- [x] A component test per state.
 
 ### P4.7 — Result node lifecycle
 
