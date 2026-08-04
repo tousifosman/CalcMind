@@ -179,11 +179,12 @@ describe('autosave lifecycle listeners', () => {
   test('AppState background force-flushes', async () => {
     const { controller, writes } = makeHarness();
     const listeners: Array<(state: string) => void> = [];
-    const addEventListener = jest.spyOn(
-      require('react-native').AppState,
-      'addEventListener',
-    );
-    addEventListener.mockImplementation((_type: string, cb: (s: string) => void) => {
+    const { AppState } = require('react-native') as {
+      AppState: { addEventListener: (...args: unknown[]) => { remove: () => void } };
+    };
+    const addEventListener = jest.spyOn(AppState, 'addEventListener');
+    addEventListener.mockImplementation((...args: unknown[]) => {
+      const cb = args[1] as (s: string) => void;
       listeners.push(cb);
       return { remove: jest.fn() };
     });

@@ -61,12 +61,20 @@ export function createAutosave(deps: AutosaveDeps): AutosaveController {
     }
   }
 
+  /** Fire-and-forget flush for timers / lifecycle (avoids `void` / no-void). */
+  function fireFlush(): void {
+    flush().then(
+      () => undefined,
+      () => undefined,
+    );
+  }
+
   function schedule(): void {
     if (disposed || suppressed || !dirty) return;
     clearTimer();
     timer = setTimeout(() => {
       timer = null;
-      void flush();
+      fireFlush();
     }, debounceMs);
   }
 
@@ -123,7 +131,7 @@ export function createAutosave(deps: AutosaveDeps): AutosaveController {
       'change',
       next => {
         if (next === 'background' || next === 'inactive') {
-          void flush();
+          fireFlush();
         }
       },
     );
@@ -135,11 +143,11 @@ export function createAutosave(deps: AutosaveDeps): AutosaveController {
     if (webWindow?.addEventListener) {
       const onVisibility = (): void => {
         if (webWindow.document?.visibilityState === 'hidden') {
-          void flush();
+          fireFlush();
         }
       };
       const onPageHide = (): void => {
-        void flush();
+        fireFlush();
       };
       webWindow.addEventListener('visibilitychange', onVisibility);
       webWindow.addEventListener('pagehide', onPageHide);
