@@ -69,3 +69,13 @@ describe('setViewport', () => {
     expect(useDocumentStore.getState().document.viewport.zoom).toBe(ZOOM_MIN);
   });
 });
+
+describe('applyCommand recomputeSeeds (P4.8)', () => {
+  test('throws when recomputeSeeds is set without a locale', () => {
+    expect(() =>
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.name = 'x';
+      }, { recomputeSeeds: ['c1'] }),
+    ).toThrow(/locale is required/);
+  });
+});

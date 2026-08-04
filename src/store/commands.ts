@@ -13,7 +13,6 @@ import {
   createOperatorNode,
   createParenNode,
   createEqualsNode,
-  createResultNode,
   createChainId,
 } from '../model/factories';
 import { CalcDocument, CalcNode, Chain, ChainId, NodeId, OperatorSymbol, ParenSide, Vec2 } from '../model/types';
@@ -21,7 +20,7 @@ import { layoutChain } from '../chains/layout';
 import { widthOf } from '../chains/measure';
 import type { SnapOutcome } from '../chains/snapping';
 import { getDeviceLocale } from '../ui/locale';
-import { computeChain } from '../engine/compute';
+import { recomputeFromSeeds } from '../engine/graph';
 
 export function renameDocument(name: string): void {
   useDocumentStore.getState().applyCommand((draft) => {
@@ -104,59 +103,11 @@ function removeResultNodesForChain(draft: CalcDocument, chainId: ChainId): void 
   }
 }
 
-/** §9 Valid → Evaluated: when a chain has `=` and is structurally Evaluated, ensure a
- *  ResultNode exists with `sourceChainId` set. `derived` is written from `computeChain`
- *  as a cache only — never read back as an input (§6, §12.1). Recompute-on-edit is P4.8;
- *  this only creates when missing. */
-function ensureResultNodeForChain(draft: CalcDocument, chainId: ChainId): void {
-  const chain = draft.chains[chainId];
-  if (!chain) return;
-
-  for (const node of Object.values(draft.nodes)) {
-    if (node.kind === 'result' && node.sourceChainId === chainId) {
-      return;
-    }
-  }
-
-  const locale = getDeviceLocale();
-  const computed = computeChain(chain, draft.nodes, locale);
-  if (computed === null) {
-    // Not Evaluated (Incomplete / Invalid / Valid without going through `=` — but we
-    // only call this when `=` is present, so Incomplete/Invalid). No result yet (§9).
-    return;
-  }
-
-  const result = createResultNode({ x: 0, y: 0 }, chainId);
-  result.chainId = chainId;
-  const computedAt = new Date().toISOString();
-  if (computed.ok) {
-    result.derived = {
-      display: computed.display,
-      computedAt,
-    };
-  } else {
-    // P4.6's resultCellContent needs `outcome: error` to show the explanation —
-    // an unset `derived` paints a blank cell (§10.4 / PR #68 review).
-    result.derived = {
-      display: '',
-      computedAt,
-      outcome: { status: 'error', error: computed.error.kind },
-    };
-  }
-
-  draft.nodes[result.id] = result;
-  const equalsIndex = chain.members.findIndex((id) => draft.nodes[id]?.kind === 'equals');
-  if (equalsIndex >= 0) {
-    chain.members.splice(equalsIndex + 1, 0, result.id);
-  } else {
-    chain.members.push(result.id);
-  }
-}
-
 /** §8.3 bookkeeping after a chain's `members` changed, in the same commit as the
- *  mutation: drop orphaned results if `=` is gone; delete an empty chain; dissolve a
- *  single-member chain (sole member becomes free with its current `position`
- *  authoritative); otherwise re-flow. */
+ *  mutation: drop orphaned results if `=` is gone; otherwise recompute the chain's
+ *  result via the dirty-set path (P4.8 / §11 — create, update, or remove); delete an
+ *  empty chain; dissolve a single-member chain (sole member becomes free with its
+ *  current `position` authoritative); otherwise re-flow. */
 function finalizeChain(draft: CalcDocument, chainId: ChainId): void {
   const chain = draft.chains[chainId];
   if (!chain) return;
@@ -165,16 +116,23 @@ function finalizeChain(draft: CalcDocument, chainId: ChainId): void {
   if (!hasEquals) {
     removeResultNodesForChain(draft, chainId);
   } else {
-    ensureResultNodeForChain(draft, chainId);
+    // Nested inside an existing applyCommand recipe, so call the graph directly
+    // rather than via applyCommand's recomputeSeeds option (that option is for
+    // top-level recipes that don't already own the draft — e.g. setNodeRaw).
+    recomputeFromSeeds(draft, [chainId], getDeviceLocale());
   }
 
-  if (chain.members.length === 0) {
+  // Recompute may have added/removed a result member — re-read after it.
+  const after = draft.chains[chainId];
+  if (!after) return;
+
+  if (after.members.length === 0) {
     delete draft.chains[chainId];
     return;
   }
 
-  if (chain.members.length === 1) {
-    const soleId = chain.members[0];
+  if (after.members.length === 1) {
+    const soleId = after.members[0];
     const sole = draft.nodes[soleId];
     if (sole) sole.chainId = null;
     delete draft.chains[chainId];
@@ -295,13 +253,21 @@ export function setNodeRaw(nodeId: NodeId, raw: string): void {
     lastRawEdit.stackLength === stackLengthBefore &&
     now - lastRawEdit.at < RAW_EDIT_COALESCE_WINDOW_MS;
 
+  // Recompute + reflow in one recipe so a keystroke updates the result and the
+  // flush layout before the commit lands (§11 same-turn rule, §8.1). The store's
+  // `recomputeSeeds` option is the same `recomputeFromSeeds` call for callers
+  // that don't own nested bookkeeping (P5 load); setNodeRaw goes through the
+  // graph directly because it must reflow *after* the result width changes.
+  const locale = getDeviceLocale();
+
   store.applyCommand((draft) => {
     const node = draft.nodes[nodeId];
     if (!node || node.kind !== 'number') return;
     node.raw = raw;
-    // A raw edit can change the node's widthOf (§8.1), so the chain it belongs to - if
-    // any - must re-flow in this same commit, or a frame could render a stale layout.
-    if (node.chainId !== null) reflowChain(draft, node.chainId);
+    if (node.chainId !== null) {
+      recomputeFromSeeds(draft, [node.chainId], locale);
+      if (draft.chains[node.chainId]) reflowChain(draft, node.chainId);
+    }
   });
 
   if (useDocumentStore.getState().undoStack.length === stackLengthBefore) {

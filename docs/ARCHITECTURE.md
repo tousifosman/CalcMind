@@ -853,6 +853,11 @@ flowchart TD
 - Deleting a node that references are pointing at leaves those references in a
   `DanglingReference` state rather than cascading deletes into the user's other work.
 
+P4.8 lands the single-chain half in `src/engine/graph.ts`: `dirtyClosure(seed)` currently
+returns the seed itself, and `recomputeFromSeeds` marks stale then evaluates that set in one
+turn via `documentStore.applyCommand`'s `recomputeSeeds` option (or directly from chain
+finalisation). P6.2 widens `dirtyClosure` only — callers and the store API stay put.
+
 ### 11.1 Identity hues: the visual language of a link
 
 Tydlig's cleverest idea (§1.3) and worth taking wholesale: **a link is communicated by colour
