@@ -710,6 +710,62 @@ the store — which is why `src/model/schema.ts` was written back in P0.
 
 Depends only on P4 and runs in parallel with P6.
 
+```mermaid
+flowchart LR
+    P4EXIT(["P4 phase exit<br/>#58"])
+    P31["P3.1<br/>Chain layout<br/>#37"]
+    P48["P4.8<br/>Recompute on edit<br/>#56"]
+    P51["P5.1<br/>Serialiser<br/>#73"]
+    P52["P5.2<br/>Load validation<br/>#75"]
+    P53["P5.3<br/>Storage adapter<br/>#74"]
+    P54["P5.4<br/>Web adapter<br/>#76"]
+    P55["P5.5<br/>Load pipeline<br/>#78"]
+    P56["P5.6<br/>Autosave<br/>#77"]
+    P57["P5.7<br/>Migration harness<br/>#79"]
+    P58["P5.8<br/>Export + import<br/>#80"]
+    EXIT(["Phase exit check<br/>#81"])
+
+    P4EXIT --> P51
+    P4EXIT --> P53
+    P51 --> P52
+    P53 --> P54
+    P52 --> P55
+    P53 --> P55
+    P31 --> P55
+    P48 --> P55
+    P51 --> P56
+    P53 --> P56
+    P52 --> P57
+    P54 --> P58
+    P55 --> EXIT
+    P56 --> EXIT
+    P57 --> EXIT
+    P58 --> EXIT
+
+    style P4EXIT fill:#8892A0,color:#fff
+    style P31 fill:#22A75B,color:#fff
+    style P48 fill:#8892A0,color:#fff
+    style P51 fill:#8892A0,color:#fff
+    style P52 fill:#8892A0,color:#fff
+    style P53 fill:#8892A0,color:#fff
+    style P54 fill:#8892A0,color:#fff
+    style P55 fill:#8892A0,color:#fff
+    style P56 fill:#8892A0,color:#fff
+    style P57 fill:#8892A0,color:#fff
+    style P58 fill:#8892A0,color:#fff
+    style EXIT fill:#7030A0,color:#fff
+```
+
+Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
+gate. Neither `P5.1` nor `P5.3` carries a task-level dependency of its own — the phase text above
+just says "depends only on P4" — but the plan sequences both behind P4's own phase-exit check
+rather than jumping the queue the moment either task's box would otherwise look open, shown here
+as a gate from P4's tracking issue rather than an individual P4 subtask. `P5.5` is the one task
+that reaches outside the phase for real, task-level dependencies: `P3.1` (chain layout, already
+done) and `P4.8` (recompute on edit, not yet). Kept current by hand alongside the
+acceptance-criteria boxes below — if a task's status here disagrees with its boxes, the boxes win
+and this diagram is stale.
+
 ### P5.1 — Serialiser
 
 **Objective.** Document → the §12.1 JSON, byte-stably.
