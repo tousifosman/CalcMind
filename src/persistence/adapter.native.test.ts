@@ -207,3 +207,39 @@ describe('native atomic write (§12.3)', () => {
     expect(list[0].id).toBe('doc_1');
   });
 });
+
+describe('native export (P5.8)', () => {
+  test('exportDocument writes a cache copy and opens the share sheet', async () => {
+    const { Share } = require('react-native') as typeof import('react-native');
+    const shareSpy = jest
+      .spyOn(Share, 'share')
+      .mockResolvedValue({ action: Share.sharedAction } as never);
+
+    const adapter = createNativeStorageAdapter();
+    const json = JSON.stringify({
+      schemaVersion: 1,
+      id: 'doc_1',
+      name: 'Share Me',
+      updatedAt: 't',
+    });
+    await adapter.write('doc_1', json);
+    await adapter.exportDocument?.('doc_1');
+
+    const cachePath = `${fs.CachesDirectoryPath}/Share Me.calcmind.json`;
+    expect(fs.__getFiles().get(cachePath)).toBe(json);
+    expect(shareSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: `file://${cachePath}`,
+        title: 'Share Me.calcmind.json',
+        message: json,
+      }),
+    );
+    shareSpy.mockRestore();
+  });
+
+  test('native adapter has export but not importDocument', () => {
+    const adapter = createNativeStorageAdapter();
+    expect(typeof adapter.exportDocument).toBe('function');
+    expect(adapter.importDocument).toBeUndefined();
+  });
+});

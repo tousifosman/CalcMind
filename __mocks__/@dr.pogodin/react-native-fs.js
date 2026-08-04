@@ -53,6 +53,8 @@ function ensureParentExists(_path) {
 
 const api = {
   DocumentDirectoryPath: DOC_ROOT,
+  CachesDirectoryPath: '/mock/caches',
+  TemporaryDirectoryPath: '/mock/tmp',
 
   async exists(filepath) {
     return files.has(filepath) || [...files.keys()].some(k => k.startsWith(filepath + '/'));

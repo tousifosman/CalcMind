@@ -71,7 +71,7 @@ flowchart LR
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
-| **P5** | Persistence | 8 | In progress — P5.1–P5.3, P5.5, P5.7 done; P5.4 / P5.6 / P5.8 remain |
+| **P5** | Persistence | 8 | In progress — P5.1–P5.5, P5.7–P5.8 done; P5.6 (autosave) remains |
 | **P6** | Linking | 8 | In progress — P6.1 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
@@ -761,11 +761,11 @@ flowchart LR
     style P51 fill:#22A75B,color:#fff
     style P52 fill:#22A75B,color:#fff
     style P53 fill:#22A75B,color:#fff
-    style P54 fill:#E8A838,color:#fff
+    style P54 fill:#22A75B,color:#fff
     style P55 fill:#22A75B,color:#fff
     style P56 fill:#E8A838,color:#fff
     style P57 fill:#22A75B,color:#fff
-    style P58 fill:#8892A0,color:#fff
+    style P58 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
@@ -773,10 +773,10 @@ Green = done, amber = ready to start, grey = blocked on a dependency, purple = t
 gate. Neither `P5.1` nor `P5.3` carries a task-level dependency of its own — the phase text above
 just says "depends only on P4" — but the plan sequences both behind P4's own phase-exit check
 rather than jumping the queue the moment either task's box would otherwise look open, shown here
-as a gate from P4's tracking issue rather than an individual P4 subtask. `P5.2` / `P5.5` /
-`P5.7` done; `P5.4` and `P5.6` remain independently ready; `P5.8` still waits on `P5.4`. Kept
-current by hand alongside the acceptance-criteria boxes below — if a task's status here
-disagrees with its boxes, the boxes win and this diagram is stale.
+as a gate from P4's tracking issue rather than an individual P4 subtask. Only `P5.6` (autosave)
+remains before the phase-exit check. Kept current by hand alongside the acceptance-criteria
+boxes below — if a task's status here disagrees with its boxes, the boxes win and this diagram
+is stale.
 
 ### P5.1 — Serialiser
 
@@ -827,6 +827,9 @@ barrier before rename (Android closes/flushes the stream; see journal). Shared b
 contract tests live in `adapter.sharedTests.ts` for P5.4 to reuse against the web adapter.
 `readBackup` is optional on the adapter; the native implementation exposes it so P5.5 can
 recover when the primary is missing or corrupt without extending `read()` beyond §12.2.
+Native `exportDocument` uses React Native's built-in `Share` (cache file + `file://` URL);
+native `importDocument` is deferred (no cross-platform picker without a new dependency) —
+web covers import, and `importDocumentThroughPipeline` reports `unsupported` when absent.
 
 ### P5.4 — Web adapter
 
@@ -835,10 +838,10 @@ recover when the primary is missing or corrupt without extending `read()` beyond
 **Touches.** `src/persistence/adapter.web.ts`.
 **Depends on.** P5.3.
 
-- [ ] IndexedDB via `idb-keyval`; its transactions give atomicity for free (§12.3).
-- [ ] Resolves through webpack's existing `.web.ts` extension order with **no config change**
+- [x] IndexedDB via `idb-keyval`; its transactions give atomicity for free (§12.3).
+- [x] Resolves through webpack's existing `.web.ts` extension order with **no config change**
       (§5.1) — verify this rather than assuming it, and if a change is needed, that is a finding.
-- [ ] The same behavioural test suite passes against both adapters.
+- [x] The same behavioural test suite passes against both adapters.
 
 ### P5.5 — Load pipeline
 
@@ -895,10 +898,10 @@ too).
 **Touches.** `adapter.native.ts`, `adapter.web.ts`.
 **Depends on.** P5.4.
 
-- [ ] Native: export through the OS share sheet.
-- [ ] Web: export as a `Blob` download; import via `<input type="file">`, upgrading to the File
+- [x] Native: export through the OS share sheet.
+- [x] Web: export as a `Blob` download; import via `<input type="file">`, upgrading to the File
       System Access API where available.
-- [ ] Imported files go through the **full** P5.5 validation path. No shortcut for "our own"
+- [x] Imported files go through the **full** P5.5 validation path. No shortcut for "our own"
       format — an exported file is still untrusted on the way back in.
 
 ### Phase exit check — P5

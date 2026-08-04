@@ -8,6 +8,7 @@
 // the native writer closes the handle (Android explicitly notes the stream is
 // flushed on close); that completion is the durability barrier before rename.
 import {
+  CachesDirectoryPath,
   DocumentDirectoryPath,
   exists,
   mkdir,
@@ -18,9 +19,11 @@ import {
   unlink,
   writeFile,
 } from '@dr.pogodin/react-native-fs';
+import { Share } from 'react-native';
 
 import type { DocumentMeta, StorageAdapter } from './adapter';
 import { assertSafeDocumentId, isSafeDocumentId } from './documentId';
+import { fileNameForExport } from './transfer';
 
 export type { DocumentMeta, StorageAdapter };
 export { assertSafeDocumentId, isSafeDocumentId } from './documentId';
@@ -150,6 +153,26 @@ async function removeDocument(id: string): Promise<void> {
   await unlinkIfExists(tmpPath(id));
 }
 
+/**
+ * Export through the OS share sheet (§12.2). Writes a cache copy then hands its
+ * `file://` URL to `Share.share` so the sheet can offer Files / Mail / etc.
+ * (React Native's built-in Share — no extra dependency.)
+ */
+async function exportDocument(id: string): Promise<void> {
+  const json = await readDocument(id);
+  const filename = fileNameForExport(json, id);
+  const cachePath = `${CachesDirectoryPath}/${filename}`;
+  await writeFile(cachePath, json, 'utf8');
+  const url = cachePath.startsWith('file://') ? cachePath : `file://${cachePath}`;
+  await Share.share({ url, message: json, title: filename });
+}
+
+/**
+ * Native import is not wired in v1 — there is no cross-platform file picker in
+ * core React Native without an extra dependency. Web owns `importDocument`
+ * (P5.8); native can grow a document-picker later behind the same optional
+ * method. `importDocumentThroughPipeline` reports `unsupported` when absent.
+ */
 export function createNativeStorageAdapter(): StorageAdapter {
   return {
     list: listDocuments,
@@ -157,6 +180,7 @@ export function createNativeStorageAdapter(): StorageAdapter {
     write: atomicWrite,
     remove: removeDocument,
     readBackup: readBackupDocument,
+    exportDocument,
   };
 }
 
