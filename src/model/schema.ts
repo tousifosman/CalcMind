@@ -77,6 +77,8 @@ const referenceNodeSchema = z.object({
   ...nodeBaseSchema,
   kind: z.literal('reference'),
   targetNodeId: z.string(),
+  /** Stamped when the target is deleted (§11.2); absent on live references. */
+  lastKnownDisplay: z.string().optional(),
 });
 
 export const calcNodeSchema = z.discriminatedUnion('kind', [

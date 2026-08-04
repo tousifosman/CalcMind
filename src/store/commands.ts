@@ -23,6 +23,13 @@ import type { SnapOutcome } from '../chains/snapping';
 import { getDeviceLocale } from '../ui/locale';
 import { tokens } from '../ui/tokens';
 import { dirtyClosure, recomputeFromSeeds, removeResultNodesForChain } from '../engine/graph';
+import {
+  deleteNodesLeavingDanglingRefs,
+  isDanglingReference,
+  isRepointTarget,
+  referenceDisplayText,
+} from '../engine/reference';
+import { parseComputedDisplay } from '../engine/format';
 
 export function renameDocument(name: string): void {
   useDocumentStore.getState().applyCommand((draft) => {
@@ -107,7 +114,7 @@ function finalizeChain(draft: CalcDocument, chainId: ChainId): void {
     recomputeFromSeeds(draft, [chainId], getDeviceLocale());
     dirtyAfterCompute = dirtyClosure(draft, [chainId]);
   } else {
-    removeResultNodesForChain(draft, chainId);
+    removeResultNodesForChain(draft, chainId, getDeviceLocale());
   }
 
   // Recompute may have added/removed a result member — re-read after it.
@@ -352,7 +359,9 @@ export function deleteNode(nodeId: NodeId): void {
     const node = draft.nodes[nodeId];
     if (!node) return;
     const chainId = node.chainId;
-    delete draft.nodes[nodeId];
+    // Stamp consumers first so they keep the last known value under §11.2 —
+    // never cascade-delete references that pointed here (§11 / P6.4).
+    deleteNodesLeavingDanglingRefs(draft, [nodeId], getDeviceLocale());
 
     if (chainId !== null) {
       const chain = draft.chains[chainId];
@@ -365,10 +374,74 @@ export function deleteNode(nodeId: NodeId): void {
 }
 
 /**
+ * Break a reference into a plain number, freezing the live (or last-known) value
+ * (§8.6 `Unlink from parent`, §11.2 convert-to-number). One undo entry.
+ * Distinct from {@link unlinkReference}, which deletes the reference (P6.3 cycle Unlink).
+ */
+export function unlinkFromParent(referenceId: NodeId): void {
+  useDocumentStore.getState().applyCommand((draft) => {
+    replaceReferenceWithNumber(draft, referenceId);
+  });
+}
+
+/**
+ * Re-point a reference at another value (§11.2). Clears any dangling stamp.
+ * No-op when the new target is missing or not a value node.
+ */
+export function repointReference(referenceId: NodeId, newTargetId: NodeId): void {
+  useDocumentStore.getState().applyCommand((draft) => {
+    const ref = draft.nodes[referenceId];
+    if (!ref || ref.kind !== 'reference') return;
+    if (!isRepointTarget(newTargetId, draft.nodes, referenceId)) return;
+    ref.targetNodeId = newTargetId;
+    delete ref.lastKnownDisplay;
+    if (ref.chainId !== null) {
+      finalizeChain(draft, ref.chainId);
+    }
+  });
+}
+
+/** Shared body for unlink-from-parent / convert-dangling-to-number. Mutates `draft` in place. */
+function replaceReferenceWithNumber(draft: CalcDocument, referenceId: NodeId): void {
+  const ref = draft.nodes[referenceId];
+  if (!ref || ref.kind !== 'reference') return;
+
+  const locale = getDeviceLocale();
+  const display =
+    referenceDisplayText(ref, draft.nodes, locale) ||
+    (isDanglingReference(ref, draft.nodes) ? (ref.lastKnownDisplay ?? '') : '');
+  let raw = '';
+  if (display !== '') {
+    try {
+      raw = parseComputedDisplay(display, locale).toFixed();
+    } catch {
+      // Unparseable stamp (e.g. an error explanation was somehow stored) — freeze
+      // as empty rather than inventing a number the user never saw.
+      raw = '';
+    }
+  }
+
+  const number = createNumberNode({ ...ref.position }, raw);
+  number.chainId = ref.chainId;
+  if (ref.label !== undefined) number.label = ref.label;
+
+  delete draft.nodes[referenceId];
+  draft.nodes[number.id] = number;
+
+  if (ref.chainId !== null) {
+    const chain = draft.chains[ref.chainId];
+    if (chain) {
+      chain.members = chain.members.map((id) => (id === referenceId ? number.id : id));
+      finalizeChain(draft, ref.chainId);
+    }
+  }
+}
+
+/**
  * Break a reference link by deleting the reference node (§11.2). Used by the
- * CircularReference Unlink affordance (P6.3) on the DFS closing edge; P6.4's
- * long-press `Unlink from parent` will share this path. One undo entry via
- * {@link deleteNode}.
+ * CircularReference Unlink affordance (P6.3) on the DFS closing edge. Long-press
+ * `Unlink from parent` is {@link unlinkFromParent} (freeze as number) — a different
+ * action. One undo entry via {@link deleteNode}.
  */
 export function unlinkReference(referenceNodeId: NodeId): void {
   const node = useDocumentStore.getState().document.nodes[referenceNodeId];

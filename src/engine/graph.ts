@@ -17,6 +17,7 @@ import type {
 } from '../model/types';
 import { validateChain } from './validate';
 import { computeChain } from './compute';
+import { deleteNodesLeavingDanglingRefs } from './reference';
 
 /** One reference link. Keyed by `(sourceNodeId, referenceNodeId)` — never by
  *  source alone, because one value commonly feeds several consumers (§11.1,
@@ -89,8 +90,8 @@ function chainOfSource(node: CalcNode, document: CalcDocument): ChainId | null {
  * (§11). Pure: reads `document.nodes` / `document.chains` only.
  *
  * Dangling targets (missing node, or target with no chain) and free references
- * (`chainId === null`) contribute no edge — P6.4 owns the dangling UI state;
- * the graph simply has nothing to wire.
+ * (`chainId === null`) contribute no edge — P6.4 stamps `lastKnownDisplay` and
+ * owns the struck-through UI; the graph simply has nothing to wire.
  *
  * An edge means "B reads a node in A," not "the reference evaluates successfully."
  * Pointing at an operator or paren still wires the chain edge even though
@@ -397,8 +398,15 @@ export function markChainsStale(draft: CalcDocument, chainIds: readonly ChainId[
  * Delete every result whose `sourceChainId` is `chainId`, and drop those ids from
  * `chain.members` if the chain still exists (§8.3: losing `=` loses the result;
  * also used when recompute finds the chain no longer Evaluated).
+ *
+ * References pointing at the removed results are left in place with
+ * `lastKnownDisplay` stamped (§11 / P6.4) — never cascaded away.
  */
-export function removeResultNodesForChain(draft: CalcDocument, chainId: ChainId): void {
+export function removeResultNodesForChain(
+  draft: CalcDocument,
+  chainId: ChainId,
+  locale: string,
+): void {
   const toDelete: NodeId[] = [];
   for (const [id, node] of Object.entries(draft.nodes)) {
     if (node.kind === 'result' && node.sourceChainId === chainId) {
@@ -407,9 +415,7 @@ export function removeResultNodesForChain(draft: CalcDocument, chainId: ChainId)
   }
   if (toDelete.length === 0) return;
 
-  for (const id of toDelete) {
-    delete draft.nodes[id];
-  }
+  deleteNodesLeavingDanglingRefs(draft, toDelete, locale);
   const chain = draft.chains[chainId];
   if (chain) {
     const drop = new Set(toDelete);
@@ -420,12 +426,15 @@ export function removeResultNodesForChain(draft: CalcDocument, chainId: ChainId)
 /**
  * Write `derived` onto the chain's result node (create / update / dedupe). Shared
  * by the normal compute path and the cycle-colouring path so both keep one
- * result per Evaluated chain.
+ * result per Evaluated chain. Duplicate results are removed via
+ * `deleteNodesLeavingDanglingRefs` so any references to them keep a last-known
+ * stamp (§11 / P6.4).
  */
 function writeChainDerived(
   draft: CalcDocument,
   chainId: ChainId,
   derived: ResultNode['derived'],
+  locale: string,
 ): void {
   const chain = draft.chains[chainId];
   if (!chain || derived === undefined) return;
@@ -433,10 +442,11 @@ function writeChainDerived(
 
   if (existing.length > 0) {
     existing[0]!.derived = derived;
-    for (let i = 1; i < existing.length; i++) {
-      const dupId = existing[i]!.id;
-      delete draft.nodes[dupId];
-      chain.members = chain.members.filter((id) => id !== dupId);
+    if (existing.length > 1) {
+      const dups = existing.slice(1).map((r) => r.id);
+      deleteNodesLeavingDanglingRefs(draft, dups, locale);
+      const drop = new Set(dups);
+      chain.members = chain.members.filter((id) => !drop.has(id));
     }
     return;
   }
@@ -468,6 +478,7 @@ export function markChainCircular(
   chainId: ChainId,
   cycle: DependencyCycle,
   chainLabels: readonly string[],
+  locale: string,
 ): void {
   const chain = draft.chains[chainId];
   if (!chain) return;
@@ -475,7 +486,7 @@ export function markChainCircular(
   const status = validateChain(chain, draft.nodes);
   if (status.status !== 'Evaluated') {
     if (resultNodesForChain(draft, chainId).length > 0) {
-      removeResultNodesForChain(draft, chainId);
+      removeResultNodesForChain(draft, chainId, locale);
     }
     return;
   }
@@ -486,15 +497,20 @@ export function markChainCircular(
     closingReferenceNodeId: cycle.closingEdge.referenceNodeId,
   };
 
-  writeChainDerived(draft, chainId, {
-    display: '',
-    computedAt: new Date().toISOString(),
-    outcome: {
-      status: 'error',
-      error: 'CircularReference',
-      cycle: cycleMeta,
+  writeChainDerived(
+    draft,
+    chainId,
+    {
+      display: '',
+      computedAt: new Date().toISOString(),
+      outcome: {
+        status: 'error',
+        error: 'CircularReference',
+        cycle: cycleMeta,
+      },
     },
-  });
+    locale,
+  );
 }
 
 /**
@@ -520,7 +536,7 @@ export function recomputeChain(
 
   if (computed === null) {
     // Not Evaluated (Incomplete / Invalid / Valid without a live result path).
-    if (existing.length > 0) removeResultNodesForChain(draft, chainId);
+    if (existing.length > 0) removeResultNodesForChain(draft, chainId, locale);
     return;
   }
 
@@ -534,7 +550,7 @@ export function recomputeChain(
           outcome: { status: 'error' as const, error: computed.error.kind },
         };
 
-  writeChainDerived(draft, chainId, derived);
+  writeChainDerived(draft, chainId, derived, locale);
 }
 
 /**
@@ -627,7 +643,7 @@ export function recomputeFromSeeds(
       const labels =
         labelsByCycle.get(cycle) ??
         cycle.chainIds.map((id) => chainCycleLabel(draft, id));
-      markChainCircular(draft, chainId, cycle, labels);
+      markChainCircular(draft, chainId, cycle, labels, locale);
     } else {
       recomputeChain(draft, chainId, locale);
     }

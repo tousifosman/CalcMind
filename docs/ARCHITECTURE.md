@@ -511,6 +511,8 @@ export type EngineErrorKind =
 export interface ReferenceNode extends NodeBase {
   kind: 'reference';
   targetNodeId: NodeId;
+  /** Display string stamped when the target is deleted (§11.2 / P6.4). Absent on live refs. */
+  lastKnownDisplay?: string;
 }
 
 export type CalcNode =
@@ -870,6 +872,8 @@ flowchart TD
   `CircularReference`; the rest of the document keeps working.
 - Deleting a node that references are pointing at leaves those references in a
   `DanglingReference` state rather than cascading deletes into the user's other work.
+  `deleteNode` / `removeResultNodesForChain` stamp `lastKnownDisplay` via
+  `prepareReferencesForDeletion` (`engine/reference.ts`) before the target is removed.
 - References are created two ways: continuation (§8.7) and **dragging a result** into another
   chain (same §8.3 snap outcomes; the commit inserts a reference and leaves the result in place).
 
@@ -933,7 +937,9 @@ The review's sharpest criticism of Tydlig is that orphaning a result leaves a ba
 telling you why the error is there." So:
 
 - `DanglingReference` renders the reference cell in a neutral struck-through style with the last
-  known value dimmed — not a bare glyph.
+  known value dimmed — not a bare glyph. Implemented: `referenceCellContent` + `ReferenceNode`
+  (P6.4); tap opens `DanglingRecoverySheet` with re-point and convert-to-number; long-press
+  adds `Unlink from parent` (§8.6).
 - Tapping it explains what happened and offers the two useful actions: *re-point at another value*
   or *convert to a plain number* freezing the last known value.
 - The same applies to `CircularReference`: name the cycle and offer to unlink the edge that closed
@@ -1136,6 +1142,7 @@ Jest is already configured and green in this repo.
 |---|---|
 | `engine/` | Table-driven: tokenise, validate, precedence (`2 + 3 × 4 = 14`), all error states, formatter boundaries (1e12, 1e-6, trailing zeros), `0.1 + 0.2 = 0.3` |
 | `engine/graph` | Topological order, incremental dirty propagation, cycle detection, dangling references |
+| `engine/reference` | Live/dangling display text, delete-time `lastKnownDisplay` stamp, re-point eligibility |
 | `chains/` | Layout arithmetic, bounds, snap candidate selection at threshold boundaries, detach hysteresis |
 | `persistence/` | Round-trip equality (document → JSON → document), byte-stability of serialisation, every migration fixture, malformed-file and newer-schema handling |
 | Components | Each node kind renders; result nodes reject edit attempts |

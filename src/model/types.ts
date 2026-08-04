@@ -101,6 +101,14 @@ export type EngineErrorKind =
 export interface ReferenceNode extends NodeBase {
   kind: 'reference';
   targetNodeId: NodeId;
+  /**
+   * Display string captured when the target was deleted (§11.2 / P6.4). Present on a
+   * dangling reference so the cell can show the last known value struck-through rather
+   * than a bare `?`. Cleared when the reference is re-pointed. Optional so documents
+   * written before P6.4 and live (non-dangling) references stay valid without a
+   * schema bump — absence means "no stamp yet," not "empty value."
+   */
+  lastKnownDisplay?: string;
 }
 
 export type CalcNode =

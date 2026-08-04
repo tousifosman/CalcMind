@@ -13,10 +13,20 @@ import { NodeLayer } from '../canvas/NodeLayer';
 import { hitTestNode } from '../canvas/hitTest';
 import { Keypad } from '../keypad/Keypad';
 import { ContextMenuOverlay } from '../nodes/NodeContextMenu';
+import { DanglingRecoveryOverlay } from '../nodes/DanglingRecoverySheet';
 import { commandFromHardwareKey, dispatchEditorCommand } from '../keypad/keymap';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
-import { addNumberNode, selectNode, editNumberNode, deleteNode, selectGroup } from '../store/commands';
+import {
+  addNumberNode,
+  selectNode,
+  editNumberNode,
+  deleteNode,
+  selectGroup,
+  unlinkFromParent,
+  repointReference,
+} from '../store/commands';
+import { isDanglingReference, isRepointTarget } from '../engine/reference';
 import { getDeviceLocale } from '../ui/locale';
 import { Vec2 } from '../model/types';
 import { startAutosave } from './startAutosave';
@@ -42,6 +52,11 @@ export function AppShell() {
     function onKeyDown(e: any): void {
       const focusedTag = webWindow.document?.activeElement?.tagName;
       if (focusedTag === 'INPUT' || focusedTag === 'TEXTAREA') return;
+      // Escape cancels an in-progress re-point (P6.4) before the usual deselect path.
+      if (e.key === 'Escape' && useUiStore.getState().repointReferenceId) {
+        useUiStore.getState().clearRepoint();
+        return;
+      }
       const command = commandFromHardwareKey(e.key);
       if (command) dispatchEditorCommand(command);
     }
@@ -53,7 +68,26 @@ export function AppShell() {
     useUiStore.getState().setLastInteractionPoint(worldPoint);
     const { document } = useDocumentStore.getState();
     const hit = hitTestNode(document.nodes, worldPoint, getDeviceLocale());
+
+    // Re-point mode (§11.2): the next valid value becomes the new target; empty /
+    // invalid taps cancel without creating a node.
+    const repointId = useUiStore.getState().repointReferenceId;
+    if (repointId) {
+      if (hit && isRepointTarget(hit.id, document.nodes, repointId)) {
+        repointReference(repointId, hit.id);
+      }
+      useUiStore.getState().clearRepoint();
+      return;
+    }
+
     if (hit) {
+      if (hit.kind === 'reference') {
+        const ref = document.nodes[hit.id];
+        if (ref && ref.kind === 'reference' && isDanglingReference(ref, document.nodes)) {
+          useUiStore.getState().openDanglingRecovery(hit.id);
+          return;
+        }
+      }
       if (hit.kind === 'number') {
         editNumberNode(hit.id);
       } else {
@@ -85,7 +119,12 @@ export function AppShell() {
           <NodeLayer />
         </Canvas>
         <Keypad locale={getDeviceLocale()} onKeyPress={dispatchEditorCommand} />
-        <ContextMenuOverlay onDeleteNode={deleteNode} onSelectGroup={selectGroup} />
+        <ContextMenuOverlay
+          onDeleteNode={deleteNode}
+          onSelectGroup={selectGroup}
+          onUnlinkFromParent={unlinkFromParent}
+        />
+        <DanglingRecoveryOverlay />
       </View>
     </GestureHandlerRootView>
   );
