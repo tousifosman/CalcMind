@@ -1,5 +1,6 @@
 import { widthOf, measureTextWidth } from './measure';
 import { tokens } from '../ui/tokens';
+import { explainEngineError, RESULT_ERROR_FONT_SIZE } from '../engine/errors';
 import type { NumberNode, OperatorNode, ParenNode, EqualsNode, ResultNode, ReferenceNode } from '../model/types';
 
 function numberNode(raw: string): NumberNode {
@@ -76,16 +77,29 @@ describe('widthOf: the nodeHeight floor', () => {
     expect(width).toBeGreaterThan(tokens.nodeHeight);
   });
 
-  test('a result in an error outcome sizes against the explanation, not the cached display', () => {
+  test('a result in an error outcome sizes against the explanation at RESULT_ERROR_FONT_SIZE', () => {
     const node = resultNode('1');
     node.derived = {
       display: '1',
       computedAt: '2026-08-04T00:00:00.000Z',
       outcome: { status: 'error', error: 'DivideByZero' },
     };
+    const explanation = explainEngineError('DivideByZero');
     const errorWidth = widthOf(node, 'en-US');
-    const shortValueWidth = widthOf(resultNode('1'), 'en-US');
-    expect(errorWidth).toBeGreaterThan(shortValueWidth);
+    // Must match the glyph size ResultNode actually renders — not numeralFontSize (30),
+    // which oversizes the cell by more than nodeHeight (P4.6 review).
+    expect(errorWidth).toBe(
+      Math.max(
+        tokens.nodeHeight,
+        measureTextWidth(explanation, RESULT_ERROR_FONT_SIZE) + 2 * tokens.numberPaddingX,
+      ),
+    );
+    expect(errorWidth).not.toBe(
+      Math.max(
+        tokens.nodeHeight,
+        measureTextWidth(explanation, tokens.numeralFontSize) + 2 * tokens.numberPaddingX,
+      ),
+    );
   });
 });
 

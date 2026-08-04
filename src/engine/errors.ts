@@ -64,6 +64,11 @@ export type ResultCellContent =
   | { mode: 'stale'; text: string; dimmed: true }
   | { mode: 'error'; text: string; dimmed: false; error: EngineErrorKind };
 
+/** Font size for error explanations on the result cell. Smaller than `tokens.numeralFontSize`
+ *  so a multi-word message reads as a message, not a failed numeral. Owned here — next to
+ *  `resultCellContent` — so `widthOf` and `ResultNode` cannot disagree about it (P4.6 review). */
+export const RESULT_ERROR_FONT_SIZE = 16;
+
 /**
  * Map a result's derived cache to what the cell should show. Pure so widthOf and ResultNode
  * agree on the string without the view owning the §10.4 / §9 rules.

@@ -14,15 +14,11 @@ import { useNode } from '../store/selectors';
 import { rolePalette, glyphColor } from '../ui/tokens';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
-import { resultCellContent } from '../engine/errors';
+import { resultCellContent, RESULT_ERROR_FONT_SIZE } from '../engine/errors';
 import { Cell, glyphTextStyle } from './Cell';
 
 /** Opacity for a §9 Stale result — previous value stays readable but clearly not current. */
 export const STALE_RESULT_OPACITY = 0.45;
-
-/** Slightly smaller than numeral glyphs so a multi-word explanation fits the cell without
- *  looking like a number that failed to parse. Still weight 800 so it reads as cell content. */
-const ERROR_FONT_SIZE = 16;
 
 interface ResultNodeProps {
   id: NodeId;
@@ -68,9 +64,8 @@ export const ResultNode = React.memo(ResultNodeComponent);
 
 const styles = StyleSheet.create({
   errorGlyph: {
-    fontSize: ERROR_FONT_SIZE,
+    fontSize: RESULT_ERROR_FONT_SIZE,
     fontWeight: '800',
     marginTop: 0,
-    paddingHorizontal: 4,
   },
 });
