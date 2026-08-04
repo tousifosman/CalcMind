@@ -65,8 +65,8 @@ export function toSerializedDocument(doc: CalcDocument): SerializedDocument {
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
     viewport: {
-      pan: { x: doc.viewport.pan.x, y: doc.viewport.pan.y },
-      zoom: doc.viewport.zoom,
+      ...doc.viewport,
+      pan: { ...doc.viewport.pan },
     },
     nodes,
     chains,
