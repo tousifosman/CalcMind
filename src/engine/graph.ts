@@ -1,12 +1,11 @@
 // Dirty-set recompute and the chain-level reference DAG (§11, §11.4).
 // See docs/ARCHITECTURE.md.
 //
-// P4.8 landed the single-chain half: a mutation seeds its own chain, and that
-// chain alone is recomputed. P6.1 builds the reference DAG (`buildDependencyGraph`,
-// `topologicalOrder`). P6.3 colours cycles via DFS at build time. P6.2 extends
-// `dirtyClosure` to transitive dependents in topological order — callers keep
-// calling `recomputeFromSeeds` with the same signature, so the cascade lands
-// without rewriting the store wiring.
+// P4.8 landed the single-chain half; P6.1 the reference DAG; P6.2 widens
+// `dirtyClosure` to seed ∪ transitive dependents in topological order; P6.3
+// colours cycles via DFS at build time. Callers keep calling
+// `recomputeFromSeeds` with the same signature — the cascade lands without
+// rewriting the store wiring.
 import { createResultNode } from '../model/factories';
 import type {
   CalcDocument,
@@ -328,23 +327,40 @@ export function topologicalOrder(graph: DependencyGraph): ChainId[] {
  * recomputed (§11). Untouched chains are never included — §11.4's dirty-set
  * rule lives here, not in the store.
  *
- * P4.8: the seed itself (deduped, existing chains only).
- * P6.2: replace this body with "seed ∪ transitive dependents in topo order"
- * using {@link buildDependencyGraph}. Do not change the signature.
+ * Returns `seed ∪ transitive dependents`, filtered into {@link topologicalOrder}
+ * so producers recompute before consumers. Signature unchanged since P4.8 —
+ * callers and the store keep calling `recomputeFromSeeds` the same way.
  */
 export function dirtyClosure(
   document: CalcDocument,
   seed: readonly ChainId[],
 ): ChainId[] {
-  const seen = new Set<ChainId>();
-  const order: ChainId[] = [];
+  const dirty = new Set<ChainId>();
   for (const id of seed) {
-    if (seen.has(id)) continue;
     if (document.chains[id] === undefined) continue;
-    seen.add(id);
-    order.push(id);
+    dirty.add(id);
   }
-  return order;
+  if (dirty.size === 0) return [];
+
+  const graph = buildDependencyGraph(document);
+  // BFS over chain-level dependents: every chain reachable from a seed is dirty.
+  const queue = [...dirty];
+  let head = 0;
+  while (head < queue.length) {
+    const id = queue[head++];
+    const deps = graph.dependents.get(id);
+    if (!deps) continue;
+    for (const dep of deps) {
+      if (dirty.has(dep)) continue;
+      if (document.chains[dep] === undefined) continue;
+      dirty.add(dep);
+      queue.push(dep);
+    }
+  }
+
+  // Emit in topo order so A→B→C recomputes A, then B, then C — never a consumer
+  // before its producer. Independent dirty seeds keep vertices / Kahn order.
+  return topologicalOrder(graph).filter((id) => dirty.has(id));
 }
 
 /** Find every result node whose `sourceChainId` is `chainId`. */
