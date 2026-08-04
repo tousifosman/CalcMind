@@ -71,13 +71,8 @@ flowchart LR
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
-<<<<<<< HEAD
-| **P5** | Persistence | 8 | In progress — P5.3 done; parallel with P6 |
+| **P5** | Persistence | 8 | In progress — P5.1 and P5.3 done; parallel with P6 |
 | **P6** | Linking | 8 | In progress — P6.1 done; parallel with P5 |
-=======
-| **P5** | Persistence | 8 | In progress — P5.1 and P5.3 done |
-| **P6** | Linking | 8 | Ready (depends only on P4, parallel with P5) |
->>>>>>> origin/main
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
