@@ -4,9 +4,13 @@
 // a module boundary (§10.4, decision #3). Explanation copy lives here so ResultNode and
 // tests share one source, and so §11.2's "explained, not marked" rule is enforceable without
 // the view inventing strings.
-import type { EngineErrorKind, ResultDerived } from '../model/types';
+import type {
+  CircularReferenceCycle,
+  EngineErrorKind,
+  ResultDerived,
+} from '../model/types';
 
-export type { EngineErrorKind };
+export type { EngineErrorKind, CircularReferenceCycle };
 
 export interface EngineError {
   kind: EngineErrorKind;
@@ -38,8 +42,8 @@ export type ChainStatus =
 /**
  * Human-readable explanation for each §10.4 error. Never a bare glyph — §11.2 is the
  * design's sharpest criticism of the reference app and applies to engine errors, not just
- * broken links. `CircularReference`'s full "name the cycle" treatment is P6.3; the string
- * here is still an explanation so P4.6 can render the kind distinguishably without the graph.
+ * broken links. When a `CircularReference` carries cycle metadata from P6.3 DFS colouring,
+ * prefer {@link explainCircularReference} so the cell *names* the cycle.
  */
 export function explainEngineError(kind: EngineErrorKind): string {
   switch (kind) {
@@ -58,11 +62,28 @@ export function explainEngineError(kind: EngineErrorKind): string {
   }
 }
 
+/** §11.2: name the cycle (`A → B → A`), not a bare "Circular reference" glyph. */
+export function explainCircularReference(chainLabels: readonly string[]): string {
+  if (chainLabels.length === 0) return explainEngineError('CircularReference');
+  return `Circular: ${[...chainLabels, chainLabels[0]].join(' → ')}`;
+}
+
+/** Affordance label offered on a named circular-reference cell (§11.2). Measured into
+ *  `widthOf` via {@link resultCellContent} so layout and the Unlink control agree. */
+export const CIRCULAR_UNLINK_LABEL = 'Unlink';
+
 export type ResultCellContent =
   | { mode: 'empty'; text: '' }
   | { mode: 'value'; text: string; dimmed: false }
   | { mode: 'stale'; text: string; dimmed: true }
-  | { mode: 'error'; text: string; dimmed: false; error: EngineErrorKind };
+  | {
+      mode: 'error';
+      text: string;
+      dimmed: false;
+      error: EngineErrorKind;
+      /** Present when DFS named the cycle — ResultNode offers Unlink on this. */
+      cycle?: CircularReferenceCycle;
+    };
 
 /** Font size for error explanations on the result cell. Smaller than `tokens.numeralFontSize`
  *  so a multi-word message reads as a message, not a failed numeral. Owned here — next to
@@ -83,6 +104,18 @@ export function resultCellContent(derived: ResultDerived | undefined): ResultCel
   }
   if (outcome.status === 'stale') {
     return { mode: 'stale', text: derived.display, dimmed: true };
+  }
+  if (outcome.error === 'CircularReference' && outcome.cycle) {
+    // Include the Unlink affordance in the measured string so the cell is wide enough
+    // for both the named cycle and the control ResultNode renders beside it (§11.2).
+    const named = explainCircularReference(outcome.cycle.chainLabels);
+    return {
+      mode: 'error',
+      text: `${named} ${CIRCULAR_UNLINK_LABEL}`,
+      dimmed: false,
+      error: 'CircularReference',
+      cycle: outcome.cycle,
+    };
   }
   return {
     mode: 'error',
