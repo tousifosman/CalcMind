@@ -1,4 +1,4 @@
-// Dirty-set recompute (P4.8) and chain-level dependency DAG (P6.1, §11 / §11.4).
+// Dirty-set recompute (P4.8 / P6.2) and chain-level dependency DAG (P6.1, §11 / §11.4).
 import { computeChain } from './compute';
 import {
   buildDependencyGraph,
@@ -318,7 +318,7 @@ describe('topologicalOrder', () => {
 });
 
 describe('dirtyClosure', () => {
-  test('P4.8: returns the seed itself, deduped, skipping missing chains', () => {
+  test('seed with no dependents is still just the seed (deduped, skip missing)', () => {
     const doc = docWithChains({
       c1: { members: [number('a', '1', 'c1'), op('p', '+', 'c1'), number('b', '2', 'c1')] },
       c2: { members: [number('c', '9', 'c2'), equals('e', 'c2')] },
@@ -331,6 +331,65 @@ describe('dirtyClosure', () => {
       c1: { members: [number('a', '1', 'c1'), equals('e', 'c1')] },
     });
     expect(dirtyClosure(doc, [])).toEqual([]);
+  });
+
+  test('P6.2: seed ∪ transitive dependents in topological order', () => {
+    // A → B → C, plus independent D. Seeding A dirties A,B,C — never D.
+    const doc = docWithChains({
+      a: {
+        members: [number('na', '1', 'a'), equals('ea', 'a'), result('ra', 'a', '1')],
+      },
+      b: {
+        members: [
+          reference('rb', 'ra', 'b'),
+          equals('eb', 'b'),
+          result('rb_out', 'b', '1'),
+        ],
+      },
+      c: {
+        members: [reference('rc', 'rb_out', 'c'), equals('ec', 'c')],
+      },
+      d: { members: [number('nd', '9', 'd')] },
+    });
+    expect(dirtyClosure(doc, ['a'])).toEqual(['a', 'b', 'c']);
+    // Mid-chain seed does not reach upstream.
+    expect(dirtyClosure(doc, ['b'])).toEqual(['b', 'c']);
+    expect(dirtyClosure(doc, ['c'])).toEqual(['c']);
+  });
+
+  test('diamond cascade: seed at the apex dirties every reachable chain once', () => {
+    const doc = docWithChains({
+      a: {
+        members: [number('na', '1', 'a'), equals('ea', 'a'), result('ra', 'a', '1')],
+      },
+      b: {
+        members: [
+          reference('rb', 'ra', 'b'),
+          equals('eb', 'b'),
+          result('rb_out', 'b', '1'),
+        ],
+      },
+      c: {
+        members: [
+          reference('rc', 'ra', 'c'),
+          equals('ec', 'c'),
+          result('rc_out', 'c', '1'),
+        ],
+      },
+      d: {
+        members: [
+          reference('rd1', 'rb_out', 'd'),
+          op('pd', '+', 'd'),
+          reference('rd2', 'rc_out', 'd'),
+        ],
+      },
+    });
+    const dirty = dirtyClosure(doc, ['a']);
+    expect(dirty).toHaveLength(4);
+    expect(dirty.indexOf('a')).toBeLessThan(dirty.indexOf('b'));
+    expect(dirty.indexOf('a')).toBeLessThan(dirty.indexOf('c'));
+    expect(dirty.indexOf('b')).toBeLessThan(dirty.indexOf('d'));
+    expect(dirty.indexOf('c')).toBeLessThan(dirty.indexOf('d'));
   });
 });
 
@@ -489,5 +548,49 @@ describe('recomputeFromSeeds', () => {
     recomputeFromSeeds(doc, ['c1'], 'en-US');
     expect(doc.nodes.r).toMatchObject({ derived: { display: '10' } });
     expect((doc.nodes.r as ResultNode).derived?.outcome).toBeUndefined();
+  });
+
+  test('§11 cascade: edit 1221→1300 yields 1303 then 2606; unrelated chain untouched', () => {
+    // Worked example from ARCHITECTURE.md §11.
+    const doc = docWithChains({
+      c1: {
+        members: [
+          number('n1', '1221', 'c1'),
+          op('p1', '+', 'c1'),
+          number('n2', '3', 'c1'),
+          equals('e1', 'c1'),
+          result('r1', 'c1', '1224'),
+        ],
+      },
+      c2: {
+        members: [
+          reference('ref1', 'r1', 'c2'),
+          op('p2', '×', 'c2'),
+          number('n3', '2', 'c2'),
+          equals('e2', 'c2'),
+          result('r2', 'c2', '2448'),
+        ],
+      },
+      c3: {
+        members: [
+          number('lone', '9', 'c3'),
+          equals('e3', 'c3'),
+          result('r3', 'c3', '9'),
+        ],
+      },
+    });
+
+    (doc.nodes.n1 as NumberNode).raw = '1300';
+    recomputeFromSeeds(doc, ['c1'], 'en-US');
+
+    const evaluatedChainIds = computeChainMock.mock.calls.map(([chain]) => chain.id);
+    expect(evaluatedChainIds).toEqual(['c1', 'c2']);
+    // en-US groups thousands; values are 1303 then 2606 (§11 worked example).
+    expect(doc.nodes.r1).toMatchObject({ derived: { display: '1,303' } });
+    expect(doc.nodes.r2).toMatchObject({ derived: { display: '2,606' } });
+    // c3 is not downstream — never re-evaluated, prior derived intact.
+    expect(doc.nodes.r3).toMatchObject({
+      derived: { display: '9', computedAt: '2026-08-04T00:00:00.000Z' },
+    });
   });
 });
