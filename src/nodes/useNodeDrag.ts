@@ -3,9 +3,10 @@
 // Snap candidates are recomputed on the JS thread each update and published to
 // `uiStore.dragSnap` for the insertion caret (P3.6) — ephemeral, outside undo.
 //
-// MovingChain (P3.7): a ≥200 ms dwell then move lifts the whole chain (anchor update);
-// a plain drag detaches the member. `Select group` is the other move-chain route (§8.6).
-// Context menu at 500 ms wins — never enter moveChain while `contextMenu !== null`.
+// MovingChain (P3.7): hold then drag (heldMs from onBegin→onStart ≥ CHAIN_MOVE_HOLD_MS)
+// lifts the whole chain (anchor update); a plain drag detaches the member.
+// `Select group` is the other move-chain route (§8.6). Context menu at 500 ms wins —
+// never enter moveChain while `contextMenu !== null`.
 import { useCallback, useEffect, useRef } from 'react';
 import { Gesture } from 'react-native-gesture-handler';
 import {
@@ -152,16 +153,8 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
   const updateDrag = useCallback(
     (worldX: number, worldY: number) => {
       const sess = session.current;
-      if (!sess) return;
+      if (!sess || sess.mode === 'moveChain') return;
       const position = { x: worldX, y: worldY };
-
-      if (sess.mode === 'moveChain' && sess.homeAnchor) {
-        const dx = worldX - sess.home.x;
-        const dy = worldY - sess.home.y;
-        chainDragDx.value = dx;
-        chainDragDy.value = dy;
-        return;
-      }
 
       if (sess.wasChained && !sess.detached && crossedDetachDistance(sess.home, position)) {
         sess.detached = true;
@@ -266,7 +259,14 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       const nextY = startY.value + e.translationY / z;
       dragX.value = nextX;
       dragY.value = nextY;
-      runOnJS(updateDrag)(nextX, nextY);
+      // Sibling follow must stay on the UI thread with the primary's translate. Writing
+      // chainDragDx/Dy via runOnJS(updateDrag) lagged followers by ≥1 frame (PR #61 review).
+      if (chainDragChainId.value !== null) {
+        chainDragDx.value = nextX - startX.value;
+        chainDragDy.value = nextY - startY.value;
+      } else {
+        runOnJS(updateDrag)(nextX, nextY);
+      }
     })
     .onEnd(() => {
       'worklet';

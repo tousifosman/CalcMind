@@ -4,8 +4,11 @@ import { DETACH_DISTANCE } from '../chains/bounds';
 import type { SnapOutcome } from '../chains/snapping';
 import type { Vec2 } from '../model/types';
 
-/** §8.2 MovingChain: dwell before a move that lifts the whole chain. Context menu is
- *  500 ms (P2.9); this stays shorter so hold-then-drag and hold-for-menu don't collide. */
+/** §8.2 MovingChain threshold (ms). Compared against time from touch-down (`onBegin`)
+ *  to pan activation (`onStart`, after `minDistance` is crossed) — so it mixes still
+ *  dwell with the time taken to move those first pixels, not pure hold-still time.
+ *  Context menu is 500 ms (P2.9); this stays shorter so hold-then-drag and
+ *  hold-for-menu don't collide. */
 export const CHAIN_MOVE_HOLD_MS = 200;
 
 /**
@@ -44,10 +47,12 @@ export function crossedDetachDistance(home: Vec2, current: Vec2): boolean {
  * 1. Free node → always `free`.
  * 2. `Select group` includes this node → `moveChain` (§8.6 other route).
  * 3. Context menu already claimed the press → never `moveChain` (menu wins at 500 ms).
- * 4. Otherwise the §17.1 dwell mapping (`LONG_PRESS_MOVES_CHAIN`).
+ * 4. Otherwise the §17.1 mapping (`LONG_PRESS_MOVES_CHAIN`), using `heldMs` from
+ *    touch-down to pan activation (see `CHAIN_MOVE_HOLD_MS`).
  */
 export function resolveNodeDragMode(args: {
   wasChained: boolean;
+  /** ms from touch-down to pan activation — see `CHAIN_MOVE_HOLD_MS`. */
   heldMs: number;
   groupSelected: boolean;
   contextMenuOpen: boolean;
