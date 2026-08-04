@@ -101,7 +101,8 @@ export function createResultNode(position: Vec2, sourceChainId: ChainId): Result
 }
 
 /** Reference to another node's live value (§6, §8.7). Created by continuation (P4.9);
- *  identity hue and dangling recovery arrive with P6. */
+ *  identity hue arrives with P6.5. `lastKnownDisplay` is stamped only when a target is
+ *  deleted (P6.4) — live references leave it absent. */
 export function createReferenceNode(position: Vec2, targetNodeId: NodeId): ReferenceNode {
   return {
     id: createNodeId(),

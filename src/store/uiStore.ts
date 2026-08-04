@@ -60,6 +60,23 @@ export interface UiState {
   openContextMenu: (menu: ContextMenu) => void;
   closeContextMenu: () => void;
 
+  /**
+   * Dangling-reference recovery sheet (§11.2 / P6.4). Ephemeral: tapping a dangling
+   * cell opens it; the two actions (re-point / convert) are document edits that go
+   * through commands, but the prompt itself is not undoable state.
+   */
+  danglingRecoveryId: NodeId | null;
+  openDanglingRecovery: (referenceId: NodeId) => void;
+  closeDanglingRecovery: () => void;
+
+  /**
+   * After choosing "Re-point at another value," the next tap on a valid value
+   * becomes the new target. Ephemeral — cancelled by tapping empty canvas or Escape.
+   */
+  repointReferenceId: NodeId | null;
+  beginRepoint: (referenceId: NodeId) => void;
+  clearRepoint: () => void;
+
   /** Nodes selected as a group (§8.6 `Select group`, P2.9). A group is the whole
    *  chain that contains the long-pressed node. Ephemeral: moving and deleting a
    *  group are the operations it enables (P3.7); the set itself is not a document edit. */
@@ -94,6 +111,16 @@ export const useUiStore = create<UiState>((set) => ({
   contextMenu: null,
   openContextMenu: (menu) => set({ contextMenu: menu }),
   closeContextMenu: () => set({ contextMenu: null }),
+
+  danglingRecoveryId: null,
+  openDanglingRecovery: (referenceId) =>
+    set({ danglingRecoveryId: referenceId, repointReferenceId: null, contextMenu: null }),
+  closeDanglingRecovery: () => set({ danglingRecoveryId: null }),
+
+  repointReferenceId: null,
+  beginRepoint: (referenceId) =>
+    set({ repointReferenceId: referenceId, danglingRecoveryId: null }),
+  clearRepoint: () => set({ repointReferenceId: null }),
 
   groupSelectedIds: new Set(),
   setGroupSelected: (ids) => set({ groupSelectedIds: ids }),

@@ -26,6 +26,8 @@ import {
   commitSnapOutcome,
   moveFreeNode,
   moveChain,
+  unlinkFromParent,
+  repointReference,
 } from './commands';
 import { createEmptyDocument } from '../model/factories';
 import { tokens } from '../ui/tokens';
@@ -1163,6 +1165,109 @@ describe('continueFromResult (P4.9, §8.7)', () => {
   test('rejects a non-result target', () => {
     const a = addNumberNode({ x: 0, y: 0 }, '1');
     expect(() => continueFromResult(a, '+')).toThrow(/not a result/);
+  });
+});
+
+describe('dangling references (P6.4 / §11.2)', () => {
+  test('deleting a referenced node leaves the reference dangling — no cascade', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '7');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    const { referenceId, chainId } = continueFromResult(result.id, '+');
+
+    deleteNode(result.id);
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.nodes[result.id]).toBeUndefined();
+    expect(doc.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: result.id,
+      lastKnownDisplay: '7',
+      chainId,
+    });
+    // Consumer chain members still include the reference — not cascaded away.
+    expect(doc.chains[chainId]!.members).toContain(referenceId);
+  });
+
+  test('unlinkFromParent freezes the live value as a plain number in one undo entry', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '12');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    const { referenceId, chainId } = continueFromResult(result.id, '+');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    unlinkFromParent(referenceId);
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.nodes[referenceId]).toBeUndefined();
+    const replacement = doc.chains[chainId]!.members
+      .map((id) => doc.nodes[id])
+      .find((n) => n && n.kind === 'number' && n.raw === '12');
+    expect(replacement).toBeDefined();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+  });
+
+  test('unlinkFromParent on a dangling reference freezes lastKnownDisplay', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '5');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    const { referenceId } = continueFromResult(result.id, '+');
+    deleteNode(result.id);
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toMatchObject({
+      lastKnownDisplay: '5',
+    });
+
+    unlinkFromParent(referenceId);
+
+    const numbers = Object.values(useDocumentStore.getState().document.nodes).filter(
+      (n) => n.kind === 'number' && n.raw === '5' && n.id !== a,
+    );
+    expect(numbers).toHaveLength(1);
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toBeUndefined();
+  });
+
+  test('repointReference retargets and clears the dangling stamp', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '3');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    const { referenceId } = continueFromResult(result.id, '+');
+    deleteNode(result.id);
+
+    const other = addNumberNode({ x: 100, y: 100 }, '99');
+    repointReference(referenceId, other);
+
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: other,
+    });
+    expect(
+      (useDocumentStore.getState().document.nodes[referenceId] as { lastKnownDisplay?: string })
+        .lastKnownDisplay,
+    ).toBeUndefined();
+  });
+
+  test('repointReference is a no-op for an invalid target', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    const { referenceId } = continueFromResult(result.id, '+');
+    const op = addOperatorNode({ x: 50, y: 50 }, '+');
+
+    repointReference(referenceId, op);
+
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toMatchObject({
+      targetNodeId: result.id,
+    });
   });
 });
 

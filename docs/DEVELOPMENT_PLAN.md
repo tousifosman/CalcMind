@@ -72,7 +72,7 @@ flowchart LR
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | **P5** | Persistence | 8 | In progress — P5.1 and P5.3 done; parallel with P6 |
-| **P6** | Linking | 8 | In progress — P6.1 done; parallel with P5 |
+| **P6** | Linking | 8 | In progress — P6.1 and P6.4 done; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -284,8 +284,8 @@ code path.
 **Touches.** `src/nodes/NodeContextMenu.tsx`, `src/canvas/Canvas.tsx`.
 **Depends on.** P2.6.
 
-- [x] Long-press a node → `Copy`, `Delete`, `Select group`. (`Unlink from parent` is
-      reference-only and arrives with P6.4.)
+- [x] Long-press a node → `Copy`, `Delete`, `Select group`. (`Unlink from parent` for
+      references landed with P6.4.)
 - [x] Long-press empty canvas → `Add number`, `Paste`, and `Add graph` rendered **disabled**
       (§17.2 defers graphing).
 - [x] `Select group` selects the whole chain — this is how a chain is moved or deleted as a unit
@@ -954,7 +954,7 @@ flowchart LR
     style P61 fill:#22A75B,color:#fff
     style P62 fill:#E8A838,color:#fff
     style P63 fill:#E8A838,color:#fff
-    style P64 fill:#E8A838,color:#fff
+    style P64 fill:#22A75B,color:#fff
     style P65 fill:#E8A838,color:#fff
     style P66 fill:#8892A0,color:#fff
     style P67 fill:#E8A838,color:#fff
@@ -1017,14 +1017,14 @@ punctuate — the review's sharpest criticism of the reference app).
 **Touches.** `src/nodes/ReferenceNode.tsx`, `src/store/commands.ts`, `src/nodes/NodeContextMenu.tsx`.
 **Depends on.** P6.1, P2.9.
 
-- [ ] Deleting a referenced node leaves its references in `DanglingReference`. **No cascading
+- [x] Deleting a referenced node leaves its references in `DanglingReference`. **No cascading
       delete** (§11).
-- [ ] Rendered as a neutral struck-through cell with the **last known value dimmed** — never a bare
+- [x] Rendered as a neutral struck-through cell with the **last known value dimmed** — never a bare
       `?` (§11.2).
-- [ ] Tapping it explains what happened and offers both useful actions: **re-point at another
+- [x] Tapping it explains what happened and offers both useful actions: **re-point at another
       value**, or **convert to a plain number** freezing the last known value (§11.2).
-- [ ] `Unlink from parent` joins the long-press menu for references (§8.6).
-- [ ] Tests for the dangling state and both recovery paths (§14).
+- [x] `Unlink from parent` joins the long-press menu for references (§8.6).
+- [x] Tests for the dangling state and both recovery paths (§14).
 
 ### P6.5 — Identity and hue assignment
 

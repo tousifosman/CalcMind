@@ -1,34 +1,14 @@
-// Shared display string for a reference cell (P4.9). Layout (`widthOf`) and the
-// ReferenceNode view must agree on what text is shown so hit-test boxes match glyphs.
-// Identity hue is P6.5 — until then a reference is uncoloured but still shows the
-// target's live display (§8.7 / P4.9 acceptance: "no hue yet is correct").
-import { formatForDisplay } from '../engine/format';
-import { resultCellContent } from '../engine/errors';
-import type { CalcNode, NodeId, ReferenceNode } from '../model/types';
-
-/** What a reference cell should paint / measure. Walks through result→source display
- *  and nested references with a cycle guard; missing targets yield '' (P6.4 will make
- *  dangling explicit). */
-export function referenceDisplayText(
-  ref: ReferenceNode,
-  nodes: Record<NodeId, CalcNode>,
-  locale: string,
-  visiting: Set<NodeId> = new Set(),
-): string {
-  if (visiting.has(ref.id)) return '';
-  visiting.add(ref.id);
-
-  const target = nodes[ref.targetNodeId];
-  if (!target) return '';
-
-  switch (target.kind) {
-    case 'number':
-      return formatForDisplay(target.raw, locale);
-    case 'result':
-      return resultCellContent(target.derived).text;
-    case 'reference':
-      return referenceDisplayText(target, nodes, locale, visiting);
-    default:
-      return '';
-  }
-}
+// Re-exports the reference display helpers from the engine. Layout (`widthOf`) and
+// the ReferenceNode view historically imported from here (P4.9); the §11.2 dangling
+// logic now lives in `engine/reference.ts` so graph deletes can stamp last-known
+// values without pulling UI modules into the engine.
+export {
+  referenceDisplayText,
+  referenceCellContent,
+  isDanglingReference,
+  explainDanglingReference,
+  prepareReferencesForDeletion,
+  deleteNodesLeavingDanglingRefs,
+  isRepointTarget,
+  type ReferenceCellContent,
+} from '../engine/reference';

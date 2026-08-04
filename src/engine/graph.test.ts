@@ -370,9 +370,33 @@ describe('removeResultNodesForChain', () => {
         ],
       },
     });
-    removeResultNodesForChain(doc, 'c1');
+    removeResultNodesForChain(doc, 'c1', 'en-US');
     expect(doc.nodes.r).toBeUndefined();
     expect(doc.chains.c1.members).toEqual(['a', 'p', 'b', 'e']);
+  });
+
+  test('stamps lastKnownDisplay on references to the removed result (P6.4)', () => {
+    const doc = docWithChains({
+      c1: {
+        members: [
+          number('a', '2', 'c1'),
+          equals('e', 'c1'),
+          result('r', 'c1', '2'),
+        ],
+      },
+      c2: {
+        members: [reference('ref1', 'r', 'c2'), op('p', '+', 'c2'), number('b', '1', 'c2')],
+      },
+    });
+    removeResultNodesForChain(doc, 'c1', 'en-US');
+    expect(doc.nodes.r).toBeUndefined();
+    expect(doc.nodes.ref1).toMatchObject({
+      kind: 'reference',
+      targetNodeId: 'r',
+      lastKnownDisplay: '2',
+    });
+    // Consumer chain is intact — no cascading delete (§11).
+    expect(doc.chains.c2.members).toEqual(['ref1', 'p', 'b']);
   });
 });
 

@@ -3,7 +3,8 @@
 // Two variants, both rendered as a floating sheet positioned at the long-press
 // screen point:
 //
-//   • Node menu — `Copy`, `Delete`, `Select group`. (`Unlink from parent` arrives with P6.4.)
+//   • Node menu — `Copy`, `Delete`, `Select group`, and for a reference
+//     `Unlink from parent` (P6.4 / §8.6).
 //   • Canvas menu — `Add number`, `Paste`, `Add graph`, all **disabled** (§17.2 defers
 //     graphing; copy/paste is future work).
 //
@@ -23,6 +24,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { useUiStore } from '../store/uiStore';
+import { useDocumentStore } from '../store/documentStore';
 import { NodeId, Vec2 } from '../model/types';
 
 // ─── Item shape ──────────────────────────────────────────────────────────────
@@ -84,6 +86,7 @@ interface NodeContextMenuProps {
   anchor: Vec2;
   onDelete: (nodeId: NodeId) => void;
   onSelectGroup: (nodeId: NodeId) => void;
+  onUnlinkFromParent: (nodeId: NodeId) => void;
   onDismiss: () => void;
 }
 
@@ -92,8 +95,10 @@ export function NodeContextMenu({
   anchor,
   onDelete,
   onSelectGroup,
+  onUnlinkFromParent,
   onDismiss,
 }: NodeContextMenuProps) {
+  const node = useDocumentStore((s) => s.document.nodes[nodeId]);
   const items: MenuItem[] = [
     {
       label: 'Copy',
@@ -115,6 +120,18 @@ export function NodeContextMenu({
       },
     },
   ];
+
+  // §8.6: references also get `Unlink from parent` — freezes the live/last-known
+  // value as a plain number (P6.4). Same action as dangling convert-to-number.
+  if (node?.kind === 'reference') {
+    items.push({
+      label: 'Unlink from parent',
+      onPress: () => {
+        onUnlinkFromParent(nodeId);
+        onDismiss();
+      },
+    });
+  }
 
   return <MenuSheet anchor={anchor} items={items} onDismiss={onDismiss} />;
 }
@@ -148,9 +165,14 @@ export function CanvasContextMenu({ anchor, onDismiss }: CanvasContextMenuProps)
 interface ContextMenuOverlayProps {
   onDeleteNode: (nodeId: NodeId) => void;
   onSelectGroup: (nodeId: NodeId) => void;
+  onUnlinkFromParent: (nodeId: NodeId) => void;
 }
 
-export function ContextMenuOverlay({ onDeleteNode, onSelectGroup }: ContextMenuOverlayProps) {
+export function ContextMenuOverlay({
+  onDeleteNode,
+  onSelectGroup,
+  onUnlinkFromParent,
+}: ContextMenuOverlayProps) {
   const contextMenu = useUiStore((state) => state.contextMenu);
   const closeContextMenu = useUiStore((state) => state.closeContextMenu);
 
@@ -163,6 +185,7 @@ export function ContextMenuOverlay({ onDeleteNode, onSelectGroup }: ContextMenuO
         anchor={contextMenu.anchor}
         onDelete={onDeleteNode}
         onSelectGroup={onSelectGroup}
+        onUnlinkFromParent={onUnlinkFromParent}
         onDismiss={closeContextMenu}
       />
     );

@@ -37,6 +37,7 @@ describe('NodeContextMenu', () => {
         anchor={ANCHOR}
         onDelete={onDelete}
         onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -66,6 +67,7 @@ describe('NodeContextMenu', () => {
         anchor={ANCHOR}
         onDelete={jest.fn()}
         onSelectGroup={onSelectGroup}
+        onUnlinkFromParent={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -92,6 +94,7 @@ describe('NodeContextMenu', () => {
         anchor={ANCHOR}
         onDelete={jest.fn()}
         onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -102,6 +105,63 @@ describe('NodeContextMenu', () => {
 
     expect(copyBtn).toBeDefined();
     expect(copyBtn!.props.disabled).toBe(true);
+  });
+
+  test('Unlink from parent is absent for non-reference nodes', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '3');
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId={id}
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+        onDismiss={jest.fn()}
+      />,
+    );
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Unlink from parent'),
+    ).toHaveLength(0);
+  });
+
+  test('Unlink from parent is present for references and invokes the handler (P6.4)', () => {
+    const target = addNumberNode({ x: 0, y: 0 }, '7');
+    let refId = '';
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        const ref = {
+          id: 'ref_unlink',
+          kind: 'reference' as const,
+          position: { x: 40, y: 0 },
+          chainId: null,
+          createdAt: 0,
+          targetNodeId: target,
+        };
+        draft.nodes[ref.id] = ref;
+        refId = ref.id;
+      });
+    });
+    const onUnlink = jest.fn();
+    const onDismiss = jest.fn();
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId={refId}
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={onUnlink}
+        onDismiss={onDismiss}
+      />,
+    );
+    const unlinkBtn = renderer.root
+      .findAll((node) => node.props.testID === 'context-menu-item-Unlink from parent')
+      .find((node) => node.props.onPress !== undefined);
+    expect(unlinkBtn).toBeDefined();
+    act(() => {
+      unlinkBtn!.props.onPress();
+    });
+    expect(onUnlink).toHaveBeenCalledWith(refId);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -124,7 +184,11 @@ describe('CanvasContextMenu', () => {
 describe('ContextMenuOverlay', () => {
   test('renders nothing when contextMenu is null', () => {
     const renderer = renderNode(
-      <ContextMenuOverlay onDeleteNode={jest.fn()} onSelectGroup={jest.fn()} />,
+      <ContextMenuOverlay
+        onDeleteNode={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+      />,
     );
     expect(renderer.toJSON()).toBeNull();
   });
@@ -136,7 +200,11 @@ describe('ContextMenuOverlay', () => {
     });
 
     const renderer = renderNode(
-      <ContextMenuOverlay onDeleteNode={jest.fn()} onSelectGroup={jest.fn()} />,
+      <ContextMenuOverlay
+        onDeleteNode={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+      />,
     );
 
     const deleteBtns = renderer.root.findAll(
@@ -151,7 +219,11 @@ describe('ContextMenuOverlay', () => {
     });
 
     const renderer = renderNode(
-      <ContextMenuOverlay onDeleteNode={jest.fn()} onSelectGroup={jest.fn()} />,
+      <ContextMenuOverlay
+        onDeleteNode={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+      />,
     );
 
     const addNumberBtns = renderer.root.findAll(

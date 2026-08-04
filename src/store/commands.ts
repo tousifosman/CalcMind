@@ -23,6 +23,13 @@ import type { SnapOutcome } from '../chains/snapping';
 import { getDeviceLocale } from '../ui/locale';
 import { tokens } from '../ui/tokens';
 import { recomputeFromSeeds, removeResultNodesForChain } from '../engine/graph';
+import {
+  deleteNodesLeavingDanglingRefs,
+  isDanglingReference,
+  isRepointTarget,
+  referenceDisplayText,
+} from '../engine/reference';
+import { parseComputedDisplay } from '../engine/format';
 
 export function renameDocument(name: string): void {
   useDocumentStore.getState().applyCommand((draft) => {
@@ -98,7 +105,7 @@ function finalizeChain(draft: CalcDocument, chainId: ChainId): void {
 
   const hasEquals = chain.members.some((id) => draft.nodes[id]?.kind === 'equals');
   if (!hasEquals) {
-    removeResultNodesForChain(draft, chainId);
+    removeResultNodesForChain(draft, chainId, getDeviceLocale());
   } else {
     // Nested inside an existing applyCommand recipe, so call the graph directly
     // rather than via applyCommand's recomputeSeeds option (that option is for
@@ -341,7 +348,9 @@ export function deleteNode(nodeId: NodeId): void {
     const node = draft.nodes[nodeId];
     if (!node) return;
     const chainId = node.chainId;
-    delete draft.nodes[nodeId];
+    // Stamp consumers first so they keep the last known value under §11.2 —
+    // never cascade-delete references that pointed here (§11 / P6.4).
+    deleteNodesLeavingDanglingRefs(draft, [nodeId], getDeviceLocale());
 
     if (chainId !== null) {
       const chain = draft.chains[chainId];
@@ -351,6 +360,69 @@ export function deleteNode(nodeId: NodeId): void {
       }
     }
   });
+}
+
+/**
+ * Break a reference into a plain number, freezing the live (or last-known) value
+ * (§8.6 `Unlink from parent`, §11.2 convert-to-number). One undo entry.
+ */
+export function unlinkFromParent(referenceId: NodeId): void {
+  useDocumentStore.getState().applyCommand((draft) => {
+    replaceReferenceWithNumber(draft, referenceId);
+  });
+}
+
+/**
+ * Re-point a reference at another value (§11.2). Clears any dangling stamp.
+ * No-op when the new target is missing or not a value node.
+ */
+export function repointReference(referenceId: NodeId, newTargetId: NodeId): void {
+  useDocumentStore.getState().applyCommand((draft) => {
+    const ref = draft.nodes[referenceId];
+    if (!ref || ref.kind !== 'reference') return;
+    if (!isRepointTarget(newTargetId, draft.nodes, referenceId)) return;
+    ref.targetNodeId = newTargetId;
+    delete ref.lastKnownDisplay;
+    if (ref.chainId !== null) {
+      finalizeChain(draft, ref.chainId);
+    }
+  });
+}
+
+/** Shared body for unlink / convert-dangling-to-number. Mutates `draft` in place. */
+function replaceReferenceWithNumber(draft: CalcDocument, referenceId: NodeId): void {
+  const ref = draft.nodes[referenceId];
+  if (!ref || ref.kind !== 'reference') return;
+
+  const locale = getDeviceLocale();
+  const display =
+    referenceDisplayText(ref, draft.nodes, locale) ||
+    (isDanglingReference(ref, draft.nodes) ? (ref.lastKnownDisplay ?? '') : '');
+  let raw = '';
+  if (display !== '') {
+    try {
+      raw = parseComputedDisplay(display, locale).toFixed();
+    } catch {
+      // Unparseable stamp (e.g. an error explanation was somehow stored) — freeze
+      // as empty rather than inventing a number the user never saw.
+      raw = '';
+    }
+  }
+
+  const number = createNumberNode({ ...ref.position }, raw);
+  number.chainId = ref.chainId;
+  if (ref.label !== undefined) number.label = ref.label;
+
+  delete draft.nodes[referenceId];
+  draft.nodes[number.id] = number;
+
+  if (ref.chainId !== null) {
+    const chain = draft.chains[ref.chainId];
+    if (chain) {
+      chain.members = chain.members.map((id) => (id === referenceId ? number.id : id));
+      finalizeChain(draft, ref.chainId);
+    }
+  }
 }
 
 // --- P3.4: snap / detach commits (§8.3 bookkeeping) ---------------------------------
