@@ -154,26 +154,34 @@ async function removeDocument(id: string): Promise<void> {
 /**
  * Export via the OS share sheet (§12.2 / P5.8).
  * iOS gets a `file://` URL to a temp `.calcmind.json`; Android's RN Share API
- * only documents `message`/`title`, so the JSON goes as the share body there.
+ * only documents `message`/`title`, so the JSON goes as the share body there
+ * (no temp file).
  */
 async function exportDocument(id: string): Promise<void> {
   const json = await readDocument(id);
   const filename = filenameForExport(id, json);
+
+  if (Platform.OS !== 'ios') {
+    await Share.share(
+      { message: json, title: filename },
+      { dialogTitle: filename },
+    );
+    return;
+  }
+
   const tempPath = `${TemporaryDirectoryPath}/${filename}`;
   await writeFile(tempPath, json, 'utf8');
   try {
-    if (Platform.OS === 'ios') {
-      await Share.share(
-        { url: `file://${tempPath}`, title: filename },
-        { subject: filename },
-      );
-    } else {
-      await Share.share(
-        { message: json, title: filename },
-        { dialogTitle: filename },
-      );
-    }
+    await Share.share(
+      { url: `file://${tempPath}`, title: filename },
+      { subject: filename },
+    );
   } finally {
+    // Share.share resolves when the sheet dismisses. Most recipients have
+    // already copied the bytes by then; a few ("Save to Files", some Mail
+    // flows) may do a second async read afterward. We still unlink here —
+    // leaving temps around is worse for a calculator that may export often —
+    // and accept that those rare targets can fail closed.
     await unlinkIfExists(tempPath);
   }
 }

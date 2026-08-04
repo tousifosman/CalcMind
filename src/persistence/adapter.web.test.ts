@@ -189,6 +189,75 @@ describe('web export / import (P5.8)', () => {
       delete g.showOpenFilePicker;
     }
   });
+
+  test('input fallback detaches the focus listener on a successful pick', async () => {
+    const g = globalThis as Record<string, unknown>;
+    // Force the <input type="file"> path.
+    delete g.showOpenFilePicker;
+
+    const listeners = new Map<string, Set<() => void>>();
+    const addEventListener = jest.fn((type: string, fn: () => void) => {
+      const set = listeners.get(type) ?? new Set();
+      set.add(fn);
+      listeners.set(type, set);
+    });
+    const removeEventListener = jest.fn((type: string, fn: () => void) => {
+      listeners.get(type)?.delete(fn);
+    });
+
+    type ChangeHandler = () => void;
+    let changeHandler: ChangeHandler | undefined;
+    const input = {
+      type: '',
+      accept: '',
+      style: { display: '' },
+      files: null as Array<{ text: () => Promise<string> }> | null,
+      click: jest.fn(() => {
+        // Simulate the user picking a file, then the change event.
+        input.files = [{ text: async () => '{"from":"input"}' }];
+        changeHandler?.();
+      }),
+      remove: jest.fn(),
+      addEventListener: (type: string, fn: ChangeHandler) => {
+        if (type === 'change') {
+          changeHandler = fn;
+        }
+      },
+    };
+
+    const prev = {
+      addEventListener: g.addEventListener,
+      removeEventListener: g.removeEventListener,
+      document: g.document,
+      setTimeout: g.setTimeout,
+    };
+    g.addEventListener = addEventListener;
+    g.removeEventListener = removeEventListener;
+    g.setTimeout = (fn: () => void) => {
+      fn();
+      return 0;
+    };
+    g.document = {
+      createElement: () => input,
+      body: { appendChild: jest.fn() },
+    };
+
+    try {
+      await expect(pickJsonTextViaBrowser()).resolves.toBe('{"from":"input"}');
+      expect(addEventListener).toHaveBeenCalledWith('focus', expect.any(Function));
+      expect(removeEventListener).toHaveBeenCalledWith(
+        'focus',
+        expect.any(Function),
+      );
+      // No stale focus listeners left after a successful pick.
+      expect(listeners.get('focus')?.size ?? 0).toBe(0);
+    } finally {
+      g.addEventListener = prev.addEventListener;
+      g.removeEventListener = prev.removeEventListener;
+      g.document = prev.document;
+      g.setTimeout = prev.setTimeout;
+    }
+  });
 });
 
 describe('webpack .web.ts resolution (§5.1 / P5.4)', () => {

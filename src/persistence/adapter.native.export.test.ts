@@ -69,11 +69,12 @@ describe('native exportDocument (P5.8)', () => {
     expect(fs.__getFiles().get(primaryPath('doc_1'))).toBe(json);
   });
 
-  test('Android shares JSON as message (RN Share has no file URL there)', async () => {
+  test('Android shares JSON as message and never writes a temp file', async () => {
     rn.Platform.OS = 'android';
     const adapter = createNativeStorageAdapter();
     const json = '{"id":"doc_1","name":"X"}';
     await adapter.write('doc_1', json);
+    const filesBefore = fs.__getFiles().size;
 
     await adapter.exportDocument!('doc_1');
 
@@ -81,6 +82,13 @@ describe('native exportDocument (P5.8)', () => {
       { message: json, title: 'X.calcmind.json' },
       { dialogTitle: 'X.calcmind.json' },
     );
+    // No temp write on Android — only the primary document file exists.
+    expect(fs.__getFiles().size).toBe(filesBefore);
+    expect(
+      [...fs.__getFiles().keys()].some(p =>
+        p.startsWith(fs.TemporaryDirectoryPath),
+      ),
+    ).toBe(false);
   });
 });
 

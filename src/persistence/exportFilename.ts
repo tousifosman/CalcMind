@@ -1,5 +1,9 @@
 // Friendly `.calcmind.json` filename for export (P5.8). Shared by native and web
 // adapters so the two platforms cannot drift on sanitisation rules.
+//
+// Own module (no `.native` / `.web` twin) for the same reason as `documentId.ts`:
+// platform adapters must not value-import from `./adapter`. Kept separate from
+// document-id safety — filename sanitisation is not id-alphabet validation.
 export function filenameForExport(id: string, json: string): string {
   let base = id;
   try {
