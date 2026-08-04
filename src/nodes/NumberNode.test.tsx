@@ -146,6 +146,44 @@ describe('NumberNode editing', () => {
     expect(useUiStore.getState().editingNodeId).toBe(chain.members[2]);
   });
 
+  test('a dispatched command key calls preventDefault, so the browser cannot also insert it', () => {
+    // Regression test for the P2.8 hardware-keyboard bug (docs/journal/2026-08-04.md): without
+    // preventDefault, react-native-web still performs its native default text-insertion for the
+    // keydown, and since dispatchEditorCommand synchronously moves editingNodeId to a *different*
+    // node, that insertion lands on the freshly-created operand instead of vanishing - '-' is
+    // valid canonical raw, so the leaked character survived as real (wrong) data. `+` isn't
+    // canonical raw, so the same leak there was silently swallowed and never visible.
+    const id = addNumberNode({ x: 0, y: 0 }, '3');
+    act(() => editNumberNode(id));
+    const renderer = renderNode(<NumberNode id={id} />);
+    const preventDefault = jest.fn();
+
+    act(() =>
+      renderer.root.findByType(TextInput).props.onKeyPress({ nativeEvent: { key: '-' }, preventDefault }),
+    );
+
+    expect(preventDefault).toHaveBeenCalledTimes(1);
+
+    const chainId = useDocumentStore.getState().document.nodes[id]!.chainId!;
+    const chain = useDocumentStore.getState().document.chains[chainId];
+    const newOperandId = chain.members[2];
+    // The whole point: the fresh operand must start genuinely empty, not pre-loaded with '-'.
+    expect(useDocumentStore.getState().document.nodes[newOperandId]).toMatchObject({ raw: '' });
+  });
+
+  test('a digit key does not call preventDefault, so native insertion + onChangeText still work', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    act(() => editNumberNode(id));
+    const renderer = renderNode(<NumberNode id={id} />);
+    const preventDefault = jest.fn();
+
+    act(() =>
+      renderer.root.findByType(TextInput).props.onKeyPress({ nativeEvent: { key: '2' }, preventDefault }),
+    );
+
+    expect(preventDefault).not.toHaveBeenCalled();
+  });
+
   test('a digit typed via a real keystroke is left to onChangeText, not double-applied', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '1');
     act(() => editNumberNode(id));

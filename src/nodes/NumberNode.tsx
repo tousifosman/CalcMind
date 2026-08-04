@@ -91,7 +91,20 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
   // on-screen taps do. Arrow keys are left alone so the text caret still moves normally while
   // typing, rather than jumping to a sibling node mid-edit. Enter is excluded - the raw
   // listener in the effect above owns it and dispatches it itself (see that comment).
-  function handleKeyPress(e: { nativeEvent: { key: string } }): void {
+  //
+  // preventDefault() on a dispatched command is not optional: react-native-web's TextInput
+  // calls this handler from a native 'keydown' listener (see TextInput/index.js's
+  // handleKeyDown) without cancelling the browser's own default text-insertion action for
+  // that key. dispatchEditorCommand runs synchronously and can re-render this component onto
+  // a *different* number node (e.g. '-' appends an operator and switches editing to a fresh
+  // empty operand) before the browser gets to apply that default action - which then lands on
+  // whichever input is focused *afterward*, not on the one the keydown actually started on.
+  // For a character that isn't valid raw (like '+') the leaked keystroke is silently rejected
+  // by parseUserInput and invisible. '-' *is* valid raw, so it survived as a real bug: typing
+  // "3", then "-", produced a fresh operand pre-loaded with "-" instead of "", so appending a
+  // digit gave "-4" instead of "4" - silently negating the second operand of every hardware-
+  // typed subtraction. Caught live in a browser, not by any test (see the journal).
+  function handleKeyPress(e: { nativeEvent: { key: string }; preventDefault?: () => void }): void {
     const key = e.nativeEvent.key;
     const isDigit = key.length === 1 && key >= '0' && key <= '9';
     if (isDigit || key === '.' || key === ',') return;
@@ -100,7 +113,10 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
     if (key === 'Enter') return;
 
     const command = commandFromHardwareKey(key);
-    if (command) dispatchEditorCommand(command);
+    if (command) {
+      e.preventDefault?.();
+      dispatchEditorCommand(command);
+    }
   }
 
   return (
