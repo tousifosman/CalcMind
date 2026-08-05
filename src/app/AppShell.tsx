@@ -31,10 +31,17 @@ import { isDanglingReference, isRepointTarget } from '../engine/reference';
 import { getDeviceLocale } from '../ui/locale';
 import { Vec2 } from '../model/types';
 import { startAutosave } from './startAutosave';
+import { loadMostRecentDocument } from './loadOnStart';
 
 export function AppShell() {
   // Debounced autosave + force-flush on background / pagehide (§12.3, P5.6).
   useEffect(() => startAutosave(), []);
+
+  // Open the most recently saved document on launch, if one exists (§12.3, P5.5). Must run
+  // after startAutosave() above so there is a controller to flush before the swap.
+  useEffect(() => {
+    loadMostRecentDocument();
+  }, []);
 
   // Hardware/web-keyboard dispatch (§8.5, P2.8), through the same `dispatchEditorCommand`
   // the on-screen keypad uses below. Web only: there is no hardware-keyboard equivalent on a
