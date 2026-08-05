@@ -1311,6 +1311,70 @@ UI has no way to exercise, the same test-harness-limitation call made for P6's c
 
 ## P7 · Polish
 
+The last phase. Gated on P5 and P6b both being done (they now are); each task below is otherwise
+independent, so there is no required order within the phase beyond each task's own listed
+dependency.
+
+```mermaid
+flowchart LR
+    P5EXIT(["P5 phase exit<br/>#81"])
+    P6bEXIT(["P6b phase exit<br/>#111"])
+    P28["P2.8<br/>Input dispatch<br/>#16"]
+    P32["P3.2<br/>Bounds + queries<br/>#38"]
+    P65["P6.5<br/>Identity + hue<br/>#87"]
+    P66["P6.6<br/>Connector rendering<br/>#89"]
+    P71["P7.1<br/>Undo/redo audit<br/>#117"]
+    P72["P7.2<br/>Full keyboard support<br/>#118"]
+    P73["P7.3<br/>Result dot texture<br/>#119"]
+    P74["P7.4<br/>Light and dark theme<br/>#120"]
+    P75["P7.5<br/>Screen-reader support<br/>#121"]
+    P76["P7.6<br/>Spatial hash<br/>#122"]
+    P77["P7.7<br/>Device performance<br/>#123"]
+    EXIT(["Phase exit check<br/>#124"])
+
+    P5EXIT --> P71
+    P6bEXIT --> P71
+    P28 --> P72
+    P66 --> P73
+    P5EXIT --> P74
+    P6bEXIT --> P74
+    P65 --> P75
+    P32 --> P76
+    P5EXIT --> P77
+    P6bEXIT --> P77
+
+    P71 --> EXIT
+    P72 --> EXIT
+    P73 --> EXIT
+    P74 --> EXIT
+    P75 --> EXIT
+    P76 --> EXIT
+    P77 --> EXIT
+
+    style P5EXIT fill:#22A75B,color:#fff
+    style P6bEXIT fill:#22A75B,color:#fff
+    style P28 fill:#22A75B,color:#fff
+    style P32 fill:#22A75B,color:#fff
+    style P65 fill:#22A75B,color:#fff
+    style P66 fill:#22A75B,color:#fff
+    style P71 fill:#F0A020,color:#fff
+    style P72 fill:#F0A020,color:#fff
+    style P73 fill:#F0A020,color:#fff
+    style P74 fill:#F0A020,color:#fff
+    style P75 fill:#F0A020,color:#fff
+    style P76 fill:#F0A020,color:#fff
+    style P77 fill:#F0A020,color:#fff
+    style EXIT fill:#7030A0,color:#fff
+```
+
+Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
+gate. `P7.1`, `P7.4`, and `P7.7` carry no task-level dependency of their own — the phase text
+above just says "gated on P5 + P6b" — but the plan sequences them behind both phases' own exit
+checks rather than jumping the queue the moment each task's box would otherwise look open, shown
+here as gates from P5's and P6b's tracking issues. All seven tasks are ready to start now that
+both gates are green. Kept current by hand alongside the acceptance-criteria boxes below — if a
+task's status here disagrees with its boxes, the boxes win and this diagram is stale.
+
 ### P7.1 — Undo/redo audit
 
 **Objective.** Confirm the §13 guarantee across everything built since P0, rather than assuming it
