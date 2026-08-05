@@ -1072,7 +1072,7 @@ sharing the canvas transform), decision #13.
       with more than ~4 consumers collapses to a count badge that expands on selection (§11.1).
 - [x] Colour is **not the only channel** — the connector line itself and the `Unlink from parent`
       affordance carry the same information non-chromatically (§11.1).
-- [ ] Verified in a browser at several zoom levels, with a 1→4 fan on screen.
+- [x] Verified in a browser at several zoom levels, with a 1→4 fan on screen.
 
 ### P6.7 — Drag a result into a chain
 
