@@ -30,6 +30,7 @@ import {
   repointReference,
 } from './commands';
 import { createEmptyDocument } from '../model/factories';
+import { dispatchEditorCommand } from '../keypad/keymap';
 import { tokens } from '../ui/tokens';
 import { insertionFeedback, layoutChain } from '../chains/layout';
 import { widthOf } from '../chains/measure';
@@ -1326,6 +1327,33 @@ describe('P6.7 drag result into chain (§11)', () => {
     });
   });
 
+  test('the new reference is selected afterward, so a follow-up = continues that chain', () => {
+    // Regression test for a bug caught live during the P6 phase exit check: dragging a
+    // result into a chain left nothing selected, so the very next keypress (typically `=`,
+    // to finish the expression the reference was just dropped into) fell through to
+    // "nothing selected" and landed as a free node at the stale last-tap point instead of
+    // continuing the chain the drop just built.
+    const { resultId, targetChainId, targetLeft, targetRight } = seedSourceAndTarget();
+
+    commitSnapOutcome(resultId, { kind: 'append', chainId: targetChainId });
+
+    const doc = useDocumentStore.getState().document;
+    const insertedId = doc.chains[targetChainId]!.members[2]!;
+    expect(useUiStore.getState().selectedNodeId).toBe(insertedId);
+    expect(useUiStore.getState().editingNodeId).toBeNull(); // selected, not opened for text edit
+
+    dispatchEditorCommand({ region: 'equals' });
+
+    const after = useDocumentStore.getState().document;
+    const chain = after.chains[targetChainId]!;
+    expect(chain.members.slice(0, 3)).toEqual([targetLeft, targetRight, insertedId]);
+    expect(after.nodes[chain.members[3]!]).toMatchObject({ kind: 'equals' });
+    const result = after.nodes[chain.members[4]!];
+    expect(result).toMatchObject({ kind: 'result' });
+    // 2 + 5 = 7 (targetLeft=2, targetRight=+, insertedId=ref->5).
+    expect(result?.kind === 'result' ? result.derived?.display : undefined).toBe('7');
+  });
+
   test('prepend and insert also place a reference; source result unchanged', () => {
     const { sourceChainId, resultId, targetChainId, targetLeft, targetRight } =
       seedSourceAndTarget();
@@ -1631,5 +1659,47 @@ describe('P6.2 incremental cascade', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  test('losing = cascades too: a dependent stops showing a stale value once its reference dangles', () => {
+    // Regression test for a bug caught live during the P6 phase exit check: finalizeChain
+    // used to call removeResultNodesForChain directly when a chain lost its `=`, bypassing
+    // recomputeFromSeeds entirely. The reference itself correctly went dangling (P6.4), but
+    // nothing told a chain built on top of that reference to recompute - it kept showing its
+    // last cached value instead of NotANumber, silently wrong until something else touched it.
+
+    // c1: 9 =
+    const n1 = addNumberNode({ x: 0, y: 0 }, '9');
+    appendEqualsNode(n1);
+    const c1 = useDocumentStore.getState().document.nodes[n1]!.chainId!;
+    const r1 = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result' && n.sourceChainId === c1,
+    )!;
+
+    // c2: 1 + [ref -> r1] = 10 (P6.7-shaped: a plain chain finished off by appending a
+    // reference to r1, same as a drag-commit would).
+    const a = addNumberNode({ x: 0, y: 200 }, '1');
+    const plus = addOperatorNode({ x: 40, y: 200 }, '+');
+    formNewChain(a, plus);
+    const c2 = useDocumentStore.getState().document.nodes[a]!.chainId!;
+    commitSnapOutcome(r1.id, { kind: 'append', chainId: c2 });
+    const c2AfterRef = useDocumentStore.getState().document.chains[c2]!;
+    appendEqualsNode(c2AfterRef.members[c2AfterRef.members.length - 1]!);
+    const r2 = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result' && n.sourceChainId === c2,
+    )!;
+    expect(r2).toMatchObject({ derived: { display: '10' } });
+
+    // Delete c1's '=' - removes r1, so c2's reference dangles.
+    const equalsInC1 = useDocumentStore
+      .getState()
+      .document.chains[c1]!.members.find((id) => useDocumentStore.getState().document.nodes[id]!.kind === 'equals')!;
+    deleteNode(equalsInC1);
+
+    expect(useDocumentStore.getState().document.nodes[r1.id]).toBeUndefined();
+    // c2 must have recomputed, not kept showing the stale '10'.
+    expect(useDocumentStore.getState().document.nodes[r2.id]).toMatchObject({
+      derived: { outcome: { status: 'error', error: 'NotANumber' } },
+    });
   });
 });

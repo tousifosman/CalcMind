@@ -22,7 +22,7 @@ import { widthOf } from '../chains/measure';
 import type { SnapOutcome } from '../chains/snapping';
 import { getDeviceLocale } from '../ui/locale';
 import { tokens } from '../ui/tokens';
-import { dirtyClosure, recomputeFromSeeds, removeResultNodesForChain } from '../engine/graph';
+import { dirtyClosure, recomputeFromSeeds } from '../engine/graph';
 import {
   deleteNodesLeavingDanglingRefs,
   isDanglingReference,
@@ -90,32 +90,34 @@ function reflowChain(draft: CalcDocument, chainId: ChainId): void {
   }
 }
 
-/** §8.3: a chain that loses its `=` also loses its result node. Deletion lives in
- *  `removeResultNodesForChain` (`engine/graph.ts`) so the equals-loss path and the
- *  not-Evaluated recompute path cannot drift apart. */
-
 /** §8.3 bookkeeping after a chain's `members` changed, in the same commit as the
- *  mutation: drop orphaned results if `=` is gone; otherwise recompute the chain's
- *  result via the dirty-set path (P4.8 / §11 — create, update, or remove); delete an
- *  empty chain; dissolve a single-member chain (sole member becomes free with its
- *  current `position` authoritative); otherwise re-flow. */
+ *  mutation: recompute the chain via the dirty-set path (P4.8 / §11 — create, update,
+ *  or drop the result depending on whether `=` is present and the chain is Evaluated)
+ *  and cascade to anything that references it (§11 / P6.2 — losing `=` is an edit too);
+ *  delete an empty chain; dissolve a single-member chain (sole member becomes free with
+ *  its current `position` authoritative); otherwise re-flow every chain the cascade
+ *  touched. */
 function finalizeChain(draft: CalcDocument, chainId: ChainId): void {
   const chain = draft.chains[chainId];
   if (!chain) return;
 
-  const hasEquals = chain.members.some((id) => draft.nodes[id]?.kind === 'equals');
-  // Capture the dirty set while the seed still exists and (for the equals path)
-  // before dissolve bookkeeping — dependents are reflowed only when we cascaded.
-  let dirtyAfterCompute: readonly ChainId[] = [chainId];
-  if (hasEquals) {
-    // Nested inside an existing applyCommand recipe, so call the graph directly
-    // rather than via applyCommand's recomputeSeeds option (that option is for
-    // top-level recipes that don't already own the draft — e.g. setNodeRaw).
-    recomputeFromSeeds(draft, [chainId], getDeviceLocale());
-    dirtyAfterCompute = dirtyClosure(draft, [chainId]);
-  } else {
-    removeResultNodesForChain(draft, chainId, getDeviceLocale());
-  }
+  // Always cascade, whether this chain gained, kept, or just lost its `=`.
+  // `recomputeChain` (inside `recomputeFromSeeds`) already handles a seed that is no
+  // longer Evaluated by removing its own result — losing `=` doesn't need a special
+  // "skip the graph" branch. That branch used to call `removeResultNodesForChain`
+  // directly, which never seeded a cascade: a chain referencing the one that just lost
+  // `=` kept showing its last cached value instead of recomputing to reflect the new
+  // dangling reference (caught live during the P6 phase exit check — deleting a
+  // dependency's `=` left a downstream result frozen on a stale number instead of
+  // turning into `NotANumber`).
+  //
+  // Nested inside an existing applyCommand recipe, so call the graph directly rather
+  // than via applyCommand's recomputeSeeds option (that option is for top-level
+  // recipes that don't already own the draft — e.g. setNodeRaw).
+  recomputeFromSeeds(draft, [chainId], getDeviceLocale());
+  // Capture the dirty set while the seed still exists and before dissolve bookkeeping —
+  // dependents are reflowed only when we cascaded.
+  const dirtyAfterCompute = dirtyClosure(draft, [chainId]);
 
   // Recompute may have added/removed a result member — re-read after it.
   const after = draft.chains[chainId];
@@ -577,13 +579,13 @@ function placeReferenceInChain(
   resultId: NodeId,
   chainId: ChainId,
   index: number,
-): void {
+): NodeId | undefined {
   const result = draft.nodes[resultId];
   const chain = draft.chains[chainId];
-  if (!result || result.kind !== 'result' || !chain) return;
+  if (!result || result.kind !== 'result' || !chain) return undefined;
   // Defence in depth: probe keeps the result's chainId so own-chain is excluded,
   // but refuse here too if a stale outcome somehow targets it.
-  if (result.chainId === chainId) return;
+  if (result.chainId === chainId) return undefined;
 
   const reference = createReferenceNode({ x: 0, y: 0 }, resultId);
   draft.nodes[reference.id] = reference;
@@ -599,6 +601,7 @@ function placeReferenceInChain(
   }
   chain.members.splice(clamped, 0, reference.id);
   finalizeChain(draft, chainId);
+  return reference.id;
 }
 
 /**
@@ -611,17 +614,17 @@ function placeReferenceInNewChain(
   resultId: NodeId,
   outcome: Extract<SnapOutcome, { kind: 'newChain' }>,
   position?: Vec2,
-): void {
+): NodeId | undefined {
   const result = draft.nodes[resultId];
-  if (!result || result.kind !== 'result') return;
-  if (outcome.leftId !== resultId && outcome.rightId !== resultId) return;
+  if (!result || result.kind !== 'result') return undefined;
+  if (outcome.leftId !== resultId && outcome.rightId !== resultId) return undefined;
 
   const partnerId = outcome.leftId === resultId ? outcome.rightId : outcome.leftId;
   const partner = draft.nodes[partnerId];
-  if (!partner || partnerId === resultId) return;
+  if (!partner || partnerId === resultId) return undefined;
 
   removeFromCurrentChain(draft, partnerId);
-  if (!draft.nodes[partnerId]) return;
+  if (!draft.nodes[partnerId]) return undefined;
 
   const resultIsLeft = outcome.leftId === resultId;
   const anchor = resultIsLeft
@@ -646,38 +649,48 @@ function placeReferenceInNewChain(
   draft.nodes[leftId]!.chainId = chainId;
   draft.nodes[rightId]!.chainId = chainId;
   finalizeChain(draft, chainId);
+  return reference.id;
 }
 
 /** P6.7 / §11 drag-to-link: snap-commit a dragged result as a reference to it.
  *  One undo entry. `snapping.ts` is untouched — only the commit substitutes a
- *  reference for the result node. */
+ *  reference for the result node.
+ *
+ *  Selects the new reference afterward the same way typing/continuation already
+ *  select what they just created (§8.5) — otherwise the drop leaves nothing
+ *  selected, and the very next keypress (typically `=`, to finish the expression
+ *  the reference was just dropped into) falls through to "nothing selected" and
+ *  lands as a free node at the stale last tap point instead of continuing the
+ *  chain the user just built. Caught live driving the P6 phase exit check. */
 function commitResultDragAsReference(
   resultId: NodeId,
   outcome: SnapOutcome,
   position?: Vec2,
 ): void {
+  let referenceId: NodeId | undefined;
   useDocumentStore.getState().applyCommand((draft) => {
     const result = draft.nodes[resultId];
     if (!result || result.kind !== 'result') return;
 
     switch (outcome.kind) {
       case 'prepend':
-        placeReferenceInChain(draft, resultId, outcome.chainId, 0);
+        referenceId = placeReferenceInChain(draft, resultId, outcome.chainId, 0);
         break;
       case 'append': {
         const chain = draft.chains[outcome.chainId];
         if (!chain) return;
-        placeReferenceInChain(draft, resultId, outcome.chainId, chain.members.length);
+        referenceId = placeReferenceInChain(draft, resultId, outcome.chainId, chain.members.length);
         break;
       }
       case 'insert':
-        placeReferenceInChain(draft, resultId, outcome.chainId, outcome.index);
+        referenceId = placeReferenceInChain(draft, resultId, outcome.chainId, outcome.index);
         break;
       case 'newChain':
-        placeReferenceInNewChain(draft, resultId, outcome, position);
+        referenceId = placeReferenceInNewChain(draft, resultId, outcome, position);
         break;
     }
   });
+  if (referenceId) selectNode(referenceId);
 }
 
 /** Dispatch a P3.3 `SnapOutcome` onto the matching mutation command. One undo entry —
