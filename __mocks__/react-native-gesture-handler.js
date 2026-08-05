@@ -35,6 +35,7 @@ const Gesture = {
   LongPress: makeGestureBuilder,
   Simultaneous: () => makeGestureBuilder(),
   Race: () => makeGestureBuilder(),
+  Exclusive: () => makeGestureBuilder(),
 };
 
 function GestureDetector({ children }) {
