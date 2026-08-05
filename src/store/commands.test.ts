@@ -31,7 +31,13 @@ import {
   setNodeLabel,
   editNodeLabel,
   finishEditingLabel,
+  beginValueScrub,
+  scrubNodeValue,
+  endValueScrub,
+  isValueScrubbing,
+  _setScrubFrameSchedulerForTests,
 } from './commands';
+import { setAutosaveSuppressHandler } from './documentStore';
 import { createEmptyDocument } from '../model/factories';
 import { dispatchEditorCommand } from '../keypad/keymap';
 import { tokens } from '../ui/tokens';
@@ -1799,5 +1805,114 @@ describe('setNodeLabel (P6b.1)', () => {
     expect(useUiStore.getState().editingNodeId).toBeNull();
     finishEditingLabel();
     expect(useUiStore.getState().editingLabelNodeId).toBeNull();
+  });
+});
+
+describe('value scrub (§8.8 / P6b.4)', () => {
+  let suppressedLog: boolean[];
+  let pendingFrames: Array<() => void>;
+
+  beforeEach(() => {
+    suppressedLog = [];
+    pendingFrames = [];
+    setAutosaveSuppressHandler((s) => {
+      suppressedLog.push(s);
+    });
+    _setScrubFrameSchedulerForTests({
+      schedule: (cb) => {
+        pendingFrames.push(cb);
+        return pendingFrames.length as unknown as ReturnType<typeof requestAnimationFrame>;
+      },
+      cancel: () => {
+        pendingFrames = [];
+      },
+    });
+  });
+
+  afterEach(() => {
+    endValueScrub();
+    setAutosaveSuppressHandler(null);
+    _setScrubFrameSchedulerForTests(null);
+  });
+
+  function flushFrame(): void {
+    const frame = pendingFrames.shift();
+    expect(frame).toBeDefined();
+    frame!();
+  }
+
+  test('begin suppresses autosave; end clears suppress', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '5');
+    beginValueScrub(id);
+    expect(isValueScrubbing()).toBe(true);
+    expect(suppressedLog).toEqual([true]);
+    endValueScrub();
+    expect(isValueScrubbing()).toBe(false);
+    expect(suppressedLog).toEqual([true, false]);
+  });
+
+  test('a multi-frame scrub coalesces into one undo entry', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    const before = useDocumentStore.getState().undoStack.length;
+
+    beginValueScrub(id);
+    scrubNodeValue(id, '2');
+    flushFrame();
+    scrubNodeValue(id, '3');
+    flushFrame();
+    scrubNodeValue(id, '4');
+    flushFrame();
+    endValueScrub();
+
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '4' });
+    expect(useDocumentStore.getState().undoStack.length).toBe(before + 1);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '1' });
+  });
+
+  test('pending frames coalesce: only the latest raw lands when flushed once', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    beginValueScrub(id);
+    scrubNodeValue(id, '2');
+    scrubNodeValue(id, '3');
+    scrubNodeValue(id, '9');
+    expect(pendingFrames).toHaveLength(1);
+    flushFrame();
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '9' });
+    endValueScrub();
+  });
+
+  test('scrub cascades through a dependent chain (dirty subgraph)', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '10');
+    const plus = addOperatorNode({ x: 40, y: 0 }, '+');
+    const b = addNumberNode({ x: 80, y: 0 }, '5');
+    formNewChain(a, plus);
+    const chainId = useDocumentStore.getState().document.nodes[a]!.chainId!;
+    appendToChain(b, chainId);
+    appendEqualsNode(b);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    expect(result).toMatchObject({ derived: { display: '15' } });
+
+    beginValueScrub(a);
+    scrubNodeValue(a, '20');
+    flushFrame();
+    endValueScrub();
+
+    expect(useDocumentStore.getState().document.nodes[a]).toMatchObject({ raw: '20' });
+    const updated = useDocumentStore.getState().document.nodes[result.id];
+    expect(updated).toMatchObject({ derived: { display: '25' } });
+  });
+
+  test('endValueScrub flushes a pending frame without waiting for rAF', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    beginValueScrub(id);
+    scrubNodeValue(id, '7');
+    expect(pendingFrames).toHaveLength(1);
+    endValueScrub();
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '7' });
+    expect(isValueScrubbing()).toBe(false);
   });
 });

@@ -35,8 +35,10 @@ export interface ApplyCommandOptions {
 }
 
 type DirtyHandler = () => void;
+type SuppressHandler = (suppressed: boolean) => void;
 
 let dirtyHandler: DirtyHandler | null = null;
+let autosaveSuppressHandler: SuppressHandler | null = null;
 
 /**
  * Register the persistence dirty listener (autosave). Pass `null` to detach.
@@ -44,6 +46,20 @@ let dirtyHandler: DirtyHandler | null = null;
  */
 export function setDocumentDirtyHandler(handler: DirtyHandler | null): void {
   dirtyHandler = handler;
+}
+
+/**
+ * Register the autosave suppress hook (§8.8 / P6b.4). The value-slider scrub
+ * gesture calls {@link setAutosaveSuppressed} so one drag does not enqueue a
+ * write per frame; force-flush still writes while suppressed.
+ */
+export function setAutosaveSuppressHandler(handler: SuppressHandler | null): void {
+  autosaveSuppressHandler = handler;
+}
+
+/** Toggle autosave debounce suppress. No-op until {@link setAutosaveSuppressHandler} is wired. */
+export function setAutosaveSuppressed(suppressed: boolean): void {
+  autosaveSuppressHandler?.(suppressed);
 }
 
 function notifyDocumentDirty(): void {

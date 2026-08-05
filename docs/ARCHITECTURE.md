@@ -351,7 +351,7 @@ src/
   app/           App shell, providers, theme injection
   canvas/        Canvas, viewport transform, pan/zoom gestures, coords.ts,
                  ConnectorLayer + connectors.ts (SVG link overlay, §11.3)
-  nodes/         One view per node kind + useNodeDrag
+  nodes/         One view per node kind + useNodeDrag + ValueSlider (§8.8)
   chains/        layout.ts, snapping.ts, bounds.ts
   engine/        tokenize, parse, evaluate, format, numeric, graph, errors
   model/         types.ts, factories.ts, schema.ts (zod)
@@ -1140,6 +1140,8 @@ document snapshots.
 
 - Rapid text edits to the same node within 500ms coalesce into one entry, so undo does not walk
   back one keystroke at a time.
+- A value-slider scrub (§8.8) coalesces the whole gesture into one entry regardless of duration —
+  it is a drag, not a keystroke burst.
 - Viewport changes are excluded (§7).
 - Autosave and undo are independent: undo mutates the store, which marks it dirty, which saves.
 - Autosave is suppressible (`setSuppressed`) so a continuous gesture such as value scrubbing
@@ -1160,9 +1162,9 @@ Jest is already configured and green in this repo.
 | `engine/reference` | Live/dangling display text, delete-time `lastKnownDisplay` stamp, re-point eligibility |
 | `chains/` | Layout arithmetic, bounds, snap candidate selection at threshold boundaries, detach hysteresis |
 | `persistence/` | Round-trip equality (document → JSON → document), byte-stability of serialisation, every migration fixture, malformed-file and newer-schema handling |
-| Components | Each node kind renders; result nodes reject edit attempts |
+| Components | Each node kind renders; result nodes reject edit attempts; value slider range inference + popover |
 | `canvas/connectors` | Live-link collection, 1→N fan paths, >4 collapse badge, selection fade (decision #13) |
-| Integration | create → snap → `=` → result; edit input → result updates; save → reload → identical document |
+| Integration | create → snap → `=` → result; edit input → result updates; save → reload → identical document; scrub gesture → one undo + cascade |
 | Property (`fast-check`) | parse∘print round-trips; formatter never emits something it cannot re-parse |
 
 ---

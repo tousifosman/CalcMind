@@ -6,6 +6,7 @@ import {
   type AutosaveController,
 } from '../persistence/autosave';
 import {
+  setAutosaveSuppressHandler,
   setDocumentDirtyHandler,
   useDocumentStore,
 } from '../store/documentStore';
@@ -32,6 +33,7 @@ export function startAutosave(): () => void {
   });
 
   setDocumentDirtyHandler(() => next.markDirty());
+  setAutosaveSuppressHandler(suppressed => next.setSuppressed(suppressed));
   detachLifecycle = next.attachLifecycleListeners();
   controller = next;
 
@@ -42,6 +44,7 @@ export function stopAutosave(): void {
   detachLifecycle?.();
   detachLifecycle = null;
   setDocumentDirtyHandler(null);
+  setAutosaveSuppressHandler(null);
   controller?.dispose();
   controller = null;
 }

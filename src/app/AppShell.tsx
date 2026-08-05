@@ -15,6 +15,7 @@ import { hitTestNode } from '../canvas/hitTest';
 import { Keypad } from '../keypad/Keypad';
 import { ContextMenuOverlay } from '../nodes/NodeContextMenu';
 import { DanglingRecoveryOverlay } from '../nodes/DanglingRecoverySheet';
+import { ValueSliderOverlay } from '../nodes/ValueSlider';
 import { commandFromHardwareKey, dispatchEditorCommand } from '../keypad/keymap';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
@@ -129,6 +130,7 @@ export function AppShell() {
           <ConnectorLayer />
         </Canvas>
         <Keypad locale={getDeviceLocale()} onKeyPress={dispatchEditorCommand} />
+        <ValueSliderOverlay />
         <ContextMenuOverlay
           onDeleteNode={deleteNode}
           onSelectGroup={selectGroup}
