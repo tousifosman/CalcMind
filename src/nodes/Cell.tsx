@@ -5,24 +5,49 @@
 // components (NumberNode etc.) own their palette, width and glyph content and render through
 // this so the five of them don't each re-derive the same box model.
 //
-// Identity (§11.1 / P6.5): when `identityHue` is set, a ring is drawn inset on the cell and the
-// label (if any) uses that hue. References pass the hue as their fill/border instead and leave
-// `identityHue` unset — the ring is for declaring cells, the fill is for reference cells.
-import { ReactNode } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+// Identity (§11.1 / P6.5 / P6b.1): when `identityHue` is set, a ring is drawn inset on the cell
+// and the label (if any) uses that hue. References pass the hue as their fill/border instead and
+// leave `identityHue` unset — the ring is for declaring cells, the fill is for reference cells.
+// References that still show the identity caption pass `labelHue` so the caption matches without
+// drawing a ring. In-place label editing (P6b.1) swaps the caption Text for a TextInput.
+import { ReactNode, useEffect, useRef } from 'react';
+import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { tokens, labelColor } from '../ui/tokens';
 
 /** Inset identity ring width — matches the structural `borderBand` so the ring reads as
  *  part of the same chrome language, not a thicker selection outline. */
 export const IDENTITY_RING_WIDTH = tokens.borderBand;
 
+/**
+ * Web-only: stop Space/Enter bubbling to a GestureDetector ancestor (§11.1 / P6b.1).
+ * Exported so the trap itself is unit-testable — react-test-renderer TextInput refs are
+ * not real DOM nodes, so the effect path cannot be exercised end-to-end in Jest.
+ */
+export function attachLabelKeyTrap(inputNode: {
+  addEventListener: (type: string, listener: (e: { key: string; stopPropagation: () => void }) => void) => void;
+  removeEventListener: (type: string, listener: (e: { key: string; stopPropagation: () => void }) => void) => void;
+}): () => void {
+  function onNativeKeyDown(e: { key: string; stopPropagation: () => void }): void {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.stopPropagation();
+  }
+  inputNode.addEventListener('keydown', onNativeKeyDown);
+  return () => inputNode.removeEventListener('keydown', onNativeKeyDown);
+}
+
 interface CellProps {
   width: number;
   fill: string;
   border: string;
   label?: string;
-  /** Identity hue for a declaring cell's ring + label colour (§11.1). */
+  /** Identity hue for a declaring cell's ring + default label colour (§11.1). */
   identityHue?: string;
+  /** Caption colour without drawing an identity ring — references showing a source label. */
+  labelHue?: string;
+  /** When true, the caption is an editable TextInput (P6b.1). */
+  isEditingLabel?: boolean;
+  onLabelChange?: (text: string) => void;
+  onLabelBlur?: () => void;
   testID?: string;
   children: ReactNode;
 }
@@ -33,17 +58,54 @@ export function Cell({
   border,
   label,
   identityHue,
+  labelHue,
+  isEditingLabel,
+  onLabelChange,
+  onLabelBlur,
   testID,
   children,
 }: CellProps) {
-  const captionColor = identityHue ?? labelColor;
+  const captionColor = labelHue ?? identityHue ?? labelColor;
+  const showCaption = isEditingLabel || (label !== undefined && label.length > 0);
+  const labelInputRef = useRef<TextInput>(null);
+
+  // Same web-only Space/Enter trap as NumberNode: gesture-handler's KeyboardEventManager
+  // treats a bubbling Space/Enter on a GestureDetector ancestor as tap activation, which
+  // steals focus mid-label (Space → only the first word survives). Stop propagation on the
+  // real <input> before that listener sees it; Enter still finishes via onSubmitEditing.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !isEditingLabel) return;
+    const inputNode: any = labelInputRef.current;
+    if (!inputNode || typeof inputNode.addEventListener !== 'function') return;
+    return attachLabelKeyTrap(inputNode);
+  }, [isEditingLabel]);
 
   return (
     <View style={styles.wrapper}>
-      {label ? (
-        <Text style={[styles.label, { color: captionColor }]} numberOfLines={1}>
-          {label}
-        </Text>
+      {showCaption ? (
+        isEditingLabel ? (
+          <TextInput
+            ref={labelInputRef}
+            testID={testID ? `${testID}-label-input` : undefined}
+            style={[styles.label, styles.labelInput, { color: captionColor }]}
+            value={label ?? ''}
+            onChangeText={onLabelChange}
+            onBlur={onLabelBlur}
+            autoFocus
+            blurOnSubmit
+            onSubmitEditing={onLabelBlur}
+            placeholder="Label"
+            placeholderTextColor={labelColor}
+          />
+        ) : (
+          <Text
+            testID={testID ? `${testID}-label` : undefined}
+            style={[styles.label, { color: captionColor }]}
+            numberOfLines={1}
+          >
+            {label}
+          </Text>
+        )
       ) : null}
       <View
         testID={testID}
@@ -95,6 +157,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     marginBottom: 2,
+  },
+  labelInput: {
+    minWidth: 64,
+    padding: 0,
+    textAlign: 'center',
   },
   band: {
     height: tokens.nodeHeight,

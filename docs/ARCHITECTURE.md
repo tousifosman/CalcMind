@@ -672,9 +672,13 @@ operators are visually separated from digits.
   other kind is selected but not itself a text field.
 - `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
   nothing typed) discards it rather than leaving a blank cell on the canvas.
-- Long-press on a node → `Copy`, `Delete`, `Select group`, and for a reference `Unlink from parent`.
+- Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` on values
+  (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
+- **`Label` opens an in-place caption editor on the identity source** (§11.1). The write always
+  lands on the declaring number or result, so every reference that shares the identity updates
+  together; successive keystrokes coalesce into one undo entry (§13).
 
 ### 8.7 Continuation: how links are normally made
 
@@ -907,7 +911,9 @@ identity, not just by a line.**
 - **The label belongs to the identity, not the cell.** It renders above the declaring cell *and*
   above every reference to it. In the compound-interest screenshot (§1.3) "Initial Deposit" appears
   three times — once on the declaration, once over each reference. So `label` is looked up through
-  the identity, and editing it updates every cell at once.
+  the identity (`labelForNode` / `identitySourceId` in `src/engine/identity.ts`), and editing it
+  via `setNodeLabel` updates every cell at once. References never own the caption — a `label`
+  field on a reference node is ignored at render time.
 
 Rules that follow from this:
 
@@ -1224,9 +1230,9 @@ fits long-press. `Select group` remains the dwell-free alternative (§8.6). Cont
    one referenced input across a range, and plots one series per dependent result with axis ticks
    colour-matched to each result's hue (§1.3). Out of scope for v1, but it is the clearest reason
    the DAG must be a real graph: a graph node is just another consumer.
-5. **Labels** — modelled on the node base (§6) and observed to be a headline feature rather than a
-   nicety. Open question is only *when*: a labelled canvas is far more readable than an unlabelled
-   one, so this may deserve to land before P7.
+5. ~~**Labels**~~ — **resolved (P6b.1).** Modelled on the node base (§6); looked up through the
+   identity so editing updates every cell that shares it. Context-menu `Label` opens the in-place
+   editor; the toolbar tag button from §1.3 remains a future discoverability nicety.
 6. ~~**Identity palette accessibility**~~ — **resolved (P6.8).** Machado et al. (2009)
    protanopia/deuteranopia simulation; ΔE₇₆ ≥ 15 for every identity×identity pair and every
    identity×structural pair. Four of the six first-guess swatches failed and were replaced

@@ -38,6 +38,7 @@ describe('NodeContextMenu', () => {
         onDelete={onDelete}
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -68,6 +69,7 @@ describe('NodeContextMenu', () => {
         onDelete={jest.fn()}
         onSelectGroup={onSelectGroup}
         onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -95,6 +97,7 @@ describe('NodeContextMenu', () => {
         onDelete={jest.fn()}
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -116,6 +119,7 @@ describe('NodeContextMenu', () => {
         onDelete={jest.fn()}
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -150,6 +154,7 @@ describe('NodeContextMenu', () => {
         onDelete={jest.fn()}
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={onUnlink}
+        onLabel={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -162,6 +167,128 @@ describe('NodeContextMenu', () => {
     });
     expect(onUnlink).toHaveBeenCalledWith(refId);
     expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  test('Label is present for numbers and invokes the handler (P6b.1)', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '10');
+    const onLabel = jest.fn();
+    const onDismiss = jest.fn();
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId={id}
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+        onLabel={onLabel}
+        onDismiss={onDismiss}
+      />,
+    );
+    const labelBtn = renderer.root
+      .findAll((node) => node.props.testID === 'context-menu-item-Label')
+      .find((node) => node.props.onPress !== undefined);
+    expect(labelBtn).toBeDefined();
+    act(() => {
+      labelBtn!.props.onPress();
+    });
+    expect(onLabel).toHaveBeenCalledWith(id);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  test('Label is absent for operators', () => {
+    let opId = '';
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.nodes.op1 = {
+          id: 'op1',
+          kind: 'operator',
+          op: '+',
+          position: { x: 0, y: 0 },
+          chainId: null,
+          createdAt: 0,
+        };
+        opId = 'op1';
+      });
+    });
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId={opId}
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
+        onDismiss={jest.fn()}
+      />,
+    );
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Label'),
+    ).toHaveLength(0);
+  });
+
+  test('Label is absent for a dangling reference (no live source to write)', () => {
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.nodes.dangling = {
+          id: 'dangling',
+          kind: 'reference',
+          position: { x: 0, y: 0 },
+          chainId: null,
+          createdAt: 0,
+          targetNodeId: 'gone',
+          lastKnownDisplay: '42',
+        };
+      });
+    });
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId="dangling"
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
+        onDismiss={jest.fn()}
+      />,
+    );
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Label'),
+    ).toHaveLength(0);
+    // Unlink is still offered — convert-to-number is the recovery path.
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Unlink from parent')
+        .length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  test('Label is present for a live reference', () => {
+    const target = addNumberNode({ x: 0, y: 0 }, '7');
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.nodes.ref_live = {
+          id: 'ref_live',
+          kind: 'reference',
+          position: { x: 40, y: 0 },
+          chainId: null,
+          createdAt: 0,
+          targetNodeId: target,
+        };
+      });
+    });
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId="ref_live"
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
+        onDismiss={jest.fn()}
+      />,
+    );
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Label').length,
+    ).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -188,6 +315,7 @@ describe('ContextMenuOverlay', () => {
         onDeleteNode={jest.fn()}
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
+        onLabelNode={jest.fn()}
       />,
     );
     expect(renderer.toJSON()).toBeNull();
@@ -204,6 +332,7 @@ describe('ContextMenuOverlay', () => {
         onDeleteNode={jest.fn()}
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
+        onLabelNode={jest.fn()}
       />,
     );
 
@@ -223,6 +352,7 @@ describe('ContextMenuOverlay', () => {
         onDeleteNode={jest.fn()}
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
+        onLabelNode={jest.fn()}
       />,
     );
 

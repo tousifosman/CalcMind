@@ -30,6 +30,7 @@ import {
   referenceDisplayText,
 } from '../engine/reference';
 import { parseComputedDisplay } from '../engine/format';
+import { identitySourceId } from '../engine/identity';
 
 export function renameDocument(name: string): void {
   useDocumentStore.getState().applyCommand((draft) => {
@@ -963,12 +964,14 @@ function discardIfAbandoned(keepId: NodeId | null): void {
 export function selectNode(nodeId: NodeId): void {
   discardIfAbandoned(nodeId);
   useUiStore.getState().setEditingNode(null);
+  useUiStore.getState().setEditingLabelNode(null);
   useUiStore.getState().setSelectedNode(nodeId);
 }
 
 /** Selects a number node and opens its in-place text editor (§8.6, P2.6). */
 export function editNumberNode(nodeId: NodeId): void {
   discardIfAbandoned(nodeId);
+  useUiStore.getState().setEditingLabelNode(null);
   useUiStore.getState().setSelectedNode(nodeId);
   useUiStore.getState().setEditingNode(nodeId);
 }
@@ -978,4 +981,110 @@ export function deselectNode(): void {
   discardIfAbandoned(null);
   useUiStore.getState().setSelectedNode(null);
   useUiStore.getState().setEditingNode(null);
+  useUiStore.getState().setEditingLabelNode(null);
+}
+
+/** setNodeLabel coalescing window (§13): keystrokes to the same identity source
+ *  within this many ms merge into one undo entry — same budget as {@link setNodeRaw}. */
+const LABEL_EDIT_COALESCE_WINDOW_MS = 500;
+
+let lastLabelEdit: { sourceId: NodeId; at: number; stackLength: number } | null =
+  null;
+
+/**
+ * Set the caption on an identity (§11.1 / P6b.1). `nodeId` may be the declaring
+ * value or any reference to it — the write always lands on the identity source
+ * so every cell sharing that identity updates together, in one undo entry
+ * (successive keystrokes within {@link LABEL_EDIT_COALESCE_WINDOW_MS} coalesce).
+ * Empty string clears the label. No-op when `nodeId` is not a number, result,
+ * or live reference to one.
+ */
+export function setNodeLabel(nodeId: NodeId, label: string): void {
+  const store = useDocumentStore.getState();
+  const sourceId = identitySourceId(store.document.nodes, nodeId);
+  if (sourceId === null) return;
+
+  // Store as typed so mid-edit spaces survive; empty string clears. Identity
+  // grant still requires a non-empty caption via {@link nodeHasLabel}.
+  const next = label.length > 0 ? label : undefined;
+
+  const stackLengthBefore = store.undoStack.length;
+  const now = Date.now();
+  const canCoalesce =
+    lastLabelEdit !== null &&
+    lastLabelEdit.sourceId === sourceId &&
+    lastLabelEdit.stackLength === stackLengthBefore &&
+    now - lastLabelEdit.at < LABEL_EDIT_COALESCE_WINDOW_MS;
+
+  store.applyCommand((draft) => {
+    const node = draft.nodes[sourceId];
+    if (!node || (node.kind !== 'number' && node.kind !== 'result')) return;
+    if (next === undefined) {
+      if (node.label === undefined) return;
+      delete node.label;
+    } else if (node.label === next) {
+      return;
+    } else {
+      node.label = next;
+    }
+  });
+
+  if (useDocumentStore.getState().undoStack.length === stackLengthBefore) {
+    return; // no-op (label unchanged, or source vanished mid-flight)
+  }
+
+  if (canCoalesce) {
+    useDocumentStore.setState((state) => {
+      const stack = state.undoStack.slice();
+      const latest = stack.pop()!;
+      const previous = stack.pop()!;
+      stack.push({
+        patches: [...previous.patches, ...latest.patches],
+        inversePatches: [...latest.inversePatches, ...previous.inversePatches],
+      });
+      return { undoStack: stack };
+    });
+  }
+
+  lastLabelEdit = {
+    sourceId,
+    at: now,
+    stackLength: useDocumentStore.getState().undoStack.length,
+  };
+}
+
+/**
+ * Open the in-place label editor on `nodeId` (§11.1). Resolves references to
+ * their source so the TextInput sits on a declaring cell; still works when
+ * invoked from a reference via the context menu (the write path looks through
+ * identity either way). Clears number-raw editing so the two text fields never
+ * compete for the same keystrokes. Switching from another node's label edit
+ * finishes that one first (trim), mirroring {@link discardIfAbandoned} for raw.
+ */
+export function editNodeLabel(nodeId: NodeId): void {
+  const nodes = useDocumentStore.getState().document.nodes;
+  const sourceId = identitySourceId(nodes, nodeId);
+  if (sourceId === null) return;
+  const previousLabelId = useUiStore.getState().editingLabelNodeId;
+  if (previousLabelId !== null && previousLabelId !== sourceId) {
+    finishEditingLabel();
+  }
+  discardIfAbandoned(sourceId);
+  useUiStore.getState().setEditingNode(null);
+  useUiStore.getState().setSelectedNode(sourceId);
+  useUiStore.getState().setEditingLabelNode(sourceId);
+}
+
+/** Finish an in-place label edit. Trims a leading/trailing-space draft into one
+ *  last coalesced write so a whitespace-only caption does not linger. */
+export function finishEditingLabel(): void {
+  const id = useUiStore.getState().editingLabelNodeId;
+  useUiStore.getState().setEditingLabelNode(null);
+  if (!id) return;
+  const node = useDocumentStore.getState().document.nodes[id];
+  if (!node || node.label === undefined) return;
+  const trimmed = node.label.trim();
+  if (trimmed !== node.label) {
+    setNodeLabel(id, trimmed);
+  }
 }

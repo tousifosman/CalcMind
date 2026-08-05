@@ -28,6 +28,9 @@ import {
   moveChain,
   unlinkFromParent,
   repointReference,
+  setNodeLabel,
+  editNodeLabel,
+  finishEditingLabel,
   beginValueScrub,
   scrubNodeValue,
   endValueScrub,
@@ -1707,6 +1710,101 @@ describe('P6.2 incremental cascade', () => {
     expect(useDocumentStore.getState().document.nodes[r2.id]).toMatchObject({
       derived: { outcome: { status: 'error', error: 'NotANumber' } },
     });
+  });
+});
+
+describe('setNodeLabel (P6b.1)', () => {
+  test('labels a number and a result; empty string clears', () => {
+    const n = addNumberNode({ x: 0, y: 0 }, '100');
+    setNodeLabel(n, 'Initial Deposit');
+    expect(useDocumentStore.getState().document.nodes[n]).toMatchObject({
+      label: 'Initial Deposit',
+    });
+
+    const a = addNumberNode({ x: 0, y: 80 }, '7');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (node) => node.kind === 'result',
+    )!;
+    setNodeLabel(result.id, 'Years');
+    expect(useDocumentStore.getState().document.nodes[result.id]).toMatchObject({
+      label: 'Years',
+    });
+
+    setNodeLabel(n, '');
+    expect(useDocumentStore.getState().document.nodes[n]!.label).toBeUndefined();
+  });
+
+  test('labelling through a reference writes the source, one undo entry', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '10');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (node) => node.kind === 'result',
+    )!;
+    const { referenceId } = continueFromResult(result.id, '+');
+    const stackBefore = useDocumentStore.getState().undoStack.length;
+
+    setNodeLabel(referenceId, 'Initial Deposit');
+    expect(useDocumentStore.getState().document.nodes[result.id]).toMatchObject({
+      label: 'Initial Deposit',
+    });
+    expect(useDocumentStore.getState().document.nodes[referenceId]!.label).toBeUndefined();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(stackBefore + 1);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[result.id]!.label).toBeUndefined();
+  });
+
+  test('successive edits to the same identity within 500ms coalesce', () => {
+    jest.useFakeTimers();
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    const stackAfterAdd = useDocumentStore.getState().undoStack.length;
+    jest.setSystemTime(1_000);
+    setNodeLabel(id, 'I');
+    jest.setSystemTime(1_200);
+    setNodeLabel(id, 'In');
+    jest.setSystemTime(1_400);
+    setNodeLabel(id, 'Initial');
+    expect(useDocumentStore.getState().undoStack).toHaveLength(stackAfterAdd + 1);
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({
+      label: 'Initial',
+    });
+  });
+
+  test('no-op on operators and dangling references', () => {
+    const op = addOperatorNode({ x: 0, y: 0 }, '+');
+    const before = useDocumentStore.getState().undoStack.length;
+    setNodeLabel(op, 'Nope');
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.nodes.dangling = {
+        id: 'dangling',
+        kind: 'reference',
+        position: { x: 0, y: 0 },
+        chainId: null,
+        createdAt: 0,
+        targetNodeId: 'gone',
+      };
+    });
+    const afterAdd = useDocumentStore.getState().undoStack.length;
+    setNodeLabel('dangling', 'Nope');
+    expect(useDocumentStore.getState().undoStack).toHaveLength(afterAdd);
+  });
+
+  test('editNodeLabel opens the label editor on the identity source', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '5');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (node) => node.kind === 'result',
+    )!;
+    const { referenceId } = continueFromResult(result.id, '+');
+    editNodeLabel(referenceId);
+    expect(useUiStore.getState().editingLabelNodeId).toBe(result.id);
+    expect(useUiStore.getState().selectedNodeId).toBe(result.id);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+    finishEditingLabel();
+    expect(useUiStore.getState().editingLabelNodeId).toBeNull();
   });
 });
 

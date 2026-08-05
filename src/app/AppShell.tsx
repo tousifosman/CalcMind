@@ -27,6 +27,7 @@ import {
   selectGroup,
   unlinkFromParent,
   repointReference,
+  editNodeLabel,
 } from '../store/commands';
 import { isDanglingReference, isRepointTarget } from '../engine/reference';
 import { getDeviceLocale } from '../ui/locale';
@@ -134,6 +135,7 @@ export function AppShell() {
           onDeleteNode={deleteNode}
           onSelectGroup={selectGroup}
           onUnlinkFromParent={unlinkFromParent}
+          onLabelNode={editNodeLabel}
         />
         <DanglingRecoveryOverlay />
       </View>

@@ -75,7 +75,7 @@ flowchart LR
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | ~~**P5**~~ | ~~Persistence~~ | — | **Done** — 8/8, phase exit check verified live |
 | ~~**P6**~~ | ~~Linking~~ | — | **Done** — 8/8, phase exit check verified live |
-| **P6b** | Labels + slider | 4 | Ready to start — P6 done |
+| **P6b** | Labels + slider | 4 | In progress — P6b.1/P6b.3/P6b.4 done; P6b.2 ready |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
 Sequencing notes, carried over from §15:
@@ -1202,16 +1202,15 @@ flowchart LR
     style P26 fill:#22A75B,color:#fff
     style P62 fill:#22A75B,color:#fff
     style P56 fill:#22A75B,color:#fff
-    style P6b1 fill:#F0A020,color:#fff
-    style P6b2 fill:#8892A0,color:#fff
+    style P6b1 fill:#22A75B,color:#fff
+    style P6b2 fill:#F0A020,color:#fff
     style P6b3 fill:#22A75B,color:#fff
     style P6b4 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
 Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
-gate. All five external dependencies (`P6.5`, `P4.9`, `P2.6`, `P6.2`, `P5.6`) are already done;
-`P6b.3` and `P6b.4` are done. `P6b.1` is ready to start; `P6b.2` waits on `P6b.1`.
+gate. `P6b.1`, `P6b.3`, and `P6b.4` are done; `P6b.2` is ready (waits only on `P6b.1`, now done).
 Kept current by hand alongside the acceptance-criteria boxes below — if a task's status here
 disagrees with its boxes, the boxes win and this diagram is stale.
 
@@ -1223,13 +1222,13 @@ base), §1.3 (labels are a headline feature of the mature reference app).
 **Touches.** `src/engine/identity.ts`, node components, `src/store/commands.ts`.
 **Depends on.** P6.5.
 
-- [ ] Any value can be labelled — results as often as inputs (§6, `2026-08-03` revision 2).
-- [ ] The label renders above the declaring cell **and above every reference to it**. §11.1's
+- [x] Any value can be labelled — results as often as inputs (§6, `2026-08-03` revision 2).
+- [x] The label renders above the declaring cell **and above every reference to it**. §11.1's
       compound-interest example shows "Initial Deposit" three times for one identity.
-- [ ] Editing it updates every cell sharing that identity, in **one** undo entry.
-- [ ] Labelling an otherwise-plain value grants it an identity hue even with zero references
+- [x] Editing it updates every cell sharing that identity, in **one** undo entry.
+- [x] Labelling an otherwise-plain value grants it an identity hue even with zero references
       (§11.1).
-- [ ] Test: label a value with three references, assert all four cells update together.
+- [x] Test: label a value with three references, assert all four cells update together.
 
 ### P6b.2 — Declare-and-label idiom
 

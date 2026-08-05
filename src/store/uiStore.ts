@@ -60,6 +60,12 @@ export interface UiState {
   setSelectedNode: (id: NodeId | null) => void;
   setEditingNode: (id: NodeId | null) => void;
 
+  /** Which identity source is showing its in-place label editor (§11.1 / P6b.1).
+   *  Always a number or result id — never a reference. Ephemeral for the same
+   *  reason as `editingNodeId`. */
+  editingLabelNodeId: NodeId | null;
+  setEditingLabelNode: (id: NodeId | null) => void;
+
   /** The open context menu, if any (§8.6, P2.9). Ephemeral — a menu is a momentary
    *  prompt, not a document change. `anchor` is in screen coordinates so the overlay
    *  can position itself without needing the viewport transform. */
@@ -114,6 +120,9 @@ export const useUiStore = create<UiState>((set) => ({
   editingNodeId: null,
   setSelectedNode: (id) => set({ selectedNodeId: id }),
   setEditingNode: (id) => set({ editingNodeId: id }),
+
+  editingLabelNodeId: null,
+  setEditingLabelNode: (id) => set({ editingLabelNodeId: id }),
 
   contextMenu: null,
   openContextMenu: (menu) => set({ contextMenu: menu }),

@@ -9,7 +9,7 @@ import { Platform, StyleSheet, Text, TextInput } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
 import { useUiStore } from '../store/uiStore';
-import { deselectNode, setNodeRaw } from '../store/commands';
+import { deselectNode, setNodeRaw, finishEditingLabel, setNodeLabel } from '../store/commands';
 import { formatForDisplay, parseUserInput } from '../engine/format';
 import { widthOf } from '../chains/measure';
 import { rolePalette, glyphColor } from '../ui/tokens';
@@ -25,6 +25,7 @@ interface NumberNodeProps {
 function NumberNodeComponent({ id }: NumberNodeProps) {
   const node = useNode(id);
   const isEditing = useUiStore((state) => state.editingNodeId === id);
+  const isEditingLabel = useUiStore((state) => state.editingLabelNodeId === id);
   const identityHue = useSourceIdentityHue(id);
   const inputRef = useRef<TextInput>(null);
 
@@ -127,8 +128,11 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
       width={widthOf(node, locale)}
       fill={palette.fill}
       border={palette.border}
-      label={node.label}
+      label={numberNode.label}
       identityHue={identityHue}
+      isEditingLabel={isEditingLabel}
+      onLabelChange={(text) => setNodeLabel(id, text)}
+      onLabelBlur={finishEditingLabel}
     >
       {isEditing ? (
         <TextInput

@@ -2,6 +2,8 @@
 import {
   assignIdentityHues,
   identityBearingNodeIds,
+  identitySourceId,
+  labelForNode,
   nodeHasLabel,
   referencedNodeIds,
 } from './identity';
@@ -71,6 +73,45 @@ describe('nodeHasLabel', () => {
     expect(nodeHasLabel(number('a', '1'))).toBe(false);
     expect(nodeHasLabel(number('a', '1', ''))).toBe(false);
     expect(nodeHasLabel(number('a', '1', 'Rate'))).toBe(true);
+  });
+});
+
+describe('identitySourceId / labelForNode (P6b.1)', () => {
+  test('number and result are their own identity source', () => {
+    const nodes = { n1: number('n1', '5'), r1: result('r1', '5', 'Sum') };
+    expect(identitySourceId(nodes, 'n1')).toBe('n1');
+    expect(identitySourceId(nodes, 'r1')).toBe('r1');
+    expect(labelForNode(nodes, 'n1')).toBeUndefined();
+    expect(labelForNode(nodes, 'r1')).toBe('Sum');
+  });
+
+  test('reference looks through to the target label', () => {
+    const nodes = {
+      r1: result('r1', '35', 'Initial Deposit'),
+      ref: reference('ref', 'r1'),
+    };
+    expect(identitySourceId(nodes, 'ref')).toBe('r1');
+    expect(labelForNode(nodes, 'ref')).toBe('Initial Deposit');
+    // A label on the reference cell itself is ignored — identity owns the caption.
+    nodes.ref = { ...nodes.ref, label: 'Ignored' };
+    expect(labelForNode(nodes, 'ref')).toBe('Initial Deposit');
+  });
+
+  test('dangling reference and non-values have no identity source', () => {
+    const nodes: Record<string, CalcNode> = {
+      ref: reference('ref', 'ghost'),
+      op: {
+        id: 'op',
+        kind: 'operator',
+        op: '+',
+        position: ORIGIN,
+        chainId: null,
+        createdAt: 0,
+      },
+    };
+    expect(identitySourceId(nodes, 'ref')).toBeNull();
+    expect(identitySourceId(nodes, 'op')).toBeNull();
+    expect(labelForNode(nodes, 'ref')).toBeUndefined();
   });
 });
 
