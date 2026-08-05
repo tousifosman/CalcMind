@@ -12,7 +12,7 @@ import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
-import { unlinkReference } from '../store/commands';
+import { unlinkReference, finishEditingLabel, setNodeLabel } from '../store/commands';
 import { rolePalette, glyphColor } from '../ui/tokens';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
@@ -24,6 +24,7 @@ import {
 } from '../engine/errors';
 import { Cell, glyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
+import { useUiStore } from '../store/uiStore';
 
 /** Opacity for a §9 Stale result — previous value stays readable but clearly not current. */
 export const STALE_RESULT_OPACITY = 0.45;
@@ -35,6 +36,7 @@ interface ResultNodeProps {
 function ResultNodeComponent({ id }: ResultNodeProps) {
   const node = useNode(id);
   const identityHue = useSourceIdentityHue(id);
+  const isEditingLabel = useUiStore((state) => state.editingLabelNodeId === id);
   if (!node || node.kind !== 'result') return null;
 
   const locale = getDeviceLocale();
@@ -62,6 +64,9 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
       border={palette.border}
       label={node.label}
       identityHue={identityHue}
+      isEditingLabel={isEditingLabel}
+      onLabelChange={(text) => setNodeLabel(id, text)}
+      onLabelBlur={finishEditingLabel}
     >
       {isCircular && content.cycle ? (
         <View style={styles.circularRow} testID={`result-node-${id}-circular`}>

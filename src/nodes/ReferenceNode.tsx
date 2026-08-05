@@ -1,7 +1,9 @@
 // Reference cell (§8.7 / §11.1 / §11.2): shows another node's live value, filled with
 // that value's identity hue so two cells sharing a hue are the same value wherever
-// they sit (P6.5). When the target is gone, a neutral struck-through cell keeps the
-// last known value dimmed (P6.4) — colour is spent only where an identity still exists.
+// they sit (P6.5). The identity caption is looked up on the source and drawn here too
+// (P6b.1 / §11.1) — editing the source updates every reference together. When the
+// target is gone, a neutral struck-through cell keeps the last known value dimmed
+// (P6.4) — colour is spent only where an identity still exists.
 import React from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { NodeId } from '../model/types';
@@ -12,6 +14,7 @@ import { getDeviceLocale } from '../ui/locale';
 import { glyphColor, identityBorderFor, tokens } from '../ui/tokens';
 import { Cell, glyphTextStyle } from './Cell';
 import { referenceCellContent } from '../engine/reference';
+import { labelForNode } from '../engine/identity';
 import { useReferenceIdentityHue } from './useIdentityHue';
 
 /** No-identity palette — distinct from role fills so an uncoloured reference is
@@ -38,6 +41,7 @@ function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
 
   const locale = getDeviceLocale();
   const content = referenceCellContent(node, nodes, locale);
+  const identityLabel = labelForNode(nodes, id);
 
   let fill: string;
   let border: string;
@@ -61,7 +65,9 @@ function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
       width={widthOf(node, locale, tokens.numeralFontSize, nodes)}
       fill={fill}
       border={border}
-      label={node.label}
+      label={identityLabel}
+      // Caption uses the identity hue without drawing a declaring-cell ring.
+      labelHue={identityHue}
     >
       <Text
         testID={`reference-node-${id}-content`}

@@ -15,6 +15,44 @@ export function nodeHasLabel(node: CalcNode): boolean {
 }
 
 /**
+ * The node that owns an identity's caption (§11.1): numbers and results store
+ * `label`; a reference looks through to its target. `null` when `nodeId` is
+ * missing, dangling, or not a value (operators / equals / parens cannot be
+ * labelled via the command layer — colour is spent on values, not chrome).
+ */
+export function identitySourceId(
+  nodes: Record<NodeId, CalcNode>,
+  nodeId: NodeId,
+): NodeId | null {
+  const node = nodes[nodeId];
+  if (!node) return null;
+  if (node.kind === 'reference') {
+    const target = nodes[node.targetNodeId];
+    if (!target) return null;
+    if (target.kind === 'number' || target.kind === 'result') return target.id;
+    return null;
+  }
+  if (node.kind === 'number' || node.kind === 'result') return node.id;
+  return null;
+}
+
+/**
+ * Caption rendered above a cell for this identity (§11.1): looked up on the
+ * declaring source, never on a reference's own `label` field. Editing the
+ * source therefore updates every reference that shares the identity.
+ */
+export function labelForNode(
+  nodes: Record<NodeId, CalcNode>,
+  nodeId: NodeId,
+): string | undefined {
+  const sourceId = identitySourceId(nodes, nodeId);
+  if (sourceId === null) return undefined;
+  const source = nodes[sourceId];
+  if (!source || !nodeHasLabel(source)) return undefined;
+  return source.label;
+}
+
+/**
  * Node ids that something in `nodes` currently references. Missing targets are
  * still collected here; {@link assignIdentityHues} only assigns a hue when the
  * target exists in `nodes` (dangling refs do not invent identities).
