@@ -6,7 +6,7 @@
 // reflowChain / finalizeChain. Typing still builds chains through appendMembersToChain
 // (P2.8, decision #16); drag-snap commits go through the P3.4 commands below, which
 // share the same §8.3 bookkeeping (dissolve / empty-delete / drop result with `=`).
-import { useDocumentStore } from './documentStore';
+import { setAutosaveSuppressed, useDocumentStore } from './documentStore';
 import { useUiStore } from './uiStore';
 import {
   createNumberNode,
@@ -341,6 +341,169 @@ export function setNodeRaw(nodeId: NodeId, raw: string): void {
   }
 
   lastRawEdit = { nodeId, at: now, stackLength: useDocumentStore.getState().undoStack.length };
+}
+
+// ─── Value-slider scrub (§8.8 / P6b.3–P6b.4) ─────────────────────────────────
+//
+// A scrub is one gesture, not a burst of keystrokes: the whole drag coalesces into
+// a single undo entry regardless of wall-clock duration, autosave is suppressed
+// until release, and recompute is coalesced to one flush per animation frame so a
+// deep dependency graph cannot drop the thumb interaction (§8.8 frame budget).
+
+interface ScrubSession {
+  nodeId: NodeId;
+  /** undoStack.length at beginValueScrub — first mutation lands as base+1. */
+  baseStackLength: number;
+}
+
+let scrubSession: ScrubSession | null = null;
+let scrubPendingRaw: string | null = null;
+let scrubRafHandle: ReturnType<typeof requestAnimationFrame> | null = null;
+
+/** Test seam: replace rAF / cancel so unit tests can drive the throttle without a browser. */
+let scrubScheduleFrame: (cb: () => void) => ReturnType<typeof requestAnimationFrame> = cb =>
+  requestAnimationFrame(cb);
+let scrubCancelFrame: (handle: ReturnType<typeof requestAnimationFrame>) => void = handle =>
+  cancelAnimationFrame(handle);
+
+/** @internal — tests only. */
+export function _setScrubFrameSchedulerForTests(options: {
+  schedule?: typeof scrubScheduleFrame;
+  cancel?: typeof scrubCancelFrame;
+} | null): void {
+  if (options === null) {
+    scrubScheduleFrame = cb => requestAnimationFrame(cb);
+    scrubCancelFrame = handle => cancelAnimationFrame(handle);
+    return;
+  }
+  if (options.schedule) scrubScheduleFrame = options.schedule;
+  if (options.cancel) scrubCancelFrame = options.cancel;
+}
+
+function cancelScheduledScrubFlush(): void {
+  if (scrubRafHandle !== null) {
+    scrubCancelFrame(scrubRafHandle);
+    scrubRafHandle = null;
+  }
+}
+
+/**
+ * Apply `raw` to the scrubbed number, recompute the dirty subgraph, and merge
+ * into the scrub's single undo entry. Shared by the rAF flush and the forced
+ * end-of-gesture flush.
+ */
+function commitScrubRaw(nodeId: NodeId, raw: string): void {
+  const store = useDocumentStore.getState();
+  const targetNode = store.document.nodes[nodeId];
+  if (targetNode && targetNode.kind !== 'number') {
+    throw new Error(`scrubNodeValue: node ${nodeId} is a ${targetNode.kind} node and is read-only`);
+  }
+
+  const stackLengthBefore = store.undoStack.length;
+  const locale = getDeviceLocale();
+
+  store.applyCommand((draft) => {
+    const node = draft.nodes[nodeId];
+    if (!node || node.kind !== 'number') return;
+    node.raw = raw;
+    if (node.chainId !== null) {
+      const seed = [node.chainId] as const;
+      recomputeFromSeeds(draft, seed, locale);
+      for (const id of dirtyClosure(draft, seed)) {
+        if (draft.chains[id]) reflowChain(draft, id);
+      }
+    }
+  });
+
+  if (useDocumentStore.getState().undoStack.length === stackLengthBefore) {
+    return; // no-op (raw unchanged)
+  }
+
+  // Coalesce every frame of this gesture into the entry opened by the first
+  // mutation — not the 500ms keystroke window. A scrub held for seconds is still
+  // one undo (§8.8).
+  if (
+    scrubSession !== null &&
+    scrubSession.nodeId === nodeId &&
+    useDocumentStore.getState().undoStack.length === scrubSession.baseStackLength + 2
+  ) {
+    useDocumentStore.setState((state) => {
+      const stack = state.undoStack.slice();
+      const latest = stack.pop()!;
+      const previous = stack.pop()!;
+      stack.push({
+        patches: [...previous.patches, ...latest.patches],
+        inversePatches: [...latest.inversePatches, ...previous.inversePatches],
+      });
+      return { undoStack: stack };
+    });
+  }
+
+  // Keep keystroke coalesce from merging with a just-finished scrub.
+  lastRawEdit = null;
+}
+
+function flushPendingScrub(): void {
+  cancelScheduledScrubFlush();
+  if (scrubSession === null || scrubPendingRaw === null) return;
+  const { nodeId } = scrubSession;
+  const raw = scrubPendingRaw;
+  scrubPendingRaw = null;
+  commitScrubRaw(nodeId, raw);
+}
+
+function scheduleScrubFlush(): void {
+  if (scrubRafHandle !== null) return;
+  scrubRafHandle = scrubScheduleFrame(() => {
+    scrubRafHandle = null;
+    flushPendingScrub();
+  });
+}
+
+/**
+ * Open a scrub gesture on `nodeId` (§8.8). Suppresses autosave until
+ * {@link endValueScrub}. Safe to call when already scrubbing the same node.
+ */
+export function beginValueScrub(nodeId: NodeId): void {
+  if (scrubSession?.nodeId === nodeId) return;
+  if (scrubSession !== null) {
+    endValueScrub();
+  }
+  setAutosaveSuppressed(true);
+  scrubSession = {
+    nodeId,
+    baseStackLength: useDocumentStore.getState().undoStack.length,
+  };
+  scrubPendingRaw = null;
+  lastRawEdit = null;
+}
+
+/**
+ * Queue a scrubbed raw value. Recompute runs at most once per animation frame
+ * so a deep dirty subgraph cannot stall the thumb; the latest raw always wins.
+ */
+export function scrubNodeValue(nodeId: NodeId, raw: string): void {
+  if (scrubSession === null || scrubSession.nodeId !== nodeId) {
+    beginValueScrub(nodeId);
+  }
+  scrubPendingRaw = raw;
+  scheduleScrubFlush();
+}
+
+/**
+ * Release the scrub gesture: flush any pending frame, clear autosave suppress
+ * (which reschedules a write if dirty), and close the coalesce session.
+ */
+export function endValueScrub(): void {
+  flushPendingScrub();
+  scrubSession = null;
+  scrubPendingRaw = null;
+  setAutosaveSuppressed(false);
+}
+
+/** True while a scrub gesture is open — tests and UI guards. */
+export function isValueScrubbing(): boolean {
+  return scrubSession !== null;
 }
 
 /** Swipe-to-clear (§8.5, decision #15): wipes every node and chain in one undo

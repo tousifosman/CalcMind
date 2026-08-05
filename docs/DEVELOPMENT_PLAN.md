@@ -1204,15 +1204,14 @@ flowchart LR
     style P56 fill:#22A75B,color:#fff
     style P6b1 fill:#F0A020,color:#fff
     style P6b2 fill:#8892A0,color:#fff
-    style P6b3 fill:#F0A020,color:#fff
-    style P6b4 fill:#8892A0,color:#fff
+    style P6b3 fill:#22A75B,color:#fff
+    style P6b4 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
 Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
-gate. All five external dependencies (`P6.5`, `P4.9`, `P2.6`, `P6.2`, `P5.6`) are already done, so
-`P6b.1` and `P6b.3` — the two tasks with no same-phase dependency of their own — are ready to start
-now rather than blocked; `P6b.2` and `P6b.4` each wait on their own phase's task ahead of them.
+gate. All five external dependencies (`P6.5`, `P4.9`, `P2.6`, `P6.2`, `P5.6`) are already done;
+`P6b.3` and `P6b.4` are done. `P6b.1` is ready to start; `P6b.2` waits on `P6b.1`.
 Kept current by hand alongside the acceptance-criteria boxes below — if a task's status here
 disagrees with its boxes, the boxes win and this diagram is stale.
 
@@ -1250,13 +1249,13 @@ base), §1.3 (labels are a headline feature of the mature reference app).
 **Touches.** `src/nodes/ValueSlider.tsx`.
 **Depends on.** P2.6.
 
-- [ ] Selecting a number raises a slider in a popover anchored beneath its cell, with both range
+- [x] Selecting a number raises a slider in a popover anchored beneath its cell, with both range
       endpoints labelled.
-- [ ] Range inferred per §8.8: `[0, 10^ceil(log10(|v|))]` for positive, symmetric about zero for
+- [x] Range inferred per §8.8: `[0, 10^ceil(log10(|v|))]` for positive, symmetric about zero for
       negative, `[0, 10]` for zero.
-- [ ] The user can edit the bounds.
-- [ ] Tap snaps to integers; dragging again is continuous (§8.8).
-- [ ] Unit tests for range inference including `v = 0`, negatives, and a value that is an exact
+- [x] The user can edit the bounds.
+- [x] Tap snaps to integers; dragging again is continuous (§8.8).
+- [x] Unit tests for range inference including `v = 0`, negatives, and a value that is an exact
       power of ten.
 
 ### P6b.4 — Live scrub cascade
@@ -1267,13 +1266,13 @@ budget), §11.4.
 **Touches.** `src/nodes/ValueSlider.tsx`, `src/persistence/autosave.ts`, `src/engine/graph.ts`.
 **Depends on.** P6b.3, P6.2, P5.6.
 
-- [ ] Scrubbing recomputes the **dirty subgraph only** (§11) and holds 60fps.
-- [ ] The whole gesture coalesces into **one** undo entry (§8.8).
-- [ ] Autosave is suppressed until release — otherwise one scrub writes hundreds of documents
+- [x] Scrubbing recomputes the **dirty subgraph only** (§11) and holds 60fps.
+- [x] The whole gesture coalesces into **one** undo entry (§8.8).
+- [x] Autosave is suppressed until release — otherwise one scrub writes hundreds of documents
       (§8.8). This is what P5.6's suppression hook was built for.
-- [ ] If a subgraph is too expensive, recompute **throttles to the frame budget** rather than
+- [x] If a subgraph is too expensive, recompute **throttles to the frame budget** rather than
       dropping the interaction (§8.8).
-- [ ] Verified interactively on a chain several dependent levels deep.
+- [x] Verified interactively on a chain several dependent levels deep.
 
 ### Phase exit check — P6b
 
