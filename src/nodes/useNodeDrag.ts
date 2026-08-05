@@ -61,8 +61,14 @@ function publishDragSnap(
   nodeId: NodeId,
   position: Vec2,
   candidate: SnapOutcome | null,
+  movingChainId: ChainId | null = null,
 ): void {
-  useUiStore.getState().setDragSnap({ nodeId, position, candidate });
+  useUiStore.getState().setDragSnap({
+    nodeId,
+    position,
+    candidate,
+    movingChainId,
+  });
 }
 
 function clearDragSnap(): void {
@@ -146,9 +152,14 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       dragX.value = current.position.x;
       dragY.value = current.position.y;
       dragging.value = 1;
-      if (mode !== 'moveChain') {
-        publishDragSnap(nodeId, current.position, null);
-      }
+      // Always publish so ConnectorLayer can track the live endpoint (P6.6). Snap
+      // candidates stay null in moveChain — insertionFeedback no-ops on null.
+      publishDragSnap(
+        nodeId,
+        current.position,
+        null,
+        mode === 'moveChain' ? current.chainId : null,
+      );
     },
     [nodeId, dragging, startX, startY, dragX, dragY],
   );
@@ -156,8 +167,16 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
   const updateDrag = useCallback(
     (worldX: number, worldY: number) => {
       const sess = session.current;
-      if (!sess || sess.mode === 'moveChain') return;
+      if (!sess) return;
       const position = { x: worldX, y: worldY };
+
+      // MovingChain: no snap search — just keep the ephemeral position feed current
+      // so connector curves follow the chain (siblings still move on the UI thread
+      // via chainDragDx/Dy; this runOnJS path is for React consumers only).
+      if (sess.mode === 'moveChain') {
+        publishDragSnap(nodeId, position, null, sess.chainId);
+        return;
+      }
 
       if (sess.wasChained && !sess.detached && crossedDetachDistance(sess.home, position)) {
         sess.detached = true;
@@ -181,7 +200,7 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       const locale = getDeviceLocale();
       const neighbours = makeSnappingNeighbours(document.chains, document.nodes, locale);
       const candidate = resolveSnapCandidate(probe, neighbours, document.nodes, locale);
-      publishDragSnap(nodeId, position, candidate);
+      publishDragSnap(nodeId, position, candidate, null);
     },
     [nodeId],
   );
@@ -274,9 +293,10 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       if (chainDragChainId.value !== null) {
         chainDragDx.value = nextX - startX.value;
         chainDragDy.value = nextY - startY.value;
-      } else {
-        runOnJS(updateDrag)(nextX, nextY);
       }
+      // Always publish the live world point for ConnectorLayer / insertion caret.
+      // Sibling follow stays on the UI thread above; this is the React-side feed.
+      runOnJS(updateDrag)(nextX, nextY);
     })
     .onEnd(() => {
       'worklet';

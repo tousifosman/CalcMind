@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Canvas } from '../canvas/Canvas';
+import { ConnectorLayer } from '../canvas/ConnectorLayer';
 import { NodeLayer } from '../canvas/NodeLayer';
 import { hitTestNode } from '../canvas/hitTest';
 import { Keypad } from '../keypad/Keypad';
@@ -117,6 +118,7 @@ export function AppShell() {
       <View style={styles.fill}>
         <Canvas style={styles.fill} onTap={handleCanvasTap} onLongPress={handleCanvasLongPress}>
           <NodeLayer />
+          <ConnectorLayer />
         </Canvas>
         <Keypad locale={getDeviceLocale()} onKeyPress={dispatchEditorCommand} />
         <ContextMenuOverlay
