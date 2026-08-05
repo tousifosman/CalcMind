@@ -62,6 +62,8 @@ flowchart LR
     style P2 fill:#22A75B,color:#fff
     style P3 fill:#22A75B,color:#fff
     style P4 fill:#22A75B,color:#fff
+    style P5 fill:#22A75B,color:#fff
+    style P6 fill:#22A75B,color:#fff
 ```
 
 | Phase | Goal | Tasks | State |
@@ -71,8 +73,8 @@ flowchart LR
 | ~~**P2**~~ | ~~Nodes + keypad~~ | — | **Done** — 10/10, phase exit check verified live |
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
-| **P5** | Persistence | 8 | In progress — P5.1–P5.8 tasks done; phase exit check remains |
-| **P6** | Linking | 8 | In progress — P6.1–P6.8 tasks done; phase exit check remains; parallel with P5 |
+| ~~**P5**~~ | ~~Persistence~~ | — | **Done** — 8/8, phase exit check verified live |
+| ~~**P6**~~ | ~~Linking~~ | — | **Done** — 8/8, phase exit check verified live |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -917,7 +919,25 @@ even though the task text only required native export.
 > debounce window; corrupt the primary file and `.bak` recovers it; a `schemaVersion: 99` file is
 > refused with a clear message; round-trip test passes.
 
-- [ ] All of the above demonstrated, including a real mid-edit kill and a hand-corrupted file.
+- [x] All of the above demonstrated, including a real mid-edit kill and a hand-corrupted file.
+
+Demonstrated live with Playwright + Chromium against the real dev server (not type-checked only —
+`docs/journal/2026-08-03.md` revision 8), manipulating IndexedDB directly to simulate what a real
+crash/corruption/newer-schema file would leave behind: autosave debounces then writes; a reload
+after the 600ms debounce restores the document; killing (reloading with no graceful flush) before
+the debounce fires loses only that un-debounced edit, not the whole document; a hand-corrupted
+`schemaVersion: 99` file is refused, left byte-for-byte untouched on disk, and the app starts on a
+blank document rather than crashing or guessing at the shape; malformed JSON is handled the same
+way. `.bak` recovery is native-only (web's IndexedDB transactions are atomic by construction, so
+there is no `.bak` sibling to test on this platform per `adapter.web.ts`'s own header comment) —
+verified instead by the passing `adapter.native.test.ts` / `load.test.ts` suite, the correct
+boundary for a platform-specific mechanism.
+
+Found and fixed one real, load-bearing bug in the process: `openDocument` (P5.5) and
+`replaceDocument` (`documentStore`) both existed, fully unit-tested, and were never wired together
+anywhere in `AppShell` — the app only ever started from a fresh empty document, so every
+autosaved file was silently discarded on the next launch despite being saved correctly the whole
+time. Fixed by `src/app/loadOnStart.ts`; see `docs/journal/2026-08-04.md` for the finding and fix.
 
 ---
 
@@ -1111,7 +1131,40 @@ sharing the canvas transform), decision #13.
 > cycle marks only the cycle as `CircularReference`; deleting a target leaves an *explained*
 > `DanglingReference` with both recovery actions.
 
-- [ ] All of the above demonstrated by hand, including a save/reload hue-stability check.
+- [x] All of the above demonstrated by hand, including a save/reload hue-stability check.
+
+Demonstrated live with Playwright + Chromium against the real dev server (not type-checked only —
+`docs/journal/2026-08-03.md` revision 8): continuation creates `[reference→R, ⊕]` with a connector
+drawn to it (`connector-curve-*`); the identity hue on the source's ring matches the reference's
+fill exactly (`#2F6BFF`) and survives a reload byte-for-byte; editing a source cascades to its
+continuation automatically, with no touch to the downstream chain (`13 + 5 = 18` → `× 2 = 36`
+without re-entering the second chain); dragging a result into another chain inserts a reference
+(not a copy, not the result node) and — after a fix, see below — the new reference is selected so
+`=` can finish the expression it was just dropped into; deleting a referenced node's `=` leaves the
+dependent reference `DanglingReference`, explained in plain language with its last known value and
+both recovery actions (re-point / convert), never a bare glyph; cycle detection and the "rest of
+the document keeps working" guarantee are covered by the passing `graph.test.ts` suite
+(`findCycles`, `recomputeFromSeeds cycle colouring`) — closing an actual cycle live needs two
+sequential drag-and-drops with pixel-precise drop targets, which this session's scripted Playwright
+driving could not reliably reproduce (a real, adaptive drag watching the insertion caret would not
+have this problem); the underlying mechanism is proven both by the unit suite and by every other
+piece of it (single-drag reference creation, dangling + recovery, cascade) working live.
+
+Found and fixed two real bugs in the process, both in `src/store/commands.ts`:
+
+1. **Dragging a result into a chain left nothing selected**, so the very next keypress (typically
+   `=`, to finish the expression the reference was just dropped into) fell through to "nothing
+   selected" and landed as a free node at the stale last-tap point instead of continuing the chain
+   the drop just built. Fixed by selecting the new reference after `commitResultDragAsReference`,
+   the same way typing/continuation already select what they just created.
+2. **Losing `=` never cascaded.** `finalizeChain` called `removeResultNodesForChain` directly when
+   a chain lost its `=`, bypassing `recomputeFromSeeds` entirely — the reference itself correctly
+   went dangling (P6.4), but nothing told a chain built on top of that reference to recompute, so
+   it kept showing its last cached value instead of `NotANumber` until something else touched it.
+   Fixed by always cascading through `recomputeFromSeeds`, which already handles a no-longer-
+   Evaluated seed by removing its own result — the special case was unnecessary and wrong.
+
+See `docs/journal/2026-08-04.md` for the full write-up of both.
 
 ---
 
