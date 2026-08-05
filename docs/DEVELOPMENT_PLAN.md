@@ -77,7 +77,7 @@ flowchart LR
 | ~~**P5**~~ | ~~Persistence~~ | — | **Done** — 8/8, phase exit check verified live |
 | ~~**P6**~~ | ~~Linking~~ | — | **Done** — 8/8, phase exit check verified live |
 | ~~**P6b**~~ | ~~Labels + slider~~ | — | **Done** — 4/4, phase exit check verified live |
-| **P7** | Polish | 7 | Ready to start — P5 + P6b done |
+| **P7** | Polish | 7 | In progress — P7.1 done; 6/7 remaining |
 
 Sequencing notes, carried over from §15:
 
@@ -1357,7 +1357,7 @@ flowchart LR
     style P32 fill:#22A75B,color:#fff
     style P65 fill:#22A75B,color:#fff
     style P66 fill:#22A75B,color:#fff
-    style P71 fill:#F0A020,color:#fff
+    style P71 fill:#22A75B,color:#fff
     style P72 fill:#F0A020,color:#fff
     style P73 fill:#F0A020,color:#fff
     style P74 fill:#F0A020,color:#fff
@@ -1382,12 +1382,12 @@ survived.
 **Architecture.** §13 (bounded 100-deep stack, 500ms coalescing, viewport excluded), §7.
 **Touches.** `src/store/undo.ts`, tests.
 
-- [ ] Every command in `commands.ts` has an undo **and** redo test.
-- [ ] Rapid edits to one node within 500ms coalesce into a single entry (§13).
-- [ ] The stack is bounded at 100 and drops oldest entries.
-- [ ] Viewport changes are **still** excluded (§7). P1 established this; assert it, because six
+- [x] Every command in `commands.ts` has an undo **and** redo test.
+- [x] Rapid edits to one node within 500ms coalesce into a single entry (§13).
+- [x] The stack is bounded at 100 and drops oldest entries.
+- [x] Viewport changes are **still** excluded (§7). P1 established this; assert it, because six
       phases of later work could have quietly broken it.
-- [ ] Undo marks the document dirty and therefore saves (§13).
+- [x] Undo marks the document dirty and therefore saves (§13).
 
 ### P7.2 — Full keyboard support
 

@@ -7,6 +7,7 @@
 // (P2.8, decision #16); drag-snap commits go through the P3.4 commands below, which
 // share the same §8.3 bookkeeping (dissolve / empty-delete / drop result with `=`).
 import { setAutosaveSuppressed, useDocumentStore } from './documentStore';
+import { historyTop, type HistoryEntry } from './undo';
 import { useUiStore } from './uiStore';
 import {
   createNumberNode,
@@ -280,7 +281,11 @@ const RAW_EDIT_COALESCE_WINDOW_MS = 500;
 // same edit burst" (merge) from "a different node, or something else was
 // undoable in between" (don't). Module state rather than store state: it's a
 // command-dispatch concern, not part of the document.
-let lastRawEdit: { nodeId: NodeId; at: number; stackLength: number } | null = null;
+//
+// `entry` is the coalesced stack-top this burst owns — keyed by object identity,
+// not `undoStack.length`, so coalescing still works once the stack is capped at
+// MAX_HISTORY (length stops growing; the top reference still changes).
+let lastRawEdit: { nodeId: NodeId; at: number; entry: HistoryEntry } | null = null;
 
 export function setNodeRaw(nodeId: NodeId, raw: string): void {
   const store = useDocumentStore.getState();
@@ -295,12 +300,12 @@ export function setNodeRaw(nodeId: NodeId, raw: string): void {
     throw new Error(`setNodeRaw: node ${nodeId} is a ${targetNode.kind} node and is read-only`);
   }
 
-  const stackLengthBefore = store.undoStack.length;
+  const topBefore = historyTop(store.undoStack);
   const now = Date.now();
   const canCoalesce =
     lastRawEdit !== null &&
     lastRawEdit.nodeId === nodeId &&
-    lastRawEdit.stackLength === stackLengthBefore &&
+    lastRawEdit.entry === topBefore &&
     now - lastRawEdit.at < RAW_EDIT_COALESCE_WINDOW_MS;
 
   // Recompute + reflow in one recipe so a keystroke updates the result and the
@@ -310,38 +315,29 @@ export function setNodeRaw(nodeId: NodeId, raw: string): void {
   // graph directly because it must reflow *after* the result width changes.
   const locale = getDeviceLocale();
 
-  store.applyCommand((draft) => {
-    const node = draft.nodes[nodeId];
-    if (!node || node.kind !== 'number') return;
-    node.raw = raw;
-    if (node.chainId !== null) {
-      const seed = [node.chainId] as const;
-      recomputeFromSeeds(draft, seed, locale);
-      // P6.2: cascade may change dependent result widths — reflow the whole dirty set.
-      for (const id of dirtyClosure(draft, seed)) {
-        if (draft.chains[id]) reflowChain(draft, id);
+  store.applyCommand(
+    (draft) => {
+      const node = draft.nodes[nodeId];
+      if (!node || node.kind !== 'number') return;
+      node.raw = raw;
+      if (node.chainId !== null) {
+        const seed = [node.chainId] as const;
+        recomputeFromSeeds(draft, seed, locale);
+        // P6.2: cascade may change dependent result widths — reflow the whole dirty set.
+        for (const id of dirtyClosure(draft, seed)) {
+          if (draft.chains[id]) reflowChain(draft, id);
+        }
       }
-    }
-  });
+    },
+    { coalesceWithTop: canCoalesce },
+  );
 
-  if (useDocumentStore.getState().undoStack.length === stackLengthBefore) {
+  const topAfter = historyTop(useDocumentStore.getState().undoStack);
+  if (topAfter === null || topAfter === topBefore) {
     return; // no-op edit (raw unchanged, or node missing - wrong kind already threw above)
   }
 
-  if (canCoalesce) {
-    useDocumentStore.setState((state) => {
-      const stack = state.undoStack.slice();
-      const latest = stack.pop()!;
-      const previous = stack.pop()!;
-      stack.push({
-        patches: [...previous.patches, ...latest.patches],
-        inversePatches: [...latest.inversePatches, ...previous.inversePatches],
-      });
-      return { undoStack: stack };
-    });
-  }
-
-  lastRawEdit = { nodeId, at: now, stackLength: useDocumentStore.getState().undoStack.length };
+  lastRawEdit = { nodeId, at: now, entry: topAfter };
 }
 
 // ─── Value-slider scrub (§8.8 / P6b.3–P6b.4) ─────────────────────────────────
@@ -353,8 +349,12 @@ export function setNodeRaw(nodeId: NodeId, raw: string): void {
 
 interface ScrubSession {
   nodeId: NodeId;
-  /** undoStack.length at beginValueScrub — first mutation lands as base+1. */
-  baseStackLength: number;
+  /**
+   * The scrub's single undo entry once the first frame commits, or `null` until
+   * then. Subsequent frames merge into this entry by identity — not by
+   * `baseStackLength + 2`, which never becomes true once the stack is capped.
+   */
+  scrubEntry: HistoryEntry | null;
 }
 
 let scrubSession: ScrubSession | null = null;
@@ -400,44 +400,41 @@ function commitScrubRaw(nodeId: NodeId, raw: string): void {
     throw new Error(`scrubNodeValue: node ${nodeId} is a ${targetNode.kind} node and is read-only`);
   }
 
-  const stackLengthBefore = store.undoStack.length;
+  const topBefore = historyTop(store.undoStack);
   const locale = getDeviceLocale();
-
-  store.applyCommand((draft) => {
-    const node = draft.nodes[nodeId];
-    if (!node || node.kind !== 'number') return;
-    node.raw = raw;
-    if (node.chainId !== null) {
-      const seed = [node.chainId] as const;
-      recomputeFromSeeds(draft, seed, locale);
-      for (const id of dirtyClosure(draft, seed)) {
-        if (draft.chains[id]) reflowChain(draft, id);
-      }
-    }
-  });
-
-  if (useDocumentStore.getState().undoStack.length === stackLengthBefore) {
-    return; // no-op (raw unchanged)
-  }
 
   // Coalesce every frame of this gesture into the entry opened by the first
   // mutation — not the 500ms keystroke window. A scrub held for seconds is still
-  // one undo (§8.8).
-  if (
+  // one undo (§8.8). Amend-in-place so a full stack does not evict older history.
+  const coalesceWithTop =
     scrubSession !== null &&
     scrubSession.nodeId === nodeId &&
-    useDocumentStore.getState().undoStack.length === scrubSession.baseStackLength + 2
-  ) {
-    useDocumentStore.setState((state) => {
-      const stack = state.undoStack.slice();
-      const latest = stack.pop()!;
-      const previous = stack.pop()!;
-      stack.push({
-        patches: [...previous.patches, ...latest.patches],
-        inversePatches: [...latest.inversePatches, ...previous.inversePatches],
-      });
-      return { undoStack: stack };
-    });
+    scrubSession.scrubEntry !== null &&
+    topBefore === scrubSession.scrubEntry;
+
+  store.applyCommand(
+    (draft) => {
+      const node = draft.nodes[nodeId];
+      if (!node || node.kind !== 'number') return;
+      node.raw = raw;
+      if (node.chainId !== null) {
+        const seed = [node.chainId] as const;
+        recomputeFromSeeds(draft, seed, locale);
+        for (const id of dirtyClosure(draft, seed)) {
+          if (draft.chains[id]) reflowChain(draft, id);
+        }
+      }
+    },
+    { coalesceWithTop },
+  );
+
+  const topAfter = historyTop(useDocumentStore.getState().undoStack);
+  if (topAfter === topBefore) {
+    return; // no-op (raw unchanged)
+  }
+
+  if (scrubSession !== null && scrubSession.nodeId === nodeId) {
+    scrubSession.scrubEntry = topAfter;
   }
 
   // Keep keystroke coalesce from merging with a just-finished scrub.
@@ -473,7 +470,7 @@ export function beginValueScrub(nodeId: NodeId): void {
   setAutosaveSuppressed(true);
   scrubSession = {
     nodeId,
-    baseStackLength: useDocumentStore.getState().undoStack.length,
+    scrubEntry: null,
   };
   scrubPendingRaw = null;
   lastRawEdit = null;
@@ -988,7 +985,7 @@ export function deselectNode(): void {
  *  within this many ms merge into one undo entry — same budget as {@link setNodeRaw}. */
 const LABEL_EDIT_COALESCE_WINDOW_MS = 500;
 
-let lastLabelEdit: { sourceId: NodeId; at: number; stackLength: number } | null =
+let lastLabelEdit: { sourceId: NodeId; at: number; entry: HistoryEntry } | null =
   null;
 
 /**
@@ -1008,48 +1005,39 @@ export function setNodeLabel(nodeId: NodeId, label: string): void {
   // grant still requires a non-empty caption via {@link nodeHasLabel}.
   const next = label.length > 0 ? label : undefined;
 
-  const stackLengthBefore = store.undoStack.length;
+  const topBefore = historyTop(store.undoStack);
   const now = Date.now();
   const canCoalesce =
     lastLabelEdit !== null &&
     lastLabelEdit.sourceId === sourceId &&
-    lastLabelEdit.stackLength === stackLengthBefore &&
+    lastLabelEdit.entry === topBefore &&
     now - lastLabelEdit.at < LABEL_EDIT_COALESCE_WINDOW_MS;
 
-  store.applyCommand((draft) => {
-    const node = draft.nodes[sourceId];
-    if (!node || (node.kind !== 'number' && node.kind !== 'result')) return;
-    if (next === undefined) {
-      if (node.label === undefined) return;
-      delete node.label;
-    } else if (node.label === next) {
-      return;
-    } else {
-      node.label = next;
-    }
-  });
+  store.applyCommand(
+    (draft) => {
+      const node = draft.nodes[sourceId];
+      if (!node || (node.kind !== 'number' && node.kind !== 'result')) return;
+      if (next === undefined) {
+        if (node.label === undefined) return;
+        delete node.label;
+      } else if (node.label === next) {
+        return;
+      } else {
+        node.label = next;
+      }
+    },
+    { coalesceWithTop: canCoalesce },
+  );
 
-  if (useDocumentStore.getState().undoStack.length === stackLengthBefore) {
+  const topAfter = historyTop(useDocumentStore.getState().undoStack);
+  if (topAfter === null || topAfter === topBefore) {
     return; // no-op (label unchanged, or source vanished mid-flight)
-  }
-
-  if (canCoalesce) {
-    useDocumentStore.setState((state) => {
-      const stack = state.undoStack.slice();
-      const latest = stack.pop()!;
-      const previous = stack.pop()!;
-      stack.push({
-        patches: [...previous.patches, ...latest.patches],
-        inversePatches: [...latest.inversePatches, ...previous.inversePatches],
-      });
-      return { undoStack: stack };
-    });
   }
 
   lastLabelEdit = {
     sourceId,
     at: now,
-    stackLength: useDocumentStore.getState().undoStack.length,
+    entry: topAfter,
   };
 }
 

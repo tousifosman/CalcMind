@@ -12,19 +12,16 @@
 // wires the listener to the autosave controller. Undo/redo notify too so autosave
 // and undo stay independent (§13).
 import { create } from 'zustand';
-import { produceWithPatches, applyPatches, enablePatches, type Patch } from 'immer';
+import { produceWithPatches, applyPatches, enablePatches } from 'immer';
 import { CalcDocument, ChainId, Vec2, ZOOM_MIN, ZOOM_MAX } from '../model/types';
 import { createEmptyDocument } from '../model/factories';
 import { recomputeFromSeeds } from '../engine/graph';
+import { amendHistoryTop, type HistoryEntry, pushHistory } from './undo';
 
 enablePatches();
 
-interface HistoryEntry {
-  patches: Patch[];
-  inversePatches: Patch[];
-}
-
-const MAX_HISTORY = 100;
+export type { HistoryEntry } from './undo';
+export { MAX_HISTORY } from './undo';
 
 /** Optional dirty-set recompute for the same undo entry as the recipe (§11). */
 export interface ApplyCommandOptions {
@@ -32,6 +29,12 @@ export interface ApplyCommandOptions {
   recomputeSeeds?: readonly ChainId[];
   /** Required when `recomputeSeeds` is non-empty — display formatting is locale-sensitive. */
   locale?: string;
+  /**
+   * Fold this recipe into the current stack-top instead of pushing (§13 coalesce).
+   * Used by rapid `setNodeRaw` / label edits and scrub frames so a full stack does
+   * not evict an older entry just to merge keystrokes.
+   */
+  coalesceWithTop?: boolean;
 }
 
 type DirtyHandler = () => void;
@@ -129,11 +132,21 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     );
     if (meaningfulPatches.length === 0) return; // no-op recipe, nothing to record
 
-    set((state) => ({
-      document: nextDocument,
-      undoStack: [...state.undoStack, { patches, inversePatches }].slice(-MAX_HISTORY),
-      redoStack: [],
-    }));
+    set((state) => {
+      if (options?.coalesceWithTop && state.undoStack.length > 0) {
+        return {
+          document: nextDocument,
+          undoStack: amendHistoryTop(state.undoStack, patches, inversePatches),
+          // First edit of a burst already cleared redo; amending must not revive it.
+          redoStack: state.redoStack,
+        };
+      }
+      return {
+        document: nextDocument,
+        undoStack: pushHistory(state.undoStack, { patches, inversePatches }),
+        redoStack: [],
+      };
+    });
     notifyDocumentDirty();
   },
 
