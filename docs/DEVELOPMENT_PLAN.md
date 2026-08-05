@@ -72,7 +72,7 @@ flowchart LR
 | ~~**P3**~~ | ~~Snapping~~ | — | **Done** — 7/7, phase exit check verified live |
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | **P5** | Persistence | 8 | In progress — P5.1–P5.8 tasks done; phase exit check remains |
-| **P6** | Linking | 8 | In progress — P6.1–P6.5, P6.7, P6.8 done; P6.6 open; parallel with P5 |
+| **P6** | Linking | 8 | In progress — P6.1–P6.8 tasks done; phase exit check remains; parallel with P5 |
 | **P6b** | Labels + slider | 4 | Blocked on P6 |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
@@ -967,7 +967,7 @@ flowchart LR
     style P63 fill:#22A75B,color:#fff
     style P64 fill:#22A75B,color:#fff
     style P65 fill:#22A75B,color:#fff
-    style P66 fill:#E8A838,color:#fff
+    style P66 fill:#22A75B,color:#fff
     style P67 fill:#22A75B,color:#fff
     style P68 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
@@ -977,8 +977,8 @@ Green = done, amber = ready to start, grey = blocked on a dependency, purple = t
 gate. `P4.8` (recompute on edit) is done, so `P6.1` is no longer gated on a cross-phase
 dependency — everything else here is downstream of it. `P2.9` and `P3.5` are already-done
 prerequisites for `P6.4` and `P6.7` respectively, shown as separate external nodes rather than
-folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. `P6.2`,
-`P6.3`, `P6.4`, `P6.5`, `P6.7`, and `P6.8` are done; `P6.6` remains open for connector drawing.
+folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. All
+eight P6 tasks are done; the purple exit node is the remaining hand-verification gate.
 Kept current by hand alongside the acceptance-criteria boxes below — if a task's status here
 disagrees with its boxes, the boxes win and this diagram is stale.
 
@@ -1063,14 +1063,14 @@ sharing the canvas transform), decision #13.
 **Touches.** `src/canvas/ConnectorLayer.tsx`.
 **Depends on.** P6.5.
 
-- [ ] Beziers with arrowheads in the source's identity hue, in a `react-native-svg` overlay above
+- [x] Beziers with arrowheads in the source's identity hue, in a `react-native-svg` overlay above
       the nodes, sharing the canvas transform (§11.3).
-- [ ] **All** connectors are drawn, not only the selected one (decision #13 — the reference app
+- [x] **All** connectors are drawn, not only the selected one (decision #13 — the reference app
       hides them and its own review calls that confusing). If density becomes a problem, **fade**
       unselected ones rather than hiding them.
-- [ ] 1→N: curves leave a source at fanned-out angles rather than all from one point, and a source
+- [x] 1→N: curves leave a source at fanned-out angles rather than all from one point, and a source
       with more than ~4 consumers collapses to a count badge that expands on selection (§11.1).
-- [ ] Colour is **not the only channel** — the connector line itself and the `Unlink from parent`
+- [x] Colour is **not the only channel** — the connector line itself and the `Unlink from parent`
       affordance carry the same information non-chromatically (§11.1).
 - [ ] Verified in a browser at several zoom levels, with a 1→4 fan on screen.
 

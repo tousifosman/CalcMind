@@ -32,6 +32,10 @@ module.exports = (_env, argv) => ({
           path.resolve(__dirname, 'node_modules/react-native-web'),
           path.resolve(__dirname, 'node_modules/@react-native'),
           path.resolve(__dirname, 'node_modules/react-native-gesture-handler'),
+          // Connector curves (§11.3 / P6.6) — ship ESM with `.web.js` entry points
+          // that webpack resolves via `resolve.extensions`, but still need Babel
+          // for the same RN JSX / runtime transforms as gesture-handler.
+          path.resolve(__dirname, 'node_modules/react-native-svg'),
         ],
         use: {
           loader: 'babel-loader',

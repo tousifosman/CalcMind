@@ -278,7 +278,7 @@ are Tydlig Software AB's and the publication's.
 | Schema validation | **zod** | MIT | Validates documents at the trust boundary (file load) and generates TS types. |
 | Native filesystem | **@dr.pogodin/react-native-fs** | MIT | Maintained fork of `react-native-fs`; the original is unmaintained. |
 | Web storage | **idb-keyval** | MIT | Thin IndexedDB wrapper; localStorage is too small and synchronous. |
-| Result texture | **react-native-svg** | MIT | Needed only for the dot pattern; see §11.3 for the zero-dependency fallback. |
+| SVG | **react-native-svg** | MIT | Load-bearing for connector beziers from P6.6 (§11.3); result dot texture may reuse it in v1.1. |
 | Tests | Jest (already configured) + **fast-check** | MIT | Table-driven engine tests; property tests for parser/formatter round-trips. |
 
 No dependency here bills by usage, gates features behind a plan, or requires an account.
@@ -349,7 +349,8 @@ makes it cheap to test exhaustively.
 ```
 src/
   app/           App shell, providers, theme injection
-  canvas/        Canvas, viewport transform, pan/zoom gestures, coords.ts
+  canvas/        Canvas, viewport transform, pan/zoom gestures, coords.ts,
+                 ConnectorLayer + connectors.ts (SVG link overlay, §11.3)
   nodes/         One view per node kind + useNodeDrag
   chains/        layout.ts, snapping.ts, bounds.ts
   engine/        tokenize, parse, evaluate, format, numeric, graph, errors
@@ -924,12 +925,16 @@ Rules that follow from this:
 - Connectors are drawn for **all** links by default, not only the selected one. Tydlig hides them
   until you swipe and the review calls that out as confusing; showing them costs a little visual
   noise and buys comprehension. If density becomes a problem, fade unselected connectors rather
-  than hiding them.
+  than hiding them. Implemented in `src/canvas/ConnectorLayer.tsx` + `connectors.ts` (P6.6):
+  every live reference gets a cubic in the source's identity hue with an SVG arrowhead; when
+  something is selected, unrelated curves fade to `CONNECTOR_UNSELECTED_OPACITY` instead of
+  vanishing. Dangling refs draw no curve (§11.2 owns their chrome).
 - **A source can have many consumers.** The reference app shows one value feeding four
   consumers at once, with four curves fanning out of it (§1.3). So the renderer must handle 1→N:
   curves leave the source at fanned-out angles rather than all from the same point, and a source
   with more than ~4 consumers collapses to a count badge that expands on selection. Edges are
-  keyed `(sourceNodeId, referenceNodeId)`, never by source alone.
+  keyed `(sourceNodeId, referenceNodeId)`, never by source alone. Fan exit points and control
+  offsets live in `connectors.ts`; collapse threshold is `CONNECTOR_FAN_COLLAPSE_AT` (5).
 
 ### 11.2 Broken links are explained, not marked with a punctuation glyph
 
@@ -956,8 +961,10 @@ keeps web and native identical. Only the result node's dot texture needs more, h
   `Image` with `resizeMode: 'repeat'` for zero new dependencies.
 
 Connector curves (§11.1) *do* need `react-native-svg` — they are beziers in an overlay layer above
-the nodes, sharing the canvas transform. That makes the dependency load-bearing from phase 6, so
-the result texture may as well use it too.
+the nodes, sharing the canvas transform. Implemented: `ConnectorLayer` is a sibling of `NodeLayer`
+inside `Canvas` (same pan/zoom), `pointerEvents="none"`, z-index above idle nodes and below
+mid-drag chrome. That makes the dependency load-bearing from phase 6, so the result texture may
+as well use it too.
 
 ### 11.4 Performance budget
 
@@ -1146,6 +1153,7 @@ Jest is already configured and green in this repo.
 | `chains/` | Layout arithmetic, bounds, snap candidate selection at threshold boundaries, detach hysteresis |
 | `persistence/` | Round-trip equality (document → JSON → document), byte-stability of serialisation, every migration fixture, malformed-file and newer-schema handling |
 | Components | Each node kind renders; result nodes reject edit attempts |
+| `canvas/connectors` | Live-link collection, 1→N fan paths, >4 collapse badge, selection fade (decision #13) |
 | Integration | create → snap → `=` → result; edit input → result updates; save → reload → identical document |
 | Property (`fast-check`) | parse∘print round-trips; formatter never emits something it cannot re-parse |
 
