@@ -3,7 +3,7 @@
 // `applyCommand` (which IS undoable) — see docs/ARCHITECTURE.md §8.5, whose last
 // bullet requires keypad visibility to sit outside undo history.
 import { create } from 'zustand';
-import { NodeId, Vec2 } from '../model/types';
+import { ChainId, NodeId, Vec2 } from '../model/types';
 import type { SnapOutcome } from '../chains/snapping';
 
 /** Discriminated union for the two menu variants (§8.6). */
@@ -19,6 +19,13 @@ export interface DragSnapState {
   position: Vec2;
   /** Nearest §8.3 candidate, or null when nothing is in range. P3.6 reads this for the caret. */
   candidate: SnapOutcome | null;
+  /**
+   * P3.7 MovingChain: when set, every member of this chain is visually offset by
+   * the same delta as `nodeId`. ConnectorLayer (P6.6) reads this so curves track
+   * siblings that only move via Reanimated, not a document write. Null for ordinary
+   * detach/free drags where only `nodeId` moves.
+   */
+  movingChainId: ChainId | null;
 }
 
 export interface UiState {

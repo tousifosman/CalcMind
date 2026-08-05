@@ -6,6 +6,7 @@ import {
   CONNECTOR_UNSELECTED_OPACITY,
   connectorMarkerId,
   connectorPath,
+  nodesWithDragOverride,
   sortFanConsumers,
 } from './connectors';
 import { assignIdentityHues } from '../engine/identity';
@@ -13,6 +14,7 @@ import { identityHues } from '../ui/tokens';
 import type {
   CalcNode,
   NumberNode,
+  OperatorNode,
   ReferenceNode,
   ResultNode,
 } from '../model/types';
@@ -220,6 +222,64 @@ describe('buildConnectorScene', () => {
     const scene = buildConnectorScene(nodes, new Map(), 'en-US', null);
     expect(scene.curves).toHaveLength(1);
     expect(scene.curves[0]!.hue).toBe(CONNECTOR_NEUTRAL_HUE);
+  });
+
+  test('collapsed badge-only sources do not emit arrowhead marker hues', () => {
+    const nodes: Record<string, CalcNode> = {
+      r1: result('r1', 100, 0),
+    };
+    for (let i = 0; i < CONNECTOR_FAN_COLLAPSE_AT; i++) {
+      const id = `ref_${i}`;
+      nodes[id] = reference(id, 'r1', i * 60, 140);
+    }
+    const hues = assignIdentityHues(nodes, identityHues);
+    const scene = buildConnectorScene(nodes, hues, 'en-US', null);
+    expect(scene.badges).toHaveLength(1);
+    expect(scene.hues).toEqual([]);
+  });
+
+  test('mid-drag override moves the dragged endpoint before store commit', () => {
+    const nodes: Record<string, CalcNode> = {
+      r1: result('r1', 0, 0),
+      a: reference('a', 'r1', 0, 120),
+    };
+    const hues = assignIdentityHues(nodes, identityHues);
+    const idle = buildConnectorScene(nodes, hues, 'en-US', null);
+    const live = buildConnectorScene(nodes, hues, 'en-US', null, {
+      nodeId: 'a',
+      position: { x: 80, y: 200 },
+      movingChainId: null,
+    });
+    expect(idle.curves[0]!.d).not.toBe(live.curves[0]!.d);
+    // End point sits on the live top edge (y = 200), not the store's y = 120.
+    expect(live.curves[0]!.d).toMatch(/ 200$/);
+  });
+
+  test('MovingChain override offsets sibling members of the same chain', () => {
+    const op: OperatorNode = {
+      id: 'op',
+      kind: 'operator',
+      op: '+',
+      position: { x: 100, y: 120 },
+      chainId: 'c_dep',
+      createdAt: 0,
+    };
+    const nodes: Record<string, CalcNode> = {
+      r1: result('r1', 0, 0),
+      a: { ...reference('a', 'r1', 40, 120), chainId: 'c_dep' },
+      op,
+    };
+
+    const overridden = nodesWithDragOverride(nodes, {
+      nodeId: 'op',
+      position: { x: 160, y: 180 },
+      movingChainId: 'c_dep',
+    });
+    expect(overridden.op!.position).toEqual({ x: 160, y: 180 });
+    // Same delta (+60, +60) applied to the sibling reference.
+    expect(overridden.a!.position).toEqual({ x: 100, y: 180 });
+    // Untouched chain stays put.
+    expect(overridden.r1!.position).toEqual({ x: 0, y: 0 });
   });
 });
 

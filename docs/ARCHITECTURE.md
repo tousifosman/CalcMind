@@ -963,8 +963,10 @@ keeps web and native identical. Only the result node's dot texture needs more, h
 Connector curves (§11.1) *do* need `react-native-svg` — they are beziers in an overlay layer above
 the nodes, sharing the canvas transform. Implemented: `ConnectorLayer` is a sibling of `NodeLayer`
 inside `Canvas` (same pan/zoom), `pointerEvents="none"`, z-index above idle nodes and below
-mid-drag chrome. That makes the dependency load-bearing from phase 6, so the result texture may
-as well use it too.
+mid-drag chrome. Mid-drag it reads `uiStore.dragSnap` (including `movingChainId` for P3.7) so
+endpoints track the finger before the store commits on release — same ephemeral feed
+`NodeLayer` uses for the insertion gap. That makes the dependency load-bearing from phase 6, so
+the result texture may as well use it too.
 
 ### 11.4 Performance budget
 

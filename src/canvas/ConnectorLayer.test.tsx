@@ -130,4 +130,26 @@ describe('ConnectorLayer', () => {
       ).toBeTruthy();
     }
   });
+
+  test('curve endpoint follows dragSnap while a reference is mid-drag', () => {
+    const { referenceIds } = seedFan(1);
+    const refId = referenceIds[0]!;
+    const renderer = renderNode(<ConnectorLayer />);
+    const before = findHostByTestID(renderer.root, `connector-curve-${refId}`)
+      .props.d as string;
+
+    act(() => {
+      useUiStore.getState().setDragSnap({
+        nodeId: refId,
+        position: { x: 200, y: 300 },
+        candidate: null,
+        movingChainId: null,
+      });
+    });
+
+    const after = findHostByTestID(renderer.root, `connector-curve-${refId}`)
+      .props.d as string;
+    expect(after).not.toBe(before);
+    expect(after).toMatch(/, \d+(\.\d+)? 300$/);
+  });
 });

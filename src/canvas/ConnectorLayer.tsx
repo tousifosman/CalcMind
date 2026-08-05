@@ -4,6 +4,10 @@
 //
 // pointerEvents="none" throughout — connectors are visual, never a hit target.
 // Selection / unlink stay on the cells and the long-press menu (§8.6).
+//
+// Mid-drag: reads `uiStore.dragSnap` the same way NodeLayer feeds
+// `insertionFeedback`, so curve endpoints follow the finger before the store
+// commits on release (including P3.7 MovingChain siblings via `movingChainId`).
 import { useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, Marker, Path } from 'react-native-svg';
@@ -26,12 +30,20 @@ export function ConnectorLayer() {
   // selectors (§11.4); this layer is the one place that must see the graph.
   const nodes = useDocumentStore((state) => state.document.nodes);
   const selectedNodeId = useUiStore((state) => state.selectedNodeId);
+  const dragSnap = useUiStore((state) => state.dragSnap);
   const locale = getDeviceLocale();
 
   const scene = useMemo(() => {
     const hues = identityHueMapFor(nodes);
-    return buildConnectorScene(nodes, hues, locale, selectedNodeId);
-  }, [nodes, locale, selectedNodeId]);
+    const drag = dragSnap
+      ? {
+          nodeId: dragSnap.nodeId,
+          position: dragSnap.position,
+          movingChainId: dragSnap.movingChainId,
+        }
+      : null;
+    return buildConnectorScene(nodes, hues, locale, selectedNodeId, drag);
+  }, [nodes, locale, selectedNodeId, dragSnap]);
 
   if (scene.curves.length === 0 && scene.badges.length === 0) {
     return null;
@@ -92,7 +104,10 @@ export function ConnectorLayer() {
         <View
           key={badge.sourceNodeId}
           testID={`connector-badge-${badge.sourceNodeId}`}
-          accessibilityLabel={`${badge.count} links`}
+          // Decorative: the layer is pointerEvents="none", so keep this out of
+          // the accessibility tree rather than announcing a non-actionable label.
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden
           style={[
             styles.badge,
             {
@@ -102,7 +117,9 @@ export function ConnectorLayer() {
             },
           ]}
         >
-          <Text style={styles.badgeText}>{badge.count}</Text>
+          <Text style={styles.badgeText} importantForAccessibility="no">
+            {badge.count}
+          </Text>
         </View>
       ))}
     </View>

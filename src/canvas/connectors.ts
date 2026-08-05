@@ -11,7 +11,19 @@
 // at distinct angles rather than stacking on one exit.
 import { boundsOf, type Bounds } from '../chains/bounds';
 import { dependencyEdgeKey } from '../engine/graph';
-import type { CalcNode, NodeId, Vec2 } from '../model/types';
+import type { CalcNode, ChainId, NodeId, Vec2 } from '../model/types';
+
+/**
+ * Mid-drag position override for connector endpoints (P6.6 / §11.4). Document
+ * positions only commit on release; without this, curves stick at the pre-drag
+ * spot while the node slides under the finger.
+ */
+export interface ConnectorDragOverride {
+  nodeId: NodeId;
+  position: Vec2;
+  /** When set, offset every other member of this chain by the same delta. */
+  movingChainId: ChainId | null;
+}
 
 /** Collapse a source's fan to a count badge when it has more than this many
  *  live consumers (§11.1 "more than ~4"). */
@@ -210,19 +222,56 @@ function expandBounds(
 }
 
 /**
+ * Overlay live drag positions onto a shallow copy of `nodes`. Only the dragged
+ * node (and, for MovingChain, its siblings) get new `position` values — enough
+ * for `boundsOf` without mutating the store.
+ */
+export function nodesWithDragOverride(
+  nodes: Record<NodeId, CalcNode>,
+  drag: ConnectorDragOverride | null | undefined,
+): Record<NodeId, CalcNode> {
+  if (!drag) return nodes;
+  const home = nodes[drag.nodeId];
+  if (!home) return nodes;
+
+  const dx = drag.position.x - home.position.x;
+  const dy = drag.position.y - home.position.y;
+  if (dx === 0 && dy === 0) return nodes;
+
+  const next: Record<NodeId, CalcNode> = { ...nodes };
+  next[drag.nodeId] = { ...home, position: drag.position };
+
+  if (drag.movingChainId !== null) {
+    for (const [id, node] of Object.entries(nodes)) {
+      if (id === drag.nodeId) continue;
+      if (node.chainId !== drag.movingChainId) continue;
+      next[id] = {
+        ...node,
+        position: { x: node.position.x + dx, y: node.position.y + dy },
+      };
+    }
+  }
+  return next;
+}
+
+/**
  * Build the drawable connector scene for the current document.
  *
  * @param selectedNodeId — when set, a collapsed (>4) fan expands if the
  *   selection is the source or any of its consumers; otherwise unselected
  *   curves fade rather than disappear (decision #13).
+ * @param drag — mid-drag live positions from `uiStore.dragSnap` so curves track
+ *   the finger before the store commits on release.
  */
 export function buildConnectorScene(
   nodes: Record<NodeId, CalcNode>,
   hues: ReadonlyMap<NodeId, string>,
   locale: string,
   selectedNodeId: NodeId | null,
+  drag?: ConnectorDragOverride | null,
 ): ConnectorScene {
-  const links = collectConnectorLinks(nodes);
+  const liveNodes = nodesWithDragOverride(nodes, drag);
+  const links = collectConnectorLinks(liveNodes);
   if (links.length === 0) {
     return { curves: [], badges: [], hues: [], bounds: null };
   }
@@ -247,12 +296,11 @@ export function buildConnectorScene(
   // Stable source order so React keys and marker emission don't shuffle.
   const sourceIds = [...bySource.keys()].sort();
   for (const sourceId of sourceIds) {
-    const group = sortFanConsumers(bySource.get(sourceId)!, nodes);
-    const source = nodes[sourceId];
+    const group = sortFanConsumers(bySource.get(sourceId)!, liveNodes);
+    const source = liveNodes[sourceId];
     if (!source) continue;
-    const sourceBounds = boundsOf(source, locale, nodes);
+    const sourceBounds = boundsOf(source, locale, liveNodes);
     const hue = hues.get(sourceId) ?? CONNECTOR_NEUTRAL_HUE;
-    hueSet.add(hue);
 
     if (!groupExpanded(group, selectedNodeId)) {
       const anchor = centerBottom(sourceBounds);
@@ -264,15 +312,17 @@ export function buildConnectorScene(
       };
       badges.push(badge);
       bounds = expandBounds(bounds, badge.position.x, badge.position.y, pad);
+      // Badge-only sources need no arrowhead marker.
       continue;
     }
 
+    hueSet.add(hue);
     const start = centerBottom(sourceBounds);
     for (let i = 0; i < group.length; i++) {
       const link = group[i]!;
-      const ref = nodes[link.referenceNodeId];
+      const ref = liveNodes[link.referenceNodeId];
       if (!ref) continue;
-      const refBounds = boundsOf(ref, locale, nodes);
+      const refBounds = boundsOf(ref, locale, liveNodes);
       const end = centerTop(refBounds);
       const d = connectorPath(start, end, i, group.length, sourceBounds);
       curves.push({
