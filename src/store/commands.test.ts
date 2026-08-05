@@ -43,6 +43,8 @@ import { dispatchEditorCommand } from '../keypad/keymap';
 import { tokens } from '../ui/tokens';
 import { insertionFeedback, layoutChain } from '../chains/layout';
 import { widthOf } from '../chains/measure';
+import { formatForDisplay } from '../engine/format';
+import { labelForNode } from '../engine/identity';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
 
@@ -1805,6 +1807,72 @@ describe('setNodeLabel (P6b.1)', () => {
     expect(useUiStore.getState().editingNodeId).toBeNull();
     finishEditingLabel();
     expect(useUiStore.getState().editingLabelNodeId).toBeNull();
+  });
+});
+
+describe('P6b.2 declare-and-label idiom (§1.3)', () => {
+  test('"10,000 =" declares a labelled value that a second chain references onward', () => {
+    // Walks the exact §1.3 idiom keystroke-by-keystroke through dispatchEditorCommand,
+    // the same dispatch a real keypad tap or hardware key goes through - not the
+    // lower-level commands directly, so this exercises the actual user path, not just
+    // the machinery underneath it.
+    for (const d of ['1', '0', '0', '0', '0'] as const) {
+      dispatchEditorCommand({ region: 'digit', value: d });
+    }
+    dispatchEditorCommand({ region: 'equals' });
+
+    const afterDeclare = useDocumentStore.getState().document;
+    const declared = Object.values(afterDeclare.nodes).find((n) => n.kind === 'number')!;
+    const declaration = Object.values(afterDeclare.nodes).find((n) => n.kind === 'result')!;
+    expect(declared).toMatchObject({ raw: '10000' });
+    // Locale display holds even though nothing asked for it explicitly: the stored raw
+    // stays canonical (no separator) while both the input and its result display grouped.
+    expect(formatForDisplay(declared.raw as string, 'en-US')).toBe('10,000');
+    expect(declaration).toMatchObject({ kind: 'result' });
+    expect(declaration.kind === 'result' ? declaration.derived?.display : undefined).toBe(
+      '10,000',
+    );
+
+    // "= [10,000]" - label the declaration, the way §1.3's screenshot names it.
+    setNodeLabel(declaration.id, 'Initial Deposit');
+    expect(useDocumentStore.getState().document.nodes[declaration.id]).toMatchObject({
+      label: 'Initial Deposit',
+    });
+
+    // Select the declared result and continue from it (§8.7) - the primary way this
+    // value gets referenced onward, exactly as a user completing the idiom would.
+    selectNode(declaration.id);
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    for (const d of ['5', '0', '0', '0'] as const) {
+      dispatchEditorCommand({ region: 'digit', value: d });
+    }
+    dispatchEditorCommand({ region: 'equals' });
+
+    const final = useDocumentStore.getState().document;
+    const reference = Object.values(final.nodes).find((n) => n.kind === 'reference')!;
+    expect(reference).toMatchObject({ kind: 'reference', targetNodeId: declaration.id });
+    // The reference carries no label of its own (P6b.1) - it inherits the declaration's
+    // caption by identity, so the same name reads above both cells.
+    expect(labelForNode(final.nodes, reference.id)).toBe('Initial Deposit');
+
+    const consumerChainId = reference.kind === 'reference' ? reference.chainId! : '';
+    const consumerResult = final.chains[consumerChainId]!.members
+      .map((id) => final.nodes[id]!)
+      .find((n) => n.kind === 'result')!;
+    expect(consumerResult.kind === 'result' ? consumerResult.derived?.display : undefined).toBe(
+      '15,000',
+    );
+
+    // Editing the declaration cascades onward (P6.2), so the referenced value stays live,
+    // not a frozen copy - the whole point of declaring it rather than retyping it.
+    setNodeRaw(declared.id, '20000');
+    const afterEdit = useDocumentStore.getState().document;
+    const consumerAfterEdit = afterEdit.chains[consumerChainId]!.members
+      .map((id) => afterEdit.nodes[id]!)
+      .find((n) => n.kind === 'result')!;
+    expect(
+      consumerAfterEdit.kind === 'result' ? consumerAfterEdit.derived?.display : undefined,
+    ).toBe('25,000');
   });
 });
 

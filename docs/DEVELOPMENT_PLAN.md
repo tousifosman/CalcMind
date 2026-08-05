@@ -64,6 +64,7 @@ flowchart LR
     style P4 fill:#22A75B,color:#fff
     style P5 fill:#22A75B,color:#fff
     style P6 fill:#22A75B,color:#fff
+    style P6b fill:#22A75B,color:#fff
 ```
 
 | Phase | Goal | Tasks | State |
@@ -75,8 +76,8 @@ flowchart LR
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | ~~**P5**~~ | ~~Persistence~~ | — | **Done** — 8/8, phase exit check verified live |
 | ~~**P6**~~ | ~~Linking~~ | — | **Done** — 8/8, phase exit check verified live |
-| **P6b** | Labels + slider | 4 | In progress — P6b.1/P6b.3/P6b.4 done; P6b.2 ready |
-| **P7** | Polish | 7 | Blocked on P5 + P6b |
+| ~~**P6b**~~ | ~~Labels + slider~~ | — | **Done** — 4/4, phase exit check verified live |
+| **P7** | Polish | 7 | Ready to start — P5 + P6b done |
 
 Sequencing notes, carried over from §15:
 
@@ -1203,14 +1204,14 @@ flowchart LR
     style P62 fill:#22A75B,color:#fff
     style P56 fill:#22A75B,color:#fff
     style P6b1 fill:#22A75B,color:#fff
-    style P6b2 fill:#F0A020,color:#fff
+    style P6b2 fill:#22A75B,color:#fff
     style P6b3 fill:#22A75B,color:#fff
     style P6b4 fill:#22A75B,color:#fff
-    style EXIT fill:#7030A0,color:#fff
+    style EXIT fill:#22A75B,color:#fff
 ```
 
 Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
-gate. `P6b.1`, `P6b.3`, and `P6b.4` are done; `P6b.2` is ready (waits only on `P6b.1`, now done).
+gate. All four P6b tasks are done, and the phase exit check is verified live — see below.
 Kept current by hand alongside the acceptance-criteria boxes below — if a task's status here
 disagrees with its boxes, the boxes win and this diagram is stale.
 
@@ -1237,9 +1238,16 @@ base), §1.3 (labels are a headline feature of the mature reference app).
 **Touches.** integration tests, `src/store/commands.ts`.
 **Depends on.** P6b.1, P4.9.
 
-- [ ] `10,000 =` produces a labelled declaration whose result can be referenced onward.
-- [ ] Locale display holds throughout: `10,000` displays grouped while storing `10000` (§10.3).
-- [ ] One integration test walks the whole idiom exactly as a user would type it.
+- [x] `10,000 =` produces a labelled declaration whose result can be referenced onward.
+- [x] Locale display holds throughout: `10,000` displays grouped while storing `10000` (§10.3).
+- [x] One integration test walks the whole idiom exactly as a user would type it.
+
+P6b.1 (labels) and P4.9 (continuation) already carried the machinery; this task was proving the
+composition, the same lesson as the P5/P6 close-out (`2026-08-04` Knowledge revision 9). One
+integration test (`P6b.2 declare-and-label idiom` in `src/store/commands.test.ts`) walks
+`10000` `=` → label "Initial Deposit" → continue `+ 5000` `=` → edit the declaration, all through
+`dispatchEditorCommand`, the same dispatch a real keystroke goes through. Verified live in a
+browser too — see the phase exit check below.
 
 ### P6b.3 — Value slider
 
@@ -1280,7 +1288,24 @@ budget), §11.4.
 > selecting a number raises the slider popover (§8.8) and scrubbing cascades live at 60fps as one
 > undo entry with autosave suppressed until release.
 
-- [ ] All of the above demonstrated by hand, with the undo stack inspected after a scrub.
+- [x] All of the above demonstrated by hand, with the undo stack inspected after a scrub.
+
+Demonstrated live with Playwright + Chromium against the real dev server (not type-checked only —
+`docs/journal/2026-08-03.md` revision 8): `10000 =` displays grouped as `10,000`; long-pressing the
+result opens its context menu with a `Label` item; typing "Initial Deposit" renders the caption
+above the declaration; continuing from it (`+ 5000 =`) creates a reference carrying the same
+caption, evaluating to `15,000`; editing the declaration's input cascades to the consumer with no
+touch to it (`1,000 + 5,000 = 6,000`) — the whole idiom, keystroke for keystroke. Separately,
+selecting a plain number raises the slider popover with editable `[0, 10]` bounds, and dragging its
+track scrubs the value live (confirmed the on-screen value changed frame to frame during the drag).
+Screenshots under the session's scratch directory (`p6b-declared-labelled.png`,
+`p6b-referenced-onward.png`, `p6b-slider-scrub.png`). The undo stack itself was **not** inspected
+by hand this way — there is no UI affordance to trigger undo yet (keyboard undo is P7.2), so
+nothing in the browser can drive it. "One undo entry per scrub" and "autosave suppressed until
+release" are instead covered by P6b.4's own passing unit tests
+(`beginValueScrub`/`scrubNodeValue`/`endValueScrub` in `src/store/commands.test.ts`), which call
+the store directly and assert the stack length — the correct boundary for a guarantee the current
+UI has no way to exercise, the same test-harness-limitation call made for P6's cycle detection.
 
 ---
 
