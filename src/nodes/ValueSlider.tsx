@@ -175,13 +175,7 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
           onChangeText={setMinText}
           onCommit={(text) => commitBound('min', text)}
         />
-        <Text style={styles.boundsLabel} testID={`value-slider-min-label-${nodeId}`}>
-          {range.min}
-        </Text>
         <View style={styles.boundsSpacer} />
-        <Text style={styles.boundsLabel} testID={`value-slider-max-label-${nodeId}`}>
-          {range.max}
-        </Text>
         <BoundInput
           testID={`value-slider-max-${nodeId}`}
           value={maxText}
@@ -363,11 +357,6 @@ const styles = StyleSheet.create({
   },
   boundsSpacer: {
     flex: 1,
-  },
-  boundsLabel: {
-    fontSize: 12,
-    color: '#6B7280',
-    marginHorizontal: 4,
   },
   boundInput: {
     width: 52,

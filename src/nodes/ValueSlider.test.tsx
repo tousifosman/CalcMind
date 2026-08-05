@@ -25,34 +25,41 @@ describe('ValueSlider', () => {
     const renderer = renderNode(<ValueSlider nodeId={id} />);
 
     expect(renderer.root.findByProps({ testID: `value-slider-${id}` })).toBeTruthy();
-    expect(renderer.root.findByProps({ testID: `value-slider-min-label-${id}` }).props.children).toBe(
-      0,
-    );
-    expect(renderer.root.findByProps({ testID: `value-slider-max-label-${id}` }).props.children).toBe(
-      100,
-    );
+    // Editable bound inputs are the labelled endpoints (42 → [0, 100]).
+    const minInput = renderer.root
+      .findAllByType(TextInput)
+      .find((n) => n.props.testID === `value-slider-min-${id}`);
+    const maxInput = renderer.root
+      .findAllByType(TextInput)
+      .find((n) => n.props.testID === `value-slider-max-${id}`);
+    expect(minInput!.props.value).toBe('0');
+    expect(maxInput!.props.value).toBe('100');
   });
 
   test('zero opens with [0, 10]', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '0');
     const renderer = renderNode(<ValueSlider nodeId={id} />);
-    expect(renderer.root.findByProps({ testID: `value-slider-min-label-${id}` }).props.children).toBe(
-      0,
-    );
-    expect(renderer.root.findByProps({ testID: `value-slider-max-label-${id}` }).props.children).toBe(
-      10,
-    );
+    expect(
+      renderer.root.findAllByType(TextInput).find((n) => n.props.testID === `value-slider-min-${id}`)!
+        .props.value,
+    ).toBe('0');
+    expect(
+      renderer.root.findAllByType(TextInput).find((n) => n.props.testID === `value-slider-max-${id}`)!
+        .props.value,
+    ).toBe('10');
   });
 
   test('negative value labels a symmetric range', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '-7');
     const renderer = renderNode(<ValueSlider nodeId={id} />);
-    expect(renderer.root.findByProps({ testID: `value-slider-min-label-${id}` }).props.children).toBe(
-      -10,
-    );
-    expect(renderer.root.findByProps({ testID: `value-slider-max-label-${id}` }).props.children).toBe(
-      10,
-    );
+    expect(
+      renderer.root.findAllByType(TextInput).find((n) => n.props.testID === `value-slider-min-${id}`)!
+        .props.value,
+    ).toBe('-10');
+    expect(
+      renderer.root.findAllByType(TextInput).find((n) => n.props.testID === `value-slider-max-${id}`)!
+        .props.value,
+    ).toBe('10');
   });
 
   test('bounds inputs are editable', () => {
@@ -68,9 +75,10 @@ describe('ValueSlider', () => {
       minInput!.props.onBlur();
     });
 
-    expect(renderer.root.findByProps({ testID: `value-slider-min-label-${id}` }).props.children).toBe(
-      -20,
-    );
+    expect(
+      renderer.root.findAllByType(TextInput).find((n) => n.props.testID === `value-slider-min-${id}`)!
+        .props.value,
+    ).toBe('-20');
   });
 
   test('renders nothing for mid-typing raw', () => {
