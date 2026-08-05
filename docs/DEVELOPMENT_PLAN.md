@@ -75,7 +75,7 @@ flowchart LR
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | ~~**P5**~~ | ~~Persistence~~ | — | **Done** — 8/8, phase exit check verified live |
 | ~~**P6**~~ | ~~Linking~~ | — | **Done** — 8/8, phase exit check verified live |
-| **P6b** | Labels + slider | 4 | In progress — P6b.1/P6b.3/P6b.4 done; P6b.2 ready |
+| **P6b** | Labels + slider | 4 | In progress — P6b.1–P6b.4 done; phase exit check open |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
 Sequencing notes, carried over from §15:
@@ -1203,14 +1203,14 @@ flowchart LR
     style P62 fill:#22A75B,color:#fff
     style P56 fill:#22A75B,color:#fff
     style P6b1 fill:#22A75B,color:#fff
-    style P6b2 fill:#F0A020,color:#fff
+    style P6b2 fill:#22A75B,color:#fff
     style P6b3 fill:#22A75B,color:#fff
     style P6b4 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
 Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
-gate. `P6b.1`, `P6b.3`, and `P6b.4` are done; `P6b.2` is ready (waits only on `P6b.1`, now done).
+gate. `P6b.1`–`P6b.4` are done; the phase-exit check remains.
 Kept current by hand alongside the acceptance-criteria boxes below — if a task's status here
 disagrees with its boxes, the boxes win and this diagram is stale.
 
@@ -1237,9 +1237,9 @@ base), §1.3 (labels are a headline feature of the mature reference app).
 **Touches.** integration tests, `src/store/commands.ts`.
 **Depends on.** P6b.1, P4.9.
 
-- [ ] `10,000 =` produces a labelled declaration whose result can be referenced onward.
-- [ ] Locale display holds throughout: `10,000` displays grouped while storing `10000` (§10.3).
-- [ ] One integration test walks the whole idiom exactly as a user would type it.
+- [x] `10,000 =` produces a labelled declaration whose result can be referenced onward.
+- [x] Locale display holds throughout: `10,000` displays grouped while storing `10000` (§10.3).
+- [x] One integration test walks the whole idiom exactly as a user would type it.
 
 ### P6b.3 — Value slider
 

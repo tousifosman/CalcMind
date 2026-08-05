@@ -8,6 +8,7 @@ import {
   appendNumberNode,
   appendParenNode,
   appendEqualsNode,
+  appendEqualsForSelection,
   appendOperatorAndNumber,
   continueFromResult,
   CONTINUATION_OFFSET,
@@ -1709,6 +1710,25 @@ describe('P6.2 incremental cascade', () => {
     // c2 must have recomputed, not kept showing the stale '10'.
     expect(useDocumentStore.getState().document.nodes[r2.id]).toMatchObject({
       derived: { outcome: { status: 'error', error: 'NotANumber' } },
+    });
+  });
+});
+
+describe('appendEqualsForSelection (P6b.2)', () => {
+  test('returns the result id when = evaluates, else the equals id', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '10000');
+    const selected = appendEqualsForSelection(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    expect(selected).toBe(result.id);
+    expect(result).toMatchObject({ derived: { display: '10,000' } });
+
+    const incomplete = addNumberNode({ x: 0, y: 80 }, '3');
+    const { numberId } = appendOperatorAndNumber(incomplete, '+');
+    const fallback = appendEqualsForSelection(numberId);
+    expect(useDocumentStore.getState().document.nodes[fallback]).toMatchObject({
+      kind: 'equals',
     });
   });
 });

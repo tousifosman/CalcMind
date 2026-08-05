@@ -695,7 +695,9 @@ then:  create chain C' below-right of C, containing
 
 This is the single most important interaction in the app: it turns "I have an answer" into "…and
 now I keep working with it" in one keystroke, and it is what produces the linked trees that make
-the canvas worth having.
+the canvas worth having. Pressing `=` selects the new **result** when evaluation succeeds
+(`appendEqualsForSelection`, P6b.2), so the next operator continues without an extra tap — the
+declare-and-label idiom `10,000 = [10,000]` → label → continue is one unbroken typing path.
 
 **The other path is drag-to-link (§11).** Dragging result `R` onto another chain (or onto a free
 node to form a new chain) uses the same §8.3 snap outcomes — no special case in `snapping.ts` —

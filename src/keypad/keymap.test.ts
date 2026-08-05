@@ -218,7 +218,8 @@ describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () =
     const afterEquals = useDocumentStore.getState().document;
     const result = Object.values(afterEquals.nodes).find((n) => n.kind === 'result');
     expect(result).toBeDefined();
-    selectNode(result!.id);
+    // `=` already selects the result (P6b.2) so continuation needs no extra tap.
+    expect(useUiStore.getState().selectedNodeId).toBe(result!.id);
 
     dispatchEditorCommand({ region: 'operator', op: '×' });
 
@@ -297,7 +298,7 @@ describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () =
     dispatchEditorCommand({ region: 'equals' });
 
     const result = Object.values(useDocumentStore.getState().document.nodes).find((n) => n.kind === 'result')!;
-    selectNode(result.id);
+    expect(useUiStore.getState().selectedNodeId).toBe(result.id);
     dispatchEditorCommand({ region: 'operator', op: '×' });
     dispatchEditorCommand({ region: 'digit', value: '2' });
     dispatchEditorCommand({ region: 'equals' });
