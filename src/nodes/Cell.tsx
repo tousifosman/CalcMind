@@ -10,8 +10,8 @@
 // leave `identityHue` unset — the ring is for declaring cells, the fill is for reference cells.
 // References that still show the identity caption pass `labelHue` so the caption matches without
 // drawing a ring. In-place label editing (P6b.1) swaps the caption Text for a TextInput.
-import { ReactNode } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { ReactNode, useEffect, useRef } from 'react';
+import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { tokens, labelColor } from '../ui/tokens';
 
 /** Inset identity ring width — matches the structural `borderBand` so the ring reads as
@@ -50,12 +50,31 @@ export function Cell({
 }: CellProps) {
   const captionColor = labelHue ?? identityHue ?? labelColor;
   const showCaption = isEditingLabel || (label !== undefined && label.length > 0);
+  const labelInputRef = useRef<TextInput>(null);
+
+  // Same web-only Space/Enter trap as NumberNode: gesture-handler's KeyboardEventManager
+  // treats a bubbling Space/Enter on a GestureDetector ancestor as tap activation, which
+  // steals focus mid-label (Space → only the first word survives). Stop propagation on the
+  // real <input> before that listener sees it; Enter still finishes via onSubmitEditing.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !isEditingLabel) return;
+    const inputNode: any = labelInputRef.current;
+    if (!inputNode || typeof inputNode.addEventListener !== 'function') return;
+
+    function onNativeKeyDown(e: any): void {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.stopPropagation();
+    }
+    inputNode.addEventListener('keydown', onNativeKeyDown);
+    return () => inputNode.removeEventListener('keydown', onNativeKeyDown);
+  }, [isEditingLabel]);
 
   return (
     <View style={styles.wrapper}>
       {showCaption ? (
         isEditingLabel ? (
           <TextInput
+            ref={labelInputRef}
             testID={testID ? `${testID}-label-input` : undefined}
             style={[styles.label, styles.labelInput, { color: captionColor }]}
             value={label ?? ''}
