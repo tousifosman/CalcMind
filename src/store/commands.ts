@@ -895,12 +895,17 @@ export function setNodeLabel(nodeId: NodeId, label: string): void {
  * their source so the TextInput sits on a declaring cell; still works when
  * invoked from a reference via the context menu (the write path looks through
  * identity either way). Clears number-raw editing so the two text fields never
- * compete for the same keystrokes.
+ * compete for the same keystrokes. Switching from another node's label edit
+ * finishes that one first (trim), mirroring {@link discardIfAbandoned} for raw.
  */
 export function editNodeLabel(nodeId: NodeId): void {
   const nodes = useDocumentStore.getState().document.nodes;
   const sourceId = identitySourceId(nodes, nodeId);
   if (sourceId === null) return;
+  const previousLabelId = useUiStore.getState().editingLabelNodeId;
+  if (previousLabelId !== null && previousLabelId !== sourceId) {
+    finishEditingLabel();
+  }
   discardIfAbandoned(sourceId);
   useUiStore.getState().setEditingNode(null);
   useUiStore.getState().setSelectedNode(sourceId);

@@ -18,6 +18,23 @@ import { tokens, labelColor } from '../ui/tokens';
  *  part of the same chrome language, not a thicker selection outline. */
 export const IDENTITY_RING_WIDTH = tokens.borderBand;
 
+/**
+ * Web-only: stop Space/Enter bubbling to a GestureDetector ancestor (§11.1 / P6b.1).
+ * Exported so the trap itself is unit-testable — react-test-renderer TextInput refs are
+ * not real DOM nodes, so the effect path cannot be exercised end-to-end in Jest.
+ */
+export function attachLabelKeyTrap(inputNode: {
+  addEventListener: (type: string, listener: (e: { key: string; stopPropagation: () => void }) => void) => void;
+  removeEventListener: (type: string, listener: (e: { key: string; stopPropagation: () => void }) => void) => void;
+}): () => void {
+  function onNativeKeyDown(e: { key: string; stopPropagation: () => void }): void {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.stopPropagation();
+  }
+  inputNode.addEventListener('keydown', onNativeKeyDown);
+  return () => inputNode.removeEventListener('keydown', onNativeKeyDown);
+}
+
 interface CellProps {
   width: number;
   fill: string;
@@ -60,13 +77,7 @@ export function Cell({
     if (Platform.OS !== 'web' || !isEditingLabel) return;
     const inputNode: any = labelInputRef.current;
     if (!inputNode || typeof inputNode.addEventListener !== 'function') return;
-
-    function onNativeKeyDown(e: any): void {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      e.stopPropagation();
-    }
-    inputNode.addEventListener('keydown', onNativeKeyDown);
-    return () => inputNode.removeEventListener('keydown', onNativeKeyDown);
+    return attachLabelKeyTrap(inputNode);
   }, [isEditingLabel]);
 
   return (
