@@ -55,6 +55,12 @@ describe('rawToSliderValue / sliderValueToRaw', () => {
     expect(sliderValueToRaw(3.5)).toBe('3.5');
     expect(sliderValueToRaw(-10)).toBe('-10');
   });
+
+  test('live scrub keeps a handful of significant digits, not toFixed(10) noise', () => {
+    // Review #114: continuous drag used to land `4.4830503302` in the cell.
+    expect(sliderValueToRaw(4.4830503302)).toBe('4.48305');
+    expect(sliderValueToRaw(18.9661006604)).toBe('18.9661');
+  });
 });
 
 describe('valueAtTrackFraction', () => {

@@ -52,13 +52,19 @@ export function rawToSliderValue(raw: string): number | null {
 /**
  * Canonical raw for a scrubbed numeric value. Always a complete number (no
  * trailing `.`), so the cell never lands in a mid-typing stub from the slider.
+ *
+ * Live scrub is a "what-if" probe: keep a handful of significant digits so cells
+ * and cascading results do not fill with `toFixed(10)` noise during a drag.
+ * Integers stay integer strings.
  */
 export function sliderValueToRaw(value: number): string {
   if (!Number.isFinite(value)) return '0';
   const d = new Decimal(value);
-  // Enough fractional digits for continuous scrub; strip trailing zeros so
-  // `3` stays `"3"` rather than `"3.0000000000"`.
-  let s = d.toFixed(10);
+  if (d.isInteger()) {
+    const asInt = d.toFixed(0);
+    return asInt === '-0' ? '0' : asInt;
+  }
+  let s = d.toSignificantDigits(6).toFixed();
   if (s.includes('.')) {
     s = s.replace(/\.?0+$/, '');
   }

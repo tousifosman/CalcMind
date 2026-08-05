@@ -23,6 +23,7 @@ import { useUiStore } from '../store/uiStore';
 import {
   beginValueScrub,
   endValueScrub,
+  isValueScrubbing,
   scrubNodeValue,
 } from '../store/commands';
 import { getDeviceLocale } from '../ui/locale';
@@ -89,9 +90,13 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
 
   useEffect(() => {
     return () => {
-      // If the popover unmounts mid-scrub (deselect / node deleted), close the
-      // gesture so autosave suppress cannot stick.
-      endValueScrub();
+      // Close a scrub left open by an interrupted gesture (deselect / node
+      // deleted mid-drag) so autosave suppress cannot stick. Only fire when a
+      // scrub is actually open — selection changes that never scrubbed should
+      // not touch the scrub session.
+      if (isValueScrubbing()) {
+        endValueScrub();
+      }
     };
   }, [nodeId]);
 
@@ -188,6 +193,8 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
         nodeId={nodeId}
         trackWidth={trackWidth}
         thumbLeft={thumbLeft}
+        range={range}
+        value={value}
         integerSnap={integerSnap}
         onLayoutWidth={setTrackWidth}
         onScrubStart={onScrubStart}
@@ -241,6 +248,8 @@ interface SliderTrackProps {
   nodeId: NodeId;
   trackWidth: number;
   thumbLeft: number;
+  range: SliderRange;
+  value: number;
   integerSnap: boolean;
   onLayoutWidth: (width: number) => void;
   onScrubStart: () => void;
@@ -253,6 +262,8 @@ function SliderTrack({
   nodeId,
   trackWidth,
   thumbLeft,
+  range,
+  value,
   integerSnap,
   onLayoutWidth,
   onScrubStart,
@@ -300,6 +311,11 @@ function SliderTrack({
         onLayout={onLayout}
         accessibilityRole="adjustable"
         accessibilityState={{ selected: integerSnap }}
+        accessibilityValue={{
+          min: range.min,
+          max: range.max,
+          now: value,
+        }}
         {...preventFocusSteal}
       >
         <View style={styles.trackFill} />
