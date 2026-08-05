@@ -75,7 +75,7 @@ flowchart LR
 | ~~**P4**~~ | ~~Engine~~ | — | **Done** — 9/9, phase exit check verified live |
 | ~~**P5**~~ | ~~Persistence~~ | — | **Done** — 8/8, phase exit check verified live |
 | ~~**P6**~~ | ~~Linking~~ | — | **Done** — 8/8, phase exit check verified live |
-| **P6b** | Labels + slider | 4 | Blocked on P6 |
+| **P6b** | Labels + slider | 4 | Ready to start — P6 done |
 | **P7** | Polish | 7 | Blocked on P5 + P6b |
 
 Sequencing notes, carried over from §15:
@@ -1172,6 +1172,49 @@ See `docs/journal/2026-08-04.md` for the full write-up of both.
 
 Not garnish (§15). Labels are what let a canvas be read back a week later; the slider is what turns
 a correct dependency graph into something you can interrogate.
+
+```mermaid
+flowchart LR
+    P65["P6.5<br/>Identity + hue<br/>#87"]
+    P49["P4.9<br/>Continuation<br/>#57"]
+    P26["P2.6<br/>Selection + edit<br/>#14"]
+    P62["P6.2<br/>Incremental cascade<br/>#84"]
+    P56["P5.6<br/>Autosave<br/>#77"]
+    P6b1["P6b.1<br/>Labels on identity<br/>#107"]
+    P6b2["P6b.2<br/>Declare-and-label<br/>#109"]
+    P6b3["P6b.3<br/>Value slider<br/>#108"]
+    P6b4["P6b.4<br/>Live scrub cascade<br/>#110"]
+    EXIT(["Phase exit check<br/>#111"])
+
+    P65 --> P6b1
+    P6b1 --> P6b2
+    P49 --> P6b2
+    P26 --> P6b3
+    P6b3 --> P6b4
+    P62 --> P6b4
+    P56 --> P6b4
+
+    P6b2 --> EXIT
+    P6b4 --> EXIT
+
+    style P65 fill:#22A75B,color:#fff
+    style P49 fill:#22A75B,color:#fff
+    style P26 fill:#22A75B,color:#fff
+    style P62 fill:#22A75B,color:#fff
+    style P56 fill:#22A75B,color:#fff
+    style P6b1 fill:#F0A020,color:#fff
+    style P6b2 fill:#8892A0,color:#fff
+    style P6b3 fill:#F0A020,color:#fff
+    style P6b4 fill:#8892A0,color:#fff
+    style EXIT fill:#7030A0,color:#fff
+```
+
+Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
+gate. All five external dependencies (`P6.5`, `P4.9`, `P2.6`, `P6.2`, `P5.6`) are already done, so
+`P6b.1` and `P6b.3` — the two tasks with no same-phase dependency of their own — are ready to start
+now rather than blocked; `P6b.2` and `P6b.4` each wait on their own phase's task ahead of them.
+Kept current by hand alongside the acceptance-criteria boxes below — if a task's status here
+disagrees with its boxes, the boxes win and this diagram is stale.
 
 ### P6b.1 — Labels on the identity
 
