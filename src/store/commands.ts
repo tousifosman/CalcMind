@@ -207,6 +207,25 @@ export function appendEqualsNode(afterNodeId: NodeId): NodeId {
   return node.id;
 }
 
+/**
+ * Append `=` and return the node the user should act on next (§8.7 / P6b.2).
+ * When the chain evaluates, that is the **result** — so the next operator
+ * continues from it and Label targets the declaration without an extra tap.
+ * Incomplete / invalid chains produce no result; then the equals node itself
+ * is returned (same as today's `selectNode(appendEqualsNode(...))` behaviour).
+ */
+export function appendEqualsForSelection(afterNodeId: NodeId): NodeId {
+  const equalsId = appendEqualsNode(afterNodeId);
+  const doc = useDocumentStore.getState().document;
+  const equals = doc.nodes[equalsId];
+  if (!equals || equals.chainId === null) return equalsId;
+  // Result is spliced into chain.members by writeChainDerived (§11 / graph.ts) —
+  // look there instead of scanning every node on the canvas (PR #115 review).
+  const chain = doc.chains[equals.chainId];
+  const resultId = chain?.members.find((id) => doc.nodes[id]?.kind === 'result');
+  return resultId ?? equalsId;
+}
+
 /** Pressing an operator doesn't just append the operator (§8.5) - the next keystroke should
  *  land in a fresh operand, so this appends the operator and an empty number node together.
  *  Doing that as two separate `appendMembersToChain` calls would let undo strand the

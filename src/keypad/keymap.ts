@@ -12,7 +12,7 @@ import {
   addEqualsNode,
   appendNumberNode,
   appendParenNode,
-  appendEqualsNode,
+  appendEqualsForSelection,
   appendOperatorAndNumber,
   continueFromResult,
   setNodeRaw,
@@ -229,7 +229,9 @@ export function dispatchEditorCommand(command: EditorCommand): void {
 
     case 'equals': {
       if (selectedNode) {
-        selectNode(appendEqualsNode(selectedNode.id));
+        // Prefer the result when `=` evaluates — §8.7 continuation and the
+        // P6b.2 declare-and-label idiom both act on the result next.
+        selectNode(appendEqualsForSelection(selectedNode.id));
         return;
       }
       selectNode(addEqualsNode(caretPoint));
