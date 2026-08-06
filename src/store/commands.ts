@@ -504,9 +504,10 @@ export function isValueScrubbing(): boolean {
   return scrubSession !== null;
 }
 
-/** Swipe-to-clear (§8.5, decision #15): wipes every node and chain in one undo
- *  entry. The confirmation gate lives in the keypad (P2.10) - this command trusts
- *  its caller and does not ask again, so it stays a plain, testable mutation. */
+/** Clear-all (§8.5, decision #15): wipes every node and chain in one undo entry.
+ *  The confirmation gate lives in the keypad (P2.10 swipe / P7.8 Clear all
+ *  button) - this command trusts its caller and does not ask again, so it stays
+ *  a plain, testable mutation. */
 export function clearDocument(): void {
   useDocumentStore.getState().applyCommand((draft) => {
     const alreadyEmpty =

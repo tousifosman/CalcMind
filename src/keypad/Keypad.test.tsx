@@ -49,6 +49,7 @@ describe('Keypad', () => {
     expect(findByTestID(renderer, 'keypad-mode-documents')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-mode-functions')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-mode-graph')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-mode-clear-all')).toBeTruthy();
   });
 
   test('the decimal key shows the locale glyph but reports a bare "decimal" press', () => {
@@ -198,6 +199,62 @@ describe('swipe-to-clear confirmation (P2.10, decision #15)', () => {
 
     expect(useDocumentStore.getState().document).toBe(documentBefore);
     expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '42' });
+    expect(useUiStore.getState().clearConfirmVisible).toBe(false);
+  });
+});
+
+describe('Clear all mode-strip button (P7.8)', () => {
+  test('is disabled on an empty canvas and enabled once a node exists', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-mode-clear-all').props.disabled).toBe(true);
+
+    act(() => {
+      addNumberNode({ x: 0, y: 0 }, '7');
+    });
+    expect(findByTestID(renderer, 'keypad-mode-clear-all').props.disabled).toBe(false);
+  });
+
+  test('pressing it raises the same confirmation as swipe-to-clear', () => {
+    act(() => {
+      addNumberNode({ x: 0, y: 0 }, '7');
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    act(() => {
+      findByTestID(renderer, 'keypad-mode-clear-all').props.onPress();
+    });
+
+    expect(useUiStore.getState().clearConfirmVisible).toBe(true);
+    expect(findByTestID(renderer, 'keypad-clear-confirm')).toBeTruthy();
+  });
+
+  test('confirming from the button clears the document in one undo entry', () => {
+    let id!: string;
+    let stackBefore!: number;
+    act(() => {
+      id = addNumberNode({ x: 0, y: 0 }, '7');
+      stackBefore = useDocumentStore.getState().undoStack.length;
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    act(() => {
+      findByTestID(renderer, 'keypad-mode-clear-all').props.onPress();
+    });
+    act(() => {
+      findByTestID(renderer, 'keypad-clear-confirm-clear').props.onPress();
+    });
+
+    expect(useDocumentStore.getState().document.nodes[id]).toBeUndefined();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(stackBefore + 1);
     expect(useUiStore.getState().clearConfirmVisible).toBe(false);
   });
 });
