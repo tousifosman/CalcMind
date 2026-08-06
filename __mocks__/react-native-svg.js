@@ -21,6 +21,7 @@ module.exports = {
   Path: createSvgElement('Path'),
   Defs: createSvgElement('Defs'),
   Marker: createSvgElement('Marker'),
+  Pattern: createSvgElement('Pattern'),
   G: createSvgElement('G'),
   Circle: createSvgElement('Circle'),
   Rect: createSvgElement('Rect'),

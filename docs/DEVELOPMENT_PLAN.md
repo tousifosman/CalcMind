@@ -1359,7 +1359,7 @@ flowchart LR
     style P66 fill:#22A75B,color:#fff
     style P71 fill:#22A75B,color:#fff
     style P72 fill:#F0A020,color:#fff
-    style P73 fill:#F0A020,color:#fff
+    style P73 fill:#22A75B,color:#fff
     style P74 fill:#F0A020,color:#fff
     style P75 fill:#F0A020,color:#fff
     style P76 fill:#F0A020,color:#fff
@@ -1405,14 +1405,14 @@ survived.
 
 **Objective.** The §11.3 v1.1 decoration deferred from P2.4.
 **Architecture.** §11.3, §1.2 (the 4×4 tile with dots at `(1,0)` and `(3,2)`), decision #9.
-**Touches.** `src/nodes/ResultNode.tsx`.
+**Touches.** `src/nodes/ResultNode.tsx`, `src/nodes/ResultDotTexture.tsx`, `src/nodes/Cell.tsx`.
 **Depends on.** P6.6.
 
-- [ ] Pattern via `react-native-svg` — already load-bearing since P6.6 — or a 4×4 tiled `Image`
+- [x] Pattern via `react-native-svg` — already load-bearing since P6.6 — or a 4×4 tiled `Image`
       with `resizeMode: 'repeat'`.
-- [ ] Geometry matches §1.2: dots at `(1,0)` and `(3,2)` of a 4×4 unit tile, in `#FFD1CF`.
-- [ ] Identical on web and native.
-- [ ] Decorative only: hue and border still carry read-only-ness without it (decision #9).
+- [x] Geometry matches §1.2: dots at `(1,0)` and `(3,2)` of a 4×4 unit tile, in `#FFD1CF`.
+- [x] Identical on web and native.
+- [x] Decorative only: hue and border still carry read-only-ness without it (decision #9).
 
 ### P7.4 — Light and dark theme
 

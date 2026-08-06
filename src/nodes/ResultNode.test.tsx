@@ -1,9 +1,10 @@
 import React from 'react';
 import { ResultNode, STALE_RESULT_OPACITY } from './ResultNode';
+import { RESULT_DOT_TILE } from './ResultDotTexture';
 import { useDocumentStore } from '../store/documentStore';
 import { setNodeRaw } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
-import { rolePalette } from '../ui/tokens';
+import { rolePalette, resultDotColor, tokens } from '../ui/tokens';
 import { explainEngineError, explainCircularReference, CIRCULAR_UNLINK_LABEL, type EngineErrorKind } from '../engine/errors';
 import type { ResultDerived, ResultNode as ResultNodeModel } from '../model/types';
 import { renderNode, unmountAll, findHostByTestID } from './testUtils';
@@ -49,7 +50,7 @@ function contentStyle(renderer: ReturnType<typeof renderNode>): object | object[
 }
 
 describe('ResultNode', () => {
-  test('renders its derived display, solid fill, no dot texture', () => {
+  test('renders its derived display with solid fill, border, and §1.2 dot texture', () => {
     addResultNode(
       resultWith({ display: '1204', computedAt: '2026-08-03T00:00:00.000Z' }),
     );
@@ -67,8 +68,35 @@ describe('ResultNode', () => {
         }),
       ]),
     );
-    // Solid fill only - no texture pattern/image sibling next to the glyph (§11.3, decision #9).
-    expect(band.children).toHaveLength(1);
+
+    // Dot texture is a decorative SVG sibling under the glyph (§11.3 / P7.3). Hue + border
+    // still carry read-only-ness without it (decision #9) — the solid fill above is present.
+    const texture = findHostByTestID(renderer.root, 'result-node-r1-texture');
+    expect(texture).toBeTruthy();
+
+    const pattern = renderer.root.findByProps({ accessibilityRole: 'Pattern' });
+    expect(pattern.props.id).toBe('result-dots-r1');
+    expect(pattern.props.width).toBe(RESULT_DOT_TILE);
+    expect(pattern.props.height).toBe(RESULT_DOT_TILE);
+    expect(pattern.props.patternUnits).toBe('userSpaceOnUse');
+
+    const dots = pattern.findAll(
+      (node) =>
+        typeof node.type === 'string' &&
+        node.props.accessibilityRole === 'Rect' &&
+        node.props.fill === resultDotColor,
+    );
+    expect(dots).toHaveLength(2);
+    expect(dots.map((d) => ({ x: d.props.x, y: d.props.y, w: d.props.width, h: d.props.height }))).toEqual([
+      { x: 1, y: 0, w: 1, h: 1 },
+      { x: 3, y: 2, w: 1, h: 1 },
+    ]);
+
+    const fill = findHostByTestID(renderer.root, 'result-node-r1-texture-fill');
+    expect(fill.props.fill).toBe('url(#result-dots-r1)');
+    // Texture covers the inner band (outside the structural border).
+    expect(fill.props.width).toBeGreaterThan(0);
+    expect(fill.props.height).toBe(tokens.nodeHeight - 2 * tokens.borderBand);
   });
 
   test('renders nothing for a missing node', () => {

@@ -278,7 +278,7 @@ are Tydlig Software AB's and the publication's.
 | Schema validation | **zod** | MIT | Validates documents at the trust boundary (file load) and generates TS types. |
 | Native filesystem | **@dr.pogodin/react-native-fs** | MIT | Maintained fork of `react-native-fs`; the original is unmaintained. |
 | Web storage | **idb-keyval** | MIT | Thin IndexedDB wrapper; localStorage is too small and synchronous. |
-| SVG | **react-native-svg** | MIT | Load-bearing for connector beziers from P6.6 (§11.3); result dot texture may reuse it in v1.1. |
+| SVG | **react-native-svg** | MIT | Load-bearing for connector beziers (P6.6) and the result dot texture (P7.3) (§11.3). |
 | Tests | Jest (already configured) + **fast-check** | MIT | Table-driven engine tests; property tests for parser/formatter round-trips. |
 
 No dependency here bills by usage, gates features behind a plan, or requires an account.
@@ -959,20 +959,21 @@ telling you why the error is there." So:
 ### 11.3 Rendering approach
 
 Nodes are plain RN `View`s with `borderRadius` — no SVG or Skia needed for the common case, which
-keeps web and native identical. Only the result node's dot texture needs more, hence:
+keeps web and native identical. The result node's dot texture is the exception:
 
-- **v1:** solid `#FF7E79` + `#FFA3A0` border band, no texture. The hue and border already
-  distinguish it; the texture is decorative.
-- **v1.1:** add the pattern with `react-native-svg` (works on native and web), or a 4×4 tiled
-  `Image` with `resizeMode: 'repeat'` for zero new dependencies.
+- Solid `#FF7E79` + `#FFA3A0` border band always — hue and border carry read-only-ness on their
+  own (decision #9).
+- Dot texture (P7.3 / §1.2): `ResultDotTexture` paints a `react-native-svg` `Pattern` — 4×4 unit
+  tile, 1-unit dots at `(1,0)` and `(3,2)` in `#FFD1CF` — as a `Cell` `bandBackground` under the
+  identity ring and glyph. Same geometry as `docs/assets/formula-reference.svg`; decorative only.
 
-Connector curves (§11.1) *do* need `react-native-svg` — they are beziers in an overlay layer above
-the nodes, sharing the canvas transform. Implemented: `ConnectorLayer` is a sibling of `NodeLayer`
+Connector curves (§11.1) also use `react-native-svg` — beziers in an overlay layer above the
+nodes, sharing the canvas transform. Implemented: `ConnectorLayer` is a sibling of `NodeLayer`
 inside `Canvas` (same pan/zoom), `pointerEvents="none"`, z-index above idle nodes and below
 mid-drag chrome. Mid-drag it reads `uiStore.dragSnap` (including `movingChainId` for P3.7) so
 endpoints track the finger before the store commits on release — same ephemeral feed
-`NodeLayer` uses for the insertion gap. That makes the dependency load-bearing from phase 6, so
-the result texture may as well use it too.
+`NodeLayer` uses for the insertion gap. The dependency has been load-bearing since P6.6; the
+result texture reuses it.
 
 ### 11.4 Performance budget
 
@@ -1199,7 +1200,7 @@ it unclear which parts were claims about the present and which were intentions.
 | 6 | `derived` stripped on write; tolerated on load as labelled cache | §12.3 save sequence keeps files free of stale paint; load still accepts `derived` so a hand-edited file can hint answers. Engine always wins | Wanting instant paint from autosaved files without waiting for evaluate |
 | 7 | Newer-schema files refused, not migrated | Guessing an unknown shape corrupts work | Never |
 | 8 | Zustand over Redux | Selector subscriptions matter during drag; less ceremony | State grows to need middleware ecosystem |
-| 9 | Result texture deferred to v1.1 | Decorative; hue + border already carry the meaning | It tests as load-bearing for comprehension |
+| 9 | Result texture is decorative (shipped P7.3) | Hue + border already carry read-only-ness; the §1.2 dots are an extra channel, not the carrier | It tests as load-bearing for comprehension — then promote it in a11y copy / remove the "decorative only" carve-out |
 | 10 | Parentheses in v1, not deferred | Tydlig puts them on the primary keypad, so users expect grouping; retrofitting costs a node kind + schema version + snapping rules (§10.2) | Never |
 | 11 | Locale display, canonical storage | `1.020` is ambiguous between two numbers across locales; storing formatted strings corrupts documents on travel (§10.3) | Never |
 | 12 | Identity hues derived, never persisted | Deterministic from traversal order, so stable across loads without occupying the schema (§11.1) | Users want to pin a specific colour to a value |
