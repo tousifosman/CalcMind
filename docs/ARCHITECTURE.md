@@ -636,9 +636,14 @@ keeps precedence.
 
 ### 8.4 Spatial indexing
 
-An O(n) scan per drag frame is fine to a few hundred nodes and is what we ship. If documents grow
-past that, insert a uniform spatial hash (bucket size `2 × nodeHeight`) behind the same
-`snapping.ts` interface — the call sites do not change.
+An O(n) scan per drag frame is fine to a few hundred nodes. P7.6 measured the pre-hash
+path at ~10 ms p95 for 500 nodes when the neighbour index was rebuilt every frame (~60% of
+a 60 fps budget), so a uniform spatial hash (bucket size `2 × nodeHeight`, Y-axis — the
+neighbour filter is vertical-only; horizontal gating stays in `resolveSnapCandidate`) now
+backs `SnappingNeighbours`. The index is built **once at drag start** and queried each
+frame; rebuilding every frame would re-pay O(n) bounds work the hash cannot avoid. The
+linear scan stays exported for behavioural parity tests. Call sites of
+`resolveSnapCandidate` / `SnappingNeighbours` are unchanged.
 
 ### 8.5 Keypad
 
@@ -983,7 +988,7 @@ result texture reuses it.
 |---|---|
 | 60fps drag | Reanimated worklets; store commit only on release |
 | Re-render scope | Per-node Zustand selectors + `React.memo`; a node re-renders only when its own slice changes |
-| Snap search | O(n) to ~500 nodes; spatial hash beyond (§8.4) |
+| Snap search | Spatial hash behind `SnappingNeighbours`; build once per drag (§8.4) |
 | Evaluation | Dirty-set only; never a full *evaluation* sweep. Cycle bookkeeping (P6.3) builds the reference graph and, only when the dirty set touches a cycle or is clearing a `CircularReference`, scans result outcomes to recover/refresh circular paints — it does not re-evaluate untouched chains. |
 | Text measurement | Memoised per `(raw, fontSize)` |
 
