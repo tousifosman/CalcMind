@@ -1,7 +1,13 @@
-import { setDocumentDirtyHandler, useDocumentStore } from './documentStore';
+import {
+  MAX_HISTORY,
+  setDocumentDirtyHandler,
+  useDocumentStore,
+} from './documentStore';
 import { renameDocument } from './commands';
 import { createEmptyDocument } from '../model/factories';
 import { ZOOM_MIN, ZOOM_MAX } from '../model/types';
+import { AUTOSAVE_DEBOUNCE_MS, createAutosave } from '../persistence/autosave';
+import { serializeDocument } from '../persistence/serialize';
 
 function resetStore() {
   setDocumentDirtyHandler(null);
@@ -70,6 +76,52 @@ describe('setViewport', () => {
     useDocumentStore.getState().setViewport({ zoom: 0.001 });
     expect(useDocumentStore.getState().document.viewport.zoom).toBe(ZOOM_MIN);
   });
+
+  test('viewport changes stay excluded when undoing later document edits (§7 / P7.1)', () => {
+    renameDocument('First');
+    useDocumentStore.getState().setViewport({ pan: { x: 40, y: 50 }, zoom: 2 });
+    renameDocument('Second');
+    useDocumentStore.getState().setViewport({ pan: { x: 1, y: 2 }, zoom: 0.5 });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(2);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.name).toBe('First');
+    // Camera is whatever the user last set — undo must not rewind it (§7).
+    expect(useDocumentStore.getState().document.viewport).toEqual({
+      pan: { x: 1, y: 2 },
+      zoom: 0.5,
+    });
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.name).toBe('Second');
+    expect(useDocumentStore.getState().document.viewport).toEqual({
+      pan: { x: 1, y: 2 },
+      zoom: 0.5,
+    });
+  });
+});
+
+describe('undo stack bound (P7.1 / §13)', () => {
+  test('the stack is capped at MAX_HISTORY and drops the oldest entry', () => {
+    for (let i = 0; i < MAX_HISTORY; i++) {
+      renameDocument(`name-${i}`);
+    }
+    expect(useDocumentStore.getState().undoStack).toHaveLength(MAX_HISTORY);
+    expect(useDocumentStore.getState().document.name).toBe(`name-${MAX_HISTORY - 1}`);
+
+    renameDocument('overflow');
+    expect(useDocumentStore.getState().undoStack).toHaveLength(MAX_HISTORY);
+    expect(useDocumentStore.getState().document.name).toBe('overflow');
+
+    // Undoing MAX_HISTORY times walks back through the retained window only —
+    // the very first rename was dropped and cannot be restored.
+    for (let i = 0; i < MAX_HISTORY; i++) {
+      useDocumentStore.getState().undo();
+    }
+    expect(useDocumentStore.getState().canUndo()).toBe(false);
+    expect(useDocumentStore.getState().document.name).toBe('name-0');
+  });
 });
 
 describe('applyCommand recomputeSeeds (P4.8)', () => {
@@ -134,5 +186,45 @@ describe('persistence dirty signalling (P5.6)', () => {
     expect(useDocumentStore.getState().undoStack).toHaveLength(0);
     expect(useDocumentStore.getState().lastSavedAt).toBeNull();
     expect(dirty).not.toHaveBeenCalled();
+  });
+
+  test('undo marks dirty and therefore saves through autosave (§13 / P7.1)', async () => {
+    jest.useFakeTimers();
+    const writes: Array<{ id: string; json: string }> = [];
+    const controller = createAutosave({
+      getDocument: () => useDocumentStore.getState().document,
+      write: async (id, json) => {
+        writes.push({ id, json });
+      },
+      onSaved: savedAt => useDocumentStore.getState().setLastSavedAt(savedAt),
+    });
+    setDocumentDirtyHandler(() => controller.markDirty());
+
+    try {
+      renameDocument('Saved once');
+      jest.advanceTimersByTime(AUTOSAVE_DEBOUNCE_MS);
+      await Promise.resolve();
+      await controller.flush();
+      expect(writes).toHaveLength(1);
+      expect(writes[0]!.json).toBe(
+        serializeDocument(useDocumentStore.getState().document),
+      );
+
+      useDocumentStore.getState().undo();
+      expect(useDocumentStore.getState().document.name).toBe('Untitled');
+
+      jest.advanceTimersByTime(AUTOSAVE_DEBOUNCE_MS);
+      await Promise.resolve();
+      await controller.flush();
+      expect(writes).toHaveLength(2);
+      expect(writes[1]!.json).toBe(
+        serializeDocument(useDocumentStore.getState().document),
+      );
+      expect(JSON.parse(writes[1]!.json).name).toBe('Untitled');
+    } finally {
+      setDocumentDirtyHandler(null);
+      controller.dispose();
+      jest.useRealTimers();
+    }
   });
 });

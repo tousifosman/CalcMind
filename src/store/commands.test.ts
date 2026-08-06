@@ -1,6 +1,7 @@
-import { useDocumentStore } from './documentStore';
+import { MAX_HISTORY, useDocumentStore } from './documentStore';
 import { useUiStore } from './uiStore';
 import {
+  renameDocument,
   addNumberNode,
   addOperatorNode,
   addParenNode,
@@ -27,6 +28,7 @@ import {
   moveFreeNode,
   moveChain,
   unlinkFromParent,
+  unlinkReference,
   repointReference,
   setNodeLabel,
   editNodeLabel,
@@ -54,7 +56,12 @@ function resetStore() {
     undoStack: [],
     redoStack: [],
   });
-  useUiStore.setState({ selectedNodeId: null, editingNodeId: null, groupSelectedIds: new Set() });
+  useUiStore.setState({
+    selectedNodeId: null,
+    editingNodeId: null,
+    editingLabelNodeId: null,
+    groupSelectedIds: new Set(),
+  });
 }
 
 beforeEach(resetStore);
@@ -195,14 +202,19 @@ describe('appendNumberNode / appendParenNode / appendEqualsNode (P2.8 chain buil
     expect(useDocumentStore.getState().undoStack).toHaveLength(before);
   });
 
-  test('undo removes the appended node and dissolves the chain it created', () => {
+  test('undo removes the appended node and dissolves the chain it created; redo restores', () => {
     const first = addNumberNode({ x: 0, y: 0 }, '1');
-    appendParenNode(first, 'open');
+    const paren = appendParenNode(first, 'open');
 
     useDocumentStore.getState().undo();
 
     expect(useDocumentStore.getState().document.nodes[first]).toMatchObject({ chainId: null });
+    expect(useDocumentStore.getState().document.nodes[paren]).toBeUndefined();
     expect(useDocumentStore.getState().document.chains).toEqual({});
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[paren]).toMatchObject({ kind: 'paren' });
+    expect(useDocumentStore.getState().document.nodes[first].chainId).not.toBeNull();
   });
 });
 
@@ -220,14 +232,18 @@ describe('appendOperatorAndNumber', () => {
     expect(useDocumentStore.getState().document.nodes[numberId]).toMatchObject({ kind: 'number', raw: '' });
   });
 
-  test('undo removes both the operator and the number together', () => {
+  test('undo removes both the operator and the number together; redo restores both', () => {
     const first = addNumberNode({ x: 0, y: 0 }, '12');
-    appendOperatorAndNumber(first, '+');
+    const { operatorId, numberId } = appendOperatorAndNumber(first, '+');
 
     useDocumentStore.getState().undo();
 
     expect(useDocumentStore.getState().document.nodes[first]).toMatchObject({ chainId: null });
     expect(Object.keys(useDocumentStore.getState().document.nodes)).toEqual([first]);
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '+' });
+    expect(useDocumentStore.getState().document.nodes[numberId]).toMatchObject({ kind: 'number', raw: '' });
   });
 });
 
@@ -268,6 +284,10 @@ describe('setNodeRaw', () => {
 
     useDocumentStore.getState().undo();
     expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '' });
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '123' });
+    jest.useRealTimers();
   });
 
   test('edits more than 500ms apart do not coalesce', () => {
@@ -388,13 +408,16 @@ describe('clearDocument', () => {
     expect(useDocumentStore.getState().undoStack).toHaveLength(stackBefore + 1);
   });
 
-  test('undo restores every node and chain that clearing removed', () => {
+  test('undo restores every node and chain that clearing removed; redo clears again', () => {
     const a = addNumberNode({ x: 0, y: 0 }, '1');
     clearDocument();
 
     useDocumentStore.getState().undo();
 
     expect(useDocumentStore.getState().document.nodes[a]).toMatchObject({ raw: '1' });
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes).toEqual({});
   });
 
   test('clearing an already-empty document is a no-op', () => {
@@ -946,6 +969,8 @@ describe('moveFreeNode', () => {
     expect(useDocumentStore.getState().undoStack).toHaveLength(1);
     useDocumentStore.getState().undo();
     expect(useDocumentStore.getState().document.nodes[id].position).toEqual({ x: 10, y: 20 });
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[id].position).toEqual({ x: 50, y: 60 });
   });
 
   test('does not move a chained member', () => {
@@ -995,6 +1020,10 @@ describe('moveChain', () => {
     useDocumentStore.getState().undo();
     expect(useDocumentStore.getState().document.chains.c1.anchor).toEqual({ x: 100, y: 40 });
     expect(useDocumentStore.getState().document.nodes[a].position).toEqual({ x: 100, y: 40 });
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.chains.c1.anchor).toEqual({ x: 200, y: 80 });
+    expect(useDocumentStore.getState().document.nodes[a].position).toEqual({ x: 200, y: 80 });
   });
 
   test('no-op when chain is missing or anchor is unchanged', () => {
@@ -1172,6 +1201,20 @@ describe('continueFromResult (P4.9, §8.7)', () => {
       y: result.position.y + CONTINUATION_OFFSET.y,
     });
     expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toBeUndefined();
+    expect(useDocumentStore.getState().document.chains[chainId]).toBeUndefined();
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: result.id,
+    });
+    expect(useDocumentStore.getState().document.chains[chainId]!.members).toEqual([
+      referenceId,
+      operatorId,
+    ]);
   });
 
   test('rejects a non-result target', () => {
@@ -1221,6 +1264,20 @@ describe('dangling references (P6.4 / §11.2)', () => {
       .find((n) => n && n.kind === 'number' && n.raw === '12');
     expect(replacement).toBeDefined();
     expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: result.id,
+    });
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toBeUndefined();
+    const afterRedo = useDocumentStore.getState().document;
+    const redoReplacement = afterRedo.chains[chainId]!.members
+      .map((id) => afterRedo.nodes[id])
+      .find((n) => n && n.kind === 'number' && n.raw === '12');
+    expect(redoReplacement).toBeDefined();
   });
 
   test('unlinkFromParent on a dangling reference freezes lastKnownDisplay', () => {
@@ -1258,6 +1315,21 @@ describe('dangling references (P6.4 / §11.2)', () => {
 
     expect(useDocumentStore.getState().document.nodes[referenceId]).toMatchObject({
       kind: 'reference',
+      targetNodeId: other,
+    });
+    expect(
+      (useDocumentStore.getState().document.nodes[referenceId] as { lastKnownDisplay?: string })
+        .lastKnownDisplay,
+    ).toBeUndefined();
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toMatchObject({
+      targetNodeId: result.id,
+      lastKnownDisplay: '3',
+    });
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toMatchObject({
       targetNodeId: other,
     });
     expect(
@@ -1755,6 +1827,11 @@ describe('setNodeLabel (P6b.1)', () => {
 
     useDocumentStore.getState().undo();
     expect(useDocumentStore.getState().document.nodes[result.id]!.label).toBeUndefined();
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[result.id]).toMatchObject({
+      label: 'Initial Deposit',
+    });
   });
 
   test('successive edits to the same identity within 500ms coalesce', () => {
@@ -1937,6 +2014,9 @@ describe('value scrub (§8.8 / P6b.4)', () => {
 
     useDocumentStore.getState().undo();
     expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '1' });
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '4' });
   });
 
   test('pending frames coalesce: only the latest raw lands when flushed once', () => {
@@ -1982,5 +2062,242 @@ describe('value scrub (§8.8 / P6b.4)', () => {
     endValueScrub();
     expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '7' });
     expect(isValueScrubbing()).toBe(false);
+  });
+});
+
+
+describe('P7.1 undo/redo audit', () => {
+  /** Run `act`, assert the post-state, then undo/redo and re-assert both sides. */
+  function expectUndoRedo(options: {
+    act: () => void;
+    assertAfter: () => void;
+    assertUndone: () => void;
+  }): void {
+    options.act();
+    options.assertAfter();
+    useDocumentStore.getState().undo();
+    options.assertUndone();
+    useDocumentStore.getState().redo();
+    options.assertAfter();
+  }
+
+  test('renameDocument undo/redo', () => {
+    expectUndoRedo({
+      act: () => renameDocument('Budget'),
+      assertAfter: () =>
+        expect(useDocumentStore.getState().document.name).toBe('Budget'),
+      assertUndone: () =>
+        expect(useDocumentStore.getState().document.name).toBe('Untitled'),
+    });
+  });
+
+  test('appendNumberNode / appendEqualsNode undo/redo', () => {
+    const first = addNumberNode({ x: 0, y: 0 }, '4');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    let appended = '';
+    expectUndoRedo({
+      act: () => {
+        appended = appendNumberNode(first, '5');
+      },
+      assertAfter: () => {
+        expect(useDocumentStore.getState().document.nodes[appended]).toMatchObject({
+          kind: 'number',
+          raw: '5',
+        });
+      },
+      assertUndone: () => {
+        expect(useDocumentStore.getState().document.nodes[appended]).toBeUndefined();
+        expect(useDocumentStore.getState().document.nodes[first].chainId).toBeNull();
+      },
+    });
+
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    let eq = '';
+    expectUndoRedo({
+      act: () => {
+        eq = appendEqualsNode(first);
+      },
+      assertAfter: () => {
+        expect(useDocumentStore.getState().document.nodes[eq]).toMatchObject({ kind: 'equals' });
+      },
+      assertUndone: () => {
+        expect(useDocumentStore.getState().document.nodes[eq]).toBeUndefined();
+      },
+    });
+  });
+
+  test('unlinkReference undo/redo', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '8');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    const { referenceId, chainId } = continueFromResult(result.id, '+');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    expectUndoRedo({
+      act: () => unlinkReference(referenceId),
+      assertAfter: () => {
+        expect(useDocumentStore.getState().document.nodes[referenceId]).toBeUndefined();
+        // Deleting the reference dissolves the one-member leftover (operator alone) —
+        // assert the reference itself is gone; chain may dissolve.
+        expect(
+          useDocumentStore.getState().document.chains[chainId]?.members ?? [],
+        ).not.toContain(referenceId);
+      },
+      assertUndone: () => {
+        expect(useDocumentStore.getState().document.nodes[referenceId]).toMatchObject({
+          kind: 'reference',
+          targetNodeId: result.id,
+        });
+      },
+    });
+  });
+
+  test('commitSnapOutcome append undo/redo', () => {
+    const left = addNumberNode({ x: 0, y: 0 }, '1');
+    const right = addNumberNode({ x: 80, y: 0 }, '2');
+    formNewChain(left, right);
+    const chainId = useDocumentStore.getState().document.nodes[left]!.chainId!;
+    const free = addNumberNode({ x: 200, y: 0 }, '3');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    expectUndoRedo({
+      act: () => commitSnapOutcome(free, { kind: 'append', chainId }),
+      assertAfter: () =>
+        expect(useDocumentStore.getState().document.chains[chainId]!.members).toEqual([
+          left,
+          right,
+          free,
+        ]),
+      assertUndone: () => {
+        expect(useDocumentStore.getState().document.chains[chainId]!.members).toEqual([
+          left,
+          right,
+        ]);
+        expect(useDocumentStore.getState().document.nodes[free].chainId).toBeNull();
+      },
+    });
+  });
+
+  test('finishEditingLabel trims via setNodeLabel and is undoable/redoable', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    setNodeLabel(id, '  Fee  ');
+    editNodeLabel(id);
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    expectUndoRedo({
+      act: () => finishEditingLabel(),
+      assertAfter: () =>
+        expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ label: 'Fee' }),
+      assertUndone: () =>
+        expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({
+          label: '  Fee  ',
+        }),
+    });
+  });
+
+  test('ephemeral selection / label-edit commands do not record undo entries', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '9');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    selectNode(id);
+    editNumberNode(id);
+    selectGroup(id);
+    editNodeLabel(id);
+    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+
+    // finishEditingLabel with nothing to trim is also a no-op for history.
+    finishEditingLabel();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+
+    deselectNode();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+  });
+
+  test('setNodeRaw still coalesces when the undo stack is already at MAX_HISTORY', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    for (let i = 0; i < MAX_HISTORY; i++) {
+      renameDocument(`cap-${i}`);
+    }
+    expect(useDocumentStore.getState().undoStack).toHaveLength(MAX_HISTORY);
+
+    setNodeRaw(id, '1');
+    setNodeRaw(id, '12');
+    setNodeRaw(id, '123');
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(MAX_HISTORY);
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '123' });
+
+    // One undo reverts the whole keystroke burst, not a single digit.
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '' });
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '123' });
+  });
+
+  test('scrub still coalesces to one entry when the undo stack is at MAX_HISTORY', () => {
+    const pendingFrames: Array<() => void> = [];
+    _setScrubFrameSchedulerForTests({
+      schedule: cb => {
+        pendingFrames.push(cb);
+        return pendingFrames.length as unknown as ReturnType<typeof requestAnimationFrame>;
+      },
+      cancel: () => {
+        pendingFrames.length = 0;
+      },
+    });
+    setAutosaveSuppressHandler(() => undefined);
+
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    for (let i = 0; i < MAX_HISTORY; i++) {
+      renameDocument(`scrub-cap-${i}`);
+    }
+    expect(useDocumentStore.getState().undoStack).toHaveLength(MAX_HISTORY);
+
+    beginValueScrub(id);
+    scrubNodeValue(id, '2');
+    pendingFrames.shift()!();
+    scrubNodeValue(id, '3');
+    pendingFrames.shift()!();
+    scrubNodeValue(id, '4');
+    pendingFrames.shift()!();
+    endValueScrub();
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(MAX_HISTORY);
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '4' });
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '1' });
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '4' });
+
+    _setScrubFrameSchedulerForTests(null);
+    setAutosaveSuppressHandler(null);
+  });
+
+  test('setNodeLabel still coalesces at MAX_HISTORY', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    for (let i = 0; i < MAX_HISTORY; i++) {
+      renameDocument(`label-cap-${i}`);
+    }
+
+    setNodeLabel(id, 'A');
+    setNodeLabel(id, 'Ab');
+    setNodeLabel(id, 'Abc');
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(MAX_HISTORY);
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ label: 'Abc' });
+
+    useDocumentStore.getState().undo();
+    expect(
+      (useDocumentStore.getState().document.nodes[id] as { label?: string }).label,
+    ).toBeUndefined();
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ label: 'Abc' });
   });
 });

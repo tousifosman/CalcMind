@@ -1136,12 +1136,14 @@ migration ships (production `migrations` stays empty while v1 is current).
 
 `immer.produceWithPatches` yields forward and inverse patches for every command. Each entry on a
 bounded stack (100 deep) holds both, so undo and redo are patch applications rather than full
-document snapshots.
+document snapshots. Helpers live in `store/undo.ts`; `documentStore` is the only writer.
 
 - Rapid text edits to the same node within 500ms coalesce into one entry, so undo does not walk
-  back one keystroke at a time.
+  back one keystroke at a time. Coalescing **amends the stack-top in place** rather than
+  push-then-merge — at the 100-deep cap a push would drop the oldest entry before the merge
+  shrank the stack by one, silently losing unrelated history.
 - A value-slider scrub (§8.8) coalesces the whole gesture into one entry regardless of duration —
-  it is a drag, not a keystroke burst.
+  it is a drag, not a keystroke burst — via the same amend path.
 - Viewport changes are excluded (§7).
 - Autosave and undo are independent: undo mutates the store, which marks it dirty, which saves.
 - Autosave is suppressible (`setSuppressed`) so a continuous gesture such as value scrubbing
