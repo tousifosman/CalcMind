@@ -160,8 +160,12 @@ describe('swipe-to-clear confirmation (P2.10, decision #15)', () => {
   });
 
   test('confirming clears every node in one undo entry and closes the dialog', () => {
-    const id = addNumberNode({ x: 0, y: 0 }, '42');
-    const stackBefore = useDocumentStore.getState().undoStack.length;
+    let id!: string;
+    let stackBefore!: number;
+    act(() => {
+      id = addNumberNode({ x: 0, y: 0 }, '42');
+      stackBefore = useDocumentStore.getState().undoStack.length;
+    });
 
     let renderer!: ReactTestRenderer;
     act(() => {
@@ -182,8 +186,12 @@ describe('swipe-to-clear confirmation (P2.10, decision #15)', () => {
   });
 
   test('dismissing leaves the document byte-identical', () => {
-    const id = addNumberNode({ x: 0, y: 0 }, '42');
-    const documentBefore = useDocumentStore.getState().document;
+    let id!: string;
+    let documentBefore!: ReturnType<typeof useDocumentStore.getState>['document'];
+    act(() => {
+      id = addNumberNode({ x: 0, y: 0 }, '42');
+      documentBefore = useDocumentStore.getState().document;
+    });
 
     let renderer!: ReactTestRenderer;
     act(() => {
