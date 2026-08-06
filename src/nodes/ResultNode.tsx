@@ -26,6 +26,7 @@ import { Cell, glyphTextStyle } from './Cell';
 import { ResultDotTexture } from './ResultDotTexture';
 import { useSourceIdentityHue } from './useIdentityHue';
 import { useUiStore } from '../store/uiStore';
+import { useNodeSelected } from './useNodeSelected';
 
 /** Opacity for a §9 Stale result — previous value stays readable but clearly not current. */
 export const STALE_RESULT_OPACITY = 0.45;
@@ -38,6 +39,7 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
   const node = useNode(id);
   const identityHue = useSourceIdentityHue(id);
   const isEditingLabel = useUiStore((state) => state.editingLabelNodeId === id);
+  const selected = useNodeSelected(id);
   if (!node || node.kind !== 'result') return null;
 
   const locale = getDeviceLocale();
@@ -69,6 +71,7 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
       label={node.label}
       identityHue={identityHue}
       isEditingLabel={isEditingLabel}
+      selected={selected}
       onLabelChange={(text) => setNodeLabel(id, text)}
       onLabelBlur={finishEditingLabel}
       bandBackground={

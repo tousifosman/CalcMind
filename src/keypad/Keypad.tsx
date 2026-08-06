@@ -5,7 +5,7 @@
 // it does not itself create or edit nodes. `onKeyPress` is wired to `keymap.ts`'s
 // `dispatchEditorCommand` (P2.8), the same function the hardware-keyboard listener in
 // `AppShell.tsx` calls, so on-screen and hardware input can't diverge.
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import { decimalSeparatorFor } from '../engine/format';
@@ -45,6 +45,11 @@ export function isClearSwipe(translationX: number, translationY: number): boolea
   const dy = Math.abs(translationY);
   return dx >= CLEAR_SWIPE_MIN_DISTANCE && dx >= dy * CLEAR_SWIPE_MIN_HORIZONTAL_DOMINANCE;
 }
+
+// Web: data-entry keys already have hardware equivalents (P7.2), so keep them out of
+// Tab order — otherwise Tab walks ~20 identical-looking buttons before reaching the
+// mode strip / confirm actions. Native ignores tabIndex.
+const skipTabOrder = Platform.OS === 'web' ? ({ tabIndex: -1 } as object) : {};
 
 export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   const visible = useUiStore((state) => state.keypadVisible);
@@ -174,7 +179,13 @@ const preventFocusSteal = { onMouseDown: (e: { preventDefault: () => void }) => 
 
 function Key({ label, onPress, testID }: KeyProps) {
   return (
-    <TouchableOpacity style={styles.key} onPress={onPress} testID={testID} {...preventFocusSteal}>
+    <TouchableOpacity
+      style={styles.key}
+      onPress={onPress}
+      testID={testID}
+      {...preventFocusSteal}
+      {...skipTabOrder}
+    >
       <Text style={styles.neutralKeyLabel}>{label}</Text>
     </TouchableOpacity>
   );
@@ -187,6 +198,7 @@ function DigitKey({ value, onPress }: { value: string; onPress: () => void }) {
       onPress={onPress}
       testID={`keypad-digit-${value}`}
       {...preventFocusSteal}
+      {...skipTabOrder}
     >
       <Text style={styles.keyLabel}>{value}</Text>
     </TouchableOpacity>
@@ -195,7 +207,13 @@ function DigitKey({ value, onPress }: { value: string; onPress: () => void }) {
 
 function OperatorKey({ label, onPress, testID }: KeyProps) {
   return (
-    <TouchableOpacity style={[styles.key, styles.accentKey]} onPress={onPress} testID={testID} {...preventFocusSteal}>
+    <TouchableOpacity
+      style={[styles.key, styles.accentKey]}
+      onPress={onPress}
+      testID={testID}
+      {...preventFocusSteal}
+      {...skipTabOrder}
+    >
       <Text style={styles.accentKeyLabel}>{label}</Text>
     </TouchableOpacity>
   );
@@ -203,7 +221,13 @@ function OperatorKey({ label, onPress, testID }: KeyProps) {
 
 function EqualsKey({ onPress, testID }: { onPress: () => void; testID?: string }) {
   return (
-    <TouchableOpacity style={[styles.key, styles.equalsKey]} onPress={onPress} testID={testID} {...preventFocusSteal}>
+    <TouchableOpacity
+      style={[styles.key, styles.equalsKey]}
+      onPress={onPress}
+      testID={testID}
+      {...preventFocusSteal}
+      {...skipTabOrder}
+    >
       <Text style={styles.accentKeyLabel}>=</Text>
     </TouchableOpacity>
   );

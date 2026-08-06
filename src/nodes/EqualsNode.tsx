@@ -7,6 +7,7 @@ import { useNode } from '../store/selectors';
 import { tokens, rolePalette, glyphColor } from '../ui/tokens';
 import { Cell, glyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
+import { useNodeSelected } from './useNodeSelected';
 
 interface EqualsNodeProps {
   id: NodeId;
@@ -15,6 +16,7 @@ interface EqualsNodeProps {
 function EqualsNodeComponent({ id }: EqualsNodeProps) {
   const node = useNode(id);
   const identityHue = useSourceIdentityHue(id);
+  const selected = useNodeSelected(id);
   if (!node || node.kind !== 'equals') return null;
 
   const palette = rolePalette.equals;
@@ -27,6 +29,7 @@ function EqualsNodeComponent({ id }: EqualsNodeProps) {
       border={palette.border}
       label={node.label}
       identityHue={identityHue}
+      selected={selected}
     >
       <Text style={[glyphTextStyle, { color: glyphColor }]}>=</Text>
     </Cell>

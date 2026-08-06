@@ -13,11 +13,16 @@
 // drawing a ring. In-place label editing (P6b.1) swaps the caption Text for a TextInput.
 import { ReactNode, useEffect, useRef } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
-import { tokens, labelColor } from '../ui/tokens';
+import { tokens, labelColor, selectionFocusColor } from '../ui/tokens';
 
 /** Inset identity ring width — matches the structural `borderBand` so the ring reads as
  *  part of the same chrome language, not a thicker selection outline. */
 export const IDENTITY_RING_WIDTH = tokens.borderBand;
+
+/** Selection focus ring paints just outside the structural band so it stays visible on
+ *  every role fill (P7.2: "Focus is always visible"). */
+export const SELECTION_FOCUS_WIDTH = 2;
+export const SELECTION_FOCUS_OUTSET = 3;
 
 /**
  * Web-only: stop Space/Enter bubbling to a GestureDetector ancestor (§11.1 / P6b.1).
@@ -47,6 +52,8 @@ interface CellProps {
   labelHue?: string;
   /** When true, the caption is an editable TextInput (P6b.1). */
   isEditingLabel?: boolean;
+  /** Selected (or group-selected) — draws the P7.2 focus ring. */
+  selected?: boolean;
   onLabelChange?: (text: string) => void;
   onLabelBlur?: () => void;
   testID?: string;
@@ -63,6 +70,7 @@ export function Cell({
   identityHue,
   labelHue,
   isEditingLabel,
+  selected,
   onLabelChange,
   onLabelBlur,
   testID,
@@ -116,11 +124,10 @@ export function Cell({
         style={[
           styles.band,
           { width, borderColor: border, backgroundColor: fill },
-          // Clip the inset ring / bandBackground to the rounded corner only when
-          // either is present — keep overflow visible otherwise so shared Cell
-          // chrome never hides a future focus/selection affordance that paints
-          // past the band bounds.
-          identityHue || bandBackground ? styles.bandClip : null,
+          // Clip inset identity ring / bandBackground to the rounded corner when
+          // either is present (P7.3). Selection focus paints *outside* the band
+          // (negative inset, P7.2), so leave overflow visible while focused.
+          (identityHue || bandBackground) && !selected ? styles.bandClip : null,
         ]}
       >
         {bandBackground}
@@ -135,6 +142,19 @@ export function Cell({
                 // Inner radius: outer corner minus the structural band so the ring
                 // sits flush inside the fill rather than clipping the outer curve.
                 borderRadius: Math.max(0, tokens.cornerRadius - tokens.borderBand),
+              },
+            ]}
+          />
+        ) : null}
+        {selected ? (
+          <View
+            pointerEvents="none"
+            testID={testID ? `${testID}-selection-focus` : undefined}
+            style={[
+              styles.selectionFocus,
+              {
+                borderColor: selectionFocusColor,
+                borderRadius: tokens.cornerRadius + SELECTION_FOCUS_OUTSET,
               },
             ]}
           />
@@ -186,5 +206,13 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     borderWidth: IDENTITY_RING_WIDTH,
+  },
+  selectionFocus: {
+    position: 'absolute',
+    top: -SELECTION_FOCUS_OUTSET,
+    left: -SELECTION_FOCUS_OUTSET,
+    right: -SELECTION_FOCUS_OUTSET,
+    bottom: -SELECTION_FOCUS_OUTSET,
+    borderWidth: SELECTION_FOCUS_WIDTH,
   },
 });

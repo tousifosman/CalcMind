@@ -17,6 +17,7 @@ import { getDeviceLocale } from '../ui/locale';
 import { commandFromHardwareKey, dispatchEditorCommand } from '../keypad/keymap';
 import { Cell, glyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
+import { useNodeSelected } from './useNodeSelected';
 
 interface NumberNodeProps {
   id: NodeId;
@@ -26,6 +27,7 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
   const node = useNode(id);
   const isEditing = useUiStore((state) => state.editingNodeId === id);
   const isEditingLabel = useUiStore((state) => state.editingLabelNodeId === id);
+  const selected = useNodeSelected(id);
   const identityHue = useSourceIdentityHue(id);
   const inputRef = useRef<TextInput>(null);
 
@@ -42,7 +44,8 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
   // since react-native-web forwards a TextInput ref straight to its host <input> - runs before
   // that bubbling starts, so it's the only place that can stop it in time. Enter is dispatched
   // from here rather than the onKeyPress handler below for the same reason: once propagation
-  // is stopped, React's own onKeyPress for this same keystroke will never fire.
+  // is stopped, React's own onKeyPress for this same keystroke will never fire. F9 (sign) is
+  // handled here too — onKeyPress only fires for printable keys (P7.2).
   useEffect(() => {
     if (Platform.OS !== 'web' || !isEditing) return;
     // No DOM lib in this project's tsconfig (a bare RN app, per AGENTS.md) - `any` here is the
@@ -51,11 +54,21 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
     if (!inputNode || typeof inputNode.addEventListener !== 'function') return;
 
     function onNativeKeyDown(e: any): void {
-      if (e.key !== 'Enter' && e.key !== ' ') return;
-      e.stopPropagation();
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.stopPropagation();
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          dispatchEditorCommand({ region: 'equals' });
+        }
+        return;
+      }
+      // P7.2: F9 is the non-printable hardware equivalent of keypad +/-. onKeyPress
+      // never sees it (react-native-web only synthesises printable keys), so handle
+      // it on the raw listener alongside Enter.
+      if (e.key === 'F9') {
         e.preventDefault();
-        dispatchEditorCommand({ region: 'equals' });
+        e.stopPropagation();
+        dispatchEditorCommand({ region: 'sign' });
       }
     }
     inputNode.addEventListener('keydown', onNativeKeyDown);
@@ -89,11 +102,13 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
   // separator are left to onChangeText, which already normalises them per-locale through
   // `parseUserInput` - re-deciding them here would bypass that. A non-empty Backspace is left
   // to onChangeText too, since it already shortens the text. Everything else (operators,
-  // parens, Backspace-on-empty, Escape) goes through the same `dispatchEditorCommand` the
-  // keypad uses (P2.8, §8.5), so a hardware keyboard can complete a chain the same way
-  // on-screen taps do. Arrow keys are left alone so the text caret still moves normally while
-  // typing, rather than jumping to a sibling node mid-edit. Enter is excluded - the raw
-  // listener in the effect above owns it and dispatches it itself (see that comment).
+  // parens, Backspace-on-empty, Escape, vertical arrows, sign) goes through the same
+  // `dispatchEditorCommand` the keypad uses (P2.8 / P7.2, §8.5), so a hardware keyboard
+  // can complete a chain the same way on-screen taps do. Horizontal arrows are left alone
+  // so the text caret still moves normally while typing, rather than jumping to a sibling
+  // node mid-edit. Vertical arrows *do* leave the field — between-chain navigation (P7.2).
+  // Enter is excluded - the raw listener in the effect above owns it and dispatches it
+  // itself (see that comment).
   //
   // preventDefault() on a dispatched command is not optional: react-native-web's TextInput
   // calls this handler from a native 'keydown' listener (see TextInput/index.js's
@@ -131,6 +146,7 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
       label={numberNode.label}
       identityHue={identityHue}
       isEditingLabel={isEditingLabel}
+      selected={selected}
       onLabelChange={(text) => setNodeLabel(id, text)}
       onLabelBlur={finishEditingLabel}
     >

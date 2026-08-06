@@ -1,4 +1,4 @@
-// Input dispatch (P2.8, §8.5). `Keypad.tsx`'s on-screen presses and `AppShell.tsx`'s
+// Input dispatch (P2.8 / P7.2, §8.5). `Keypad.tsx`'s on-screen presses and `AppShell.tsx`'s
 // hardware-keyboard listener both resolve to an `EditorCommand` and are handed to
 // `dispatchEditorCommand` below - the one place that decides what a key does. Two
 // implementations of "what does pressing + mean" would diverge; this is deliberately the
@@ -21,7 +21,7 @@ import {
   editNumberNode,
   deselectNode,
 } from '../store/commands';
-import { NodeId, NumberNode, OperatorSymbol, ParenSide } from '../model/types';
+import { CalcNode, NodeId, NumberNode, OperatorSymbol, ParenSide } from '../model/types';
 
 export type Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 
@@ -35,16 +35,41 @@ export type KeypadKey =
   | { region: 'equals' };
 
 /** Hardware/web-keyboard-only commands with no on-screen keypad equivalent (§8.5: "arrows
- *  move selection along a chain", "Escape deselects"). Unioned with `KeypadKey` so both
- *  input sources share one command type and one dispatch function. */
-export type EditorCommand = KeypadKey | { region: 'escape' } | { region: 'arrow'; direction: 'left' | 'right' };
+ *  move selection along a chain", Escape deselects; P7.2 adds between-chain arrows and
+ *  undo/redo). Unioned with `KeypadKey` so both input sources share one command type and
+ *  one dispatch function. */
+export type EditorCommand =
+  | KeypadKey
+  | { region: 'escape' }
+  | { region: 'arrow'; direction: 'left' | 'right' | 'up' | 'down' }
+  | { region: 'undo' }
+  | { region: 'redo' };
+
+/** Modifier flags from a hardware `KeyboardEvent` (P7.2). */
+export interface KeyMods {
+  ctrl?: boolean;
+  meta?: boolean;
+  shift?: boolean;
+  alt?: boolean;
+}
 
 const DIGITS = new Set(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9']);
 
-/** Maps a `KeyboardEvent.key` to the same commands the on-screen keypad reports (§8.5:
- *  "Hardware and web keyboards map to the same commands"). Returns `null` for a key this
- *  app has no use for, e.g. letters. */
-export function commandFromHardwareKey(key: string): EditorCommand | null {
+/** Maps a `KeyboardEvent.key` (+ modifiers) to the same commands the on-screen keypad
+ *  reports (§8.5 / P7.2). Returns `null` for a key this app has no use for, e.g. letters. */
+export function commandFromHardwareKey(key: string, mods: KeyMods = {}): EditorCommand | null {
+  const mod = !!(mods.ctrl || mods.meta);
+
+  // Undo / redo before the bare-key table so Ctrl+Z is never mistaken for a letter no-op,
+  // and so Alt/Ctrl chords do not fall through into digit/operator mapping.
+  if (mod && (key === 'z' || key === 'Z')) {
+    return mods.shift ? { region: 'redo' } : { region: 'undo' };
+  }
+  if (mod && (key === 'y' || key === 'Y')) {
+    return { region: 'redo' };
+  }
+  if (mod || mods.alt) return null;
+
   if (DIGITS.has(key)) return { region: 'digit', value: key as Digit };
   switch (key) {
     case '.':
@@ -73,6 +98,15 @@ export function commandFromHardwareKey(key: string): EditorCommand | null {
       return { region: 'arrow', direction: 'left' };
     case 'ArrowRight':
       return { region: 'arrow', direction: 'right' };
+    case 'ArrowUp':
+      return { region: 'arrow', direction: 'up' };
+    case 'ArrowDown':
+      return { region: 'arrow', direction: 'down' };
+    // Keypad `+/-` has no single glyph on a standard keyboard. `_` is unused elsewhere
+    // in the map; F9 matches the common calculator negate shortcut.
+    case '_':
+    case 'F9':
+      return { region: 'sign' };
     default:
       return null;
   }
@@ -80,6 +114,11 @@ export function commandFromHardwareKey(key: string): EditorCommand | null {
 
 function isStructural(command: EditorCommand): boolean {
   return command.region === 'operator' || command.region === 'paren' || command.region === 'equals';
+}
+
+function focusNode(node: CalcNode): void {
+  if (node.kind === 'number') editNumberNode(node.id);
+  else selectNode(node.id);
 }
 
 function moveSelectionAlongChain(selectedId: NodeId | null, direction: 'left' | 'right'): void {
@@ -95,23 +134,102 @@ function moveSelectionAlongChain(selectedId: NodeId | null, direction: 'left' | 
   const nextNode = nextId ? document.nodes[nextId] : undefined;
   if (!nextNode) return;
 
-  if (nextNode.kind === 'number') editNumberNode(nextNode.id);
-  else selectNode(nextNode.id);
+  focusNode(nextNode);
+}
+
+/** Vertical jump to another chain (or a free node), landing on the member nearest in x
+ *  to the current selection (P7.2: "arrows move selection … between chains"). */
+function moveSelectionBetweenChains(selectedId: NodeId | null, direction: 'up' | 'down'): void {
+  if (!selectedId) return;
+  const { document } = useDocumentStore.getState();
+  const selected = document.nodes[selectedId];
+  if (!selected) return;
+
+  const currentChainId = selected.chainId;
+  const currentX = selected.position.x;
+  const currentY = selected.position.y;
+
+  type Candidate = { id: NodeId; dy: number; dx: number };
+  const candidates: Candidate[] = [];
+
+  for (const chain of Object.values(document.chains)) {
+    if (chain.id === currentChainId) continue;
+
+    let bestId: NodeId | undefined;
+    let bestDx = Infinity;
+    let bestY = 0;
+    for (const memberId of chain.members) {
+      const member = document.nodes[memberId];
+      if (!member) continue;
+      const dx = Math.abs(member.position.x - currentX);
+      if (dx < bestDx) {
+        bestDx = dx;
+        bestId = memberId;
+        bestY = member.position.y;
+      }
+    }
+    if (!bestId) continue;
+    const dy = bestY - currentY;
+    if (direction === 'up' && dy >= 0) continue;
+    if (direction === 'down' && dy <= 0) continue;
+    candidates.push({ id: bestId, dy: Math.abs(dy), dx: bestDx });
+  }
+
+  for (const node of Object.values(document.nodes)) {
+    if (node.chainId !== null) continue;
+    if (node.id === selectedId) continue;
+    // A free node already covered when walking the selected node's own (absent) chain.
+    const dy = node.position.y - currentY;
+    if (direction === 'up' && dy >= 0) continue;
+    if (direction === 'down' && dy <= 0) continue;
+    candidates.push({
+      id: node.id,
+      dy: Math.abs(dy),
+      dx: Math.abs(node.position.x - currentX),
+    });
+  }
+
+  if (candidates.length === 0) return;
+  candidates.sort((a, b) => a.dy - b.dy || a.dx - b.dx);
+  const next = document.nodes[candidates[0]!.id];
+  if (next) focusNode(next);
+}
+
+function moveSelection(selectedId: NodeId | null, direction: 'left' | 'right' | 'up' | 'down'): void {
+  if (direction === 'left' || direction === 'right') {
+    moveSelectionAlongChain(selectedId, direction);
+  } else {
+    moveSelectionBetweenChains(selectedId, direction);
+  }
 }
 
 /** The one dispatch function every key press goes through, from the on-screen keypad or a
  *  hardware/web keyboard (§8.5). Targets the selected node if there is one, otherwise
  *  creates a new node at the last tap point. */
 export function dispatchEditorCommand(command: EditorCommand): void {
+  if (command.region === 'undo') {
+    useDocumentStore.getState().undo();
+    return;
+  }
+  if (command.region === 'redo') {
+    useDocumentStore.getState().redo();
+    return;
+  }
+
   if (command.region === 'escape') {
+    const ui = useUiStore.getState();
+    const hadFocus = ui.selectedNodeId !== null || ui.editingNodeId !== null || ui.editingLabelNodeId !== null;
     deselectNode();
+    // Second Escape (nothing focused) dismisses the keypad — the mode-strip chevron's
+    // keyboard equivalent (P7.2). First Escape stays §8.5's "Escape deselects."
+    if (!hadFocus) useUiStore.getState().hideKeypad();
     return;
   }
 
   const ui = useUiStore.getState();
 
   if (command.region === 'arrow') {
-    moveSelectionAlongChain(ui.selectedNodeId, command.direction);
+    moveSelection(ui.selectedNodeId, command.direction);
     return;
   }
 
