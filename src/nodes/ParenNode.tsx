@@ -12,6 +12,7 @@ import { useNode } from '../store/selectors';
 import { tokens, rolePalette, glyphColor, lightenHex } from '../ui/tokens';
 import { Cell, glyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
+import { useNodeSelected } from './useNodeSelected';
 
 interface ParenNodeProps {
   id: NodeId;
@@ -35,6 +36,7 @@ export function tintForDepth(hex: string, depth: number): string {
 function ParenNodeComponent({ id, depth = 0 }: ParenNodeProps) {
   const node = useNode(id);
   const identityHue = useSourceIdentityHue(id);
+  const selected = useNodeSelected(id);
   if (!node || node.kind !== 'paren') return null;
 
   const palette = rolePalette.operator;
@@ -47,6 +49,7 @@ function ParenNodeComponent({ id, depth = 0 }: ParenNodeProps) {
       border={tintForDepth(palette.border, depth)}
       label={node.label}
       identityHue={identityHue}
+      selected={selected}
     >
       <Text style={[glyphTextStyle, { color: glyphColor }]}>
         {node.side === 'open' ? '(' : ')'}

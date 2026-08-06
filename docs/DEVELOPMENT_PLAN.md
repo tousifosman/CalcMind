@@ -77,7 +77,7 @@ flowchart LR
 | ~~**P5**~~ | ~~Persistence~~ | — | **Done** — 8/8, phase exit check verified live |
 | ~~**P6**~~ | ~~Linking~~ | — | **Done** — 8/8, phase exit check verified live |
 | ~~**P6b**~~ | ~~Labels + slider~~ | — | **Done** — 4/4, phase exit check verified live |
-| **P7** | Polish | 7 | In progress — P7.1 done; 6/7 remaining |
+| **P7** | Polish | 7 | In progress — P7.1–P7.2 done; 5/7 remaining |
 
 Sequencing notes, carried over from §15:
 
@@ -1358,7 +1358,7 @@ flowchart LR
     style P65 fill:#22A75B,color:#fff
     style P66 fill:#22A75B,color:#fff
     style P71 fill:#22A75B,color:#fff
-    style P72 fill:#F0A020,color:#fff
+    style P72 fill:#22A75B,color:#fff
     style P73 fill:#F0A020,color:#fff
     style P74 fill:#F0A020,color:#fff
     style P75 fill:#F0A020,color:#fff
@@ -1396,10 +1396,10 @@ survived.
 **Touches.** `src/keypad/keymap.ts`, `src/app/AppShell.tsx`.
 **Depends on.** P2.8.
 
-- [ ] Arrows move selection along a chain and between chains.
-- [ ] Every keypad action has a keyboard equivalent.
-- [ ] Focus is always visible; tab order is sane.
-- [ ] Verified by completing a full linked calculation using only the keyboard.
+- [x] Arrows move selection along a chain and between chains.
+- [x] Every keypad action has a keyboard equivalent.
+- [x] Focus is always visible; tab order is sane.
+- [x] Verified by completing a full linked calculation using only the keyboard.
 
 ### P7.3 — Result dot texture
 

@@ -16,6 +16,7 @@ import { Cell, glyphTextStyle } from './Cell';
 import { referenceCellContent } from '../engine/reference';
 import { labelForNode } from '../engine/identity';
 import { useReferenceIdentityHue } from './useIdentityHue';
+import { useNodeSelected } from './useNodeSelected';
 
 /** No-identity palette — distinct from role fills so an uncoloured reference is
  *  not mistaken for a number/result (dangling target, or hue not yet assigned). */
@@ -37,6 +38,7 @@ function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
   const node = useNode(id);
   const nodes = useDocumentStore((s) => s.document.nodes);
   const identityHue = useReferenceIdentityHue(id);
+  const selected = useNodeSelected(id);
   if (!node || node.kind !== 'reference') return null;
 
   const locale = getDeviceLocale();
@@ -68,6 +70,7 @@ function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
       label={identityLabel}
       // Caption uses the identity hue without drawing a declaring-cell ring.
       labelHue={identityHue}
+      selected={selected}
     >
       <Text
         testID={`reference-node-${id}-content`}

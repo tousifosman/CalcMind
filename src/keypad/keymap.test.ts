@@ -38,6 +38,26 @@ describe('commandFromHardwareKey (§8.5 hardware/web keyboard mapping)', () => {
   test('arrows map to chain-navigation commands with no on-screen keypad equivalent', () => {
     expect(commandFromHardwareKey('ArrowLeft')).toEqual({ region: 'arrow', direction: 'left' });
     expect(commandFromHardwareKey('ArrowRight')).toEqual({ region: 'arrow', direction: 'right' });
+    expect(commandFromHardwareKey('ArrowUp')).toEqual({ region: 'arrow', direction: 'up' });
+    expect(commandFromHardwareKey('ArrowDown')).toEqual({ region: 'arrow', direction: 'down' });
+  });
+
+  test('+/- maps via _ and F9 (no single glyph on a standard keyboard)', () => {
+    expect(commandFromHardwareKey('_')).toEqual({ region: 'sign' });
+    expect(commandFromHardwareKey('F9')).toEqual({ region: 'sign' });
+  });
+
+  test('Ctrl/Cmd+Z / Shift+Z / Y map to undo and redo', () => {
+    expect(commandFromHardwareKey('z', { ctrl: true })).toEqual({ region: 'undo' });
+    expect(commandFromHardwareKey('z', { meta: true })).toEqual({ region: 'undo' });
+    expect(commandFromHardwareKey('z', { ctrl: true, shift: true })).toEqual({ region: 'redo' });
+    expect(commandFromHardwareKey('y', { ctrl: true })).toEqual({ region: 'redo' });
+    expect(commandFromHardwareKey('Z', { meta: true, shift: true })).toEqual({ region: 'redo' });
+  });
+
+  test('modifier chords other than undo/redo do not fall through to bare-key commands', () => {
+    expect(commandFromHardwareKey('+', { ctrl: true })).toBeNull();
+    expect(commandFromHardwareKey('1', { alt: true })).toBeNull();
   });
 
   test('a key this app has no use for maps to null', () => {
@@ -376,5 +396,96 @@ describe('dispatchEditorCommand: arrows move selection along a chain (§8.5)', (
   test('no selection is a no-op', () => {
     dispatchEditorCommand({ region: 'arrow', direction: 'left' });
     expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
+});
+
+describe('dispatchEditorCommand: arrows move selection between chains (P7.2)', () => {
+  test('ArrowDown / ArrowUp jump to the nearest chain, landing on the closest member in x', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addOperatorNode({ x: 40, y: 0 }, '+');
+    const c = addNumberNode({ x: 80, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.c_top = { id: 'c_top', members: [a, b, c], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'c_top';
+      draft.nodes[b].chainId = 'c_top';
+      draft.nodes[c].chainId = 'c_top';
+      draft.nodes[a].position = { x: 0, y: 0 };
+      draft.nodes[b].position = { x: 40, y: 0 };
+      draft.nodes[c].position = { x: 80, y: 0 };
+    });
+
+    const d = addNumberNode({ x: 50, y: 120 }, '3');
+    const e = addOperatorNode({ x: 90, y: 120 }, '×');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.c_bot = { id: 'c_bot', members: [d, e], anchor: { x: 50, y: 120 } };
+      draft.nodes[d].chainId = 'c_bot';
+      draft.nodes[e].chainId = 'c_bot';
+      draft.nodes[d].position = { x: 50, y: 120 };
+      draft.nodes[e].position = { x: 90, y: 120 };
+    });
+
+    selectNode(a); // x=0 on the top chain
+    dispatchEditorCommand({ region: 'arrow', direction: 'down' });
+    // Nearest bottom member to x=0 is d at x=50
+    expect(useUiStore.getState().selectedNodeId).toBe(d);
+    expect(useUiStore.getState().editingNodeId).toBe(d);
+
+    selectNode(c); // x=80 on the top chain
+    dispatchEditorCommand({ region: 'arrow', direction: 'down' });
+    // Nearest to x=80 is e at x=90 (closer than d at 50)
+    expect(useUiStore.getState().selectedNodeId).toBe(e);
+
+    dispatchEditorCommand({ region: 'arrow', direction: 'up' });
+    expect(useUiStore.getState().selectedNodeId).toBe(c);
+  });
+
+  test('ArrowDown reaches a free node below when no other chain is closer', () => {
+    const top = addNumberNode({ x: 0, y: 0 }, '1');
+    selectNode(top);
+    // Force free (addNumberNode leaves chainId null already)
+    const free = addNumberNode({ x: 10, y: 200 }, '9');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.nodes[free].position = { x: 10, y: 200 };
+    });
+
+    dispatchEditorCommand({ region: 'arrow', direction: 'down' });
+    expect(useUiStore.getState().selectedNodeId).toBe(free);
+  });
+
+  test('ArrowUp / ArrowDown are no-ops when nothing lies in that direction', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    selectNode(id);
+    dispatchEditorCommand({ region: 'arrow', direction: 'up' });
+    expect(useUiStore.getState().selectedNodeId).toBe(id);
+    dispatchEditorCommand({ region: 'arrow', direction: 'down' });
+    expect(useUiStore.getState().selectedNodeId).toBe(id);
+  });
+});
+
+describe('dispatchEditorCommand: undo / redo and Escape dismiss (P7.2)', () => {
+  test('undo and redo drive the document stack', () => {
+    dispatchEditorCommand({ region: 'digit', value: '7' });
+    const id = useUiStore.getState().selectedNodeId!;
+    expect(nodes()[id]).toMatchObject({ raw: '7' });
+
+    dispatchEditorCommand({ region: 'undo' });
+    expect(nodes()[id]).toBeUndefined();
+
+    dispatchEditorCommand({ region: 'redo' });
+    expect(nodes()[id]).toMatchObject({ raw: '7' });
+  });
+
+  test('Escape deselects first; a second Escape with nothing focused hides the keypad', () => {
+    useUiStore.getState().showKeypad();
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    editNumberNode(id);
+    expect(useUiStore.getState().keypadVisible).toBe(true);
+
+    dispatchEditorCommand({ region: 'escape' });
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+    expect(useUiStore.getState().keypadVisible).toBe(true); // still showing
+
+    dispatchEditorCommand({ region: 'escape' });
+    expect(useUiStore.getState().keypadVisible).toBe(false);
   });
 });

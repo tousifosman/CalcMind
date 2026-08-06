@@ -45,33 +45,59 @@ export function AppShell() {
     loadMostRecentDocument();
   }, []);
 
-  // Hardware/web-keyboard dispatch (§8.5, P2.8), through the same `dispatchEditorCommand`
-  // the on-screen keypad uses below. Web only: there is no hardware-keyboard equivalent on a
-  // touch-only device. A number node being edited handles its own keys locally in
-  // NumberNode.tsx instead - react-native-web's TextInput stops most handled keydowns from
-  // reaching this listener while it's focused (docs/journal/2026-08-03.md), but not
-  // reliably every one: Enter was observed reaching both handlers, double-dispatching (the
-  // editing node's own '=' append, then a second, unwanted "nothing selected" one here). The
-  // activeElement check below is the actual guard against that - the comment above is why a
-  // key gets to the input at all, not why this listener skips it.
+  // Hardware/web-keyboard dispatch (§8.5, P2.8 / P7.2), through the same
+  // `dispatchEditorCommand` the on-screen keypad uses below. Web only: there is no
+  // hardware-keyboard equivalent on a touch-only device. A number node being edited
+  // handles its own keys locally in NumberNode.tsx instead - react-native-web's
+  // TextInput stops most handled keydowns from reaching this listener while it's
+  // focused (docs/journal/2026-08-03.md), but not reliably every one: Enter was
+  // observed reaching both handlers, double-dispatching (the editing node's own '='
+  // append, then a second, unwanted "nothing selected" one here). The activeElement
+  // check below is the actual guard against that - with one P7.2 exception: undo/redo
+  // must still reach the document stack while a field is focused, otherwise Ctrl+Z
+  // only undoes characters inside the TextInput and never the canvas command.
+  // Capture phase so Ctrl+Z is seen before the browser's default text-undo.
   useEffect(() => {
     // No DOM lib in this project's tsconfig (a bare RN app, per AGENTS.md) - `any` here is
     // the same trade Canvas.tsx's onWheel already makes for the same reason.
     const webWindow = Platform.OS === 'web' ? (globalThis as any).window : undefined;
     if (!webWindow) return;
     function onKeyDown(e: any): void {
-      const focusedTag = webWindow.document?.activeElement?.tagName;
-      if (focusedTag === 'INPUT' || focusedTag === 'TEXTAREA') return;
       // Escape cancels an in-progress re-point (P6.4) before the usual deselect path.
       if (e.key === 'Escape' && useUiStore.getState().repointReferenceId) {
         useUiStore.getState().clearRepoint();
+        e.preventDefault();
         return;
       }
-      const command = commandFromHardwareKey(e.key);
-      if (command) dispatchEditorCommand(command);
+      const command = commandFromHardwareKey(e.key, {
+        ctrl: !!e.ctrlKey,
+        meta: !!e.metaKey,
+        shift: !!e.shiftKey,
+        alt: !!e.altKey,
+      });
+      if (!command) return;
+
+      const focusedTag = webWindow.document?.activeElement?.tagName;
+      const inField = focusedTag === 'INPUT' || focusedTag === 'TEXTAREA';
+      if (inField) {
+        // Undo/redo must hit the document stack, not the browser's text-undo.
+        // F9 (sign) never reaches NumberNode's onKeyPress — react-native-web only
+        // synthesises that for printable keys — so take it here. `_` stays with
+        // NumberNode (printable) to avoid a double-toggle.
+        const allowInField =
+          command.region === 'undo' ||
+          command.region === 'redo' ||
+          (command.region === 'sign' && e.key === 'F9');
+        if (!allowInField) return;
+      }
+
+      e.preventDefault();
+      // Stop F9 reaching any other handler that might swallow it without toggling.
+      if (command.region === 'sign' && e.key === 'F9') e.stopPropagation();
+      dispatchEditorCommand(command);
     }
-    webWindow.addEventListener('keydown', onKeyDown);
-    return () => webWindow.removeEventListener('keydown', onKeyDown);
+    webWindow.addEventListener('keydown', onKeyDown, true);
+    return () => webWindow.removeEventListener('keydown', onKeyDown, true);
   }, []);
 
   function handleCanvasTap(worldPoint: Vec2): void {

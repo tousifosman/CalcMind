@@ -6,6 +6,7 @@ import { useNode } from '../store/selectors';
 import { tokens, rolePalette, glyphColor } from '../ui/tokens';
 import { Cell, glyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
+import { useNodeSelected } from './useNodeSelected';
 
 interface OperatorNodeProps {
   id: NodeId;
@@ -14,6 +15,7 @@ interface OperatorNodeProps {
 function OperatorNodeComponent({ id }: OperatorNodeProps) {
   const node = useNode(id);
   const identityHue = useSourceIdentityHue(id);
+  const selected = useNodeSelected(id);
   if (!node || node.kind !== 'operator') return null;
 
   const palette = rolePalette.operator;
@@ -26,6 +28,7 @@ function OperatorNodeComponent({ id }: OperatorNodeProps) {
       border={palette.border}
       label={node.label}
       identityHue={identityHue}
+      selected={selected}
     >
       <Text style={[glyphTextStyle, { color: glyphColor }]}>{node.op}</Text>
     </Cell>

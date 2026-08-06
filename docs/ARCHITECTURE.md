@@ -661,7 +661,9 @@ operators are visually separated from digits.
   was hidden (§8.6) — superseding the placeholder from when nothing was on the canvas yet to
   tap on. Dismissing the keypad is the mode strip's chevron key.
 - Hardware and web keyboards map to the same commands: digits, `+ - * /` → `+ − × ÷`,
-  `Enter` → `=`, `Backspace`, `Escape` deselects, arrows move selection along a chain.
+  `Enter` → `=`, `Backspace`, `Escape` deselects (a second Escape with nothing focused
+  dismisses the keypad), arrows move selection along a chain (←/→) and between chains
+  (↑/↓), `_` / `F9` toggle sign, and `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` (or `Y`) undo/redo.
 - **Swipe across backspace clears the document** (Tydlig's gesture). Ours requires a confirm —
   wiping a canvas on a stray swipe is not recoverable enough to be worth the speed, even with undo.
 
