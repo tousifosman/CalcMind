@@ -4,8 +4,8 @@
 // Pure: given a dragged node and a neighbour query (P3.2), return the single best
 // snap outcome for this frame, or null. Thresholds are the named world-unit constants
 // from bounds.ts — never inlined here, so a later tweak to SNAP_DISTANCE cannot drift
-// between gather and resolve. Call sites of `SnappingNeighbours` do not change when
-// §8.4's spatial hash lands behind that interface.
+// between gather and resolve. Call sites of `SnappingNeighbours` do not change —
+// P7.6's spatial hash lives behind that interface (§8.4).
 import type { CalcNode, Chain, ChainId, NodeId } from '../model/types';
 import {
   SNAP_DISTANCE,

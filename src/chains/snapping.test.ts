@@ -2,7 +2,9 @@ import {
   DETACH_DISTANCE,
   SNAP_DISTANCE,
   SNAP_VERTICAL,
-  makeSnappingNeighbours,
+  makeLinearSnappingNeighbours,
+  makeSpatialHashSnappingNeighbours,
+  type SnappingNeighbours,
 } from './bounds';
 import { resolveSnapCandidate, type SnapOutcome } from './snapping';
 import { widthOf } from './measure';
@@ -10,6 +12,18 @@ import { tokens } from '../ui/tokens';
 import type { CalcNode, Chain, NumberNode, OperatorNode } from '../model/types';
 
 const LOCALE = 'en-US';
+
+type NeighbourFactory = (
+  chains: Record<string, Chain>,
+  nodes: Record<string, CalcNode>,
+  locale: string,
+) => SnappingNeighbours;
+
+/** P7.6: same snap suite must pass against both neighbour implementations. */
+const neighbourFactories: ReadonlyArray<readonly [string, NeighbourFactory]> = [
+  ['linear', makeLinearSnappingNeighbours],
+  ['spatial-hash', makeSpatialHashSnappingNeighbours],
+];
 
 function numberNode(
   id: string,
@@ -33,14 +47,15 @@ function chain(id: string, members: string[], anchor = { x: 100, y: 0 }): Chain 
   return { id, anchor, members };
 }
 
-function resolve(
+function resolveWith(
+  factory: NeighbourFactory,
   dragged: CalcNode,
   chains: Record<string, Chain>,
   nodes: Record<string, CalcNode>,
 ): SnapOutcome | null {
   return resolveSnapCandidate(
     dragged,
-    makeSnappingNeighbours(chains, nodes, LOCALE),
+    factory(chains, nodes, LOCALE),
     nodes,
     LOCALE,
   );
@@ -71,7 +86,14 @@ function atRightDelta(
   return { ...node, position: { x: edgeX + delta - w, y } };
 }
 
-describe('resolveSnapCandidate: chain append / prepend at SNAP_DISTANCE', () => {
+describe.each(neighbourFactories)('resolveSnapCandidate (%s)', (_label, factory) => {
+  const resolve = (
+    dragged: CalcNode,
+    chains: Record<string, Chain>,
+    nodes: Record<string, CalcNode>,
+  ) => resolveWith(factory, dragged, chains, nodes);
+
+  describe('chain append / prepend at SNAP_DISTANCE', () => {
   // Single-member chain: left = 100, right = 100 + nodeHeight (64).
   const member = numberNode('m', '1', { x: 100, y: 0 }, 'c1');
   const c1 = chain('c1', ['m'], { x: 100, y: 0 });
@@ -110,7 +132,7 @@ describe('resolveSnapCandidate: chain append / prepend at SNAP_DISTANCE', () => 
   });
 });
 
-describe('resolveSnapCandidate: INSERT_AT at member boundaries', () => {
+describe('INSERT_AT at member boundaries', () => {
   const a = numberNode('a', '12', { x: 100, y: 0 }, 'c1');
   const op = operatorNode('op', '+', { x: 0, y: 0 }, 'c1');
   const b = numberNode('b', '3', { x: 0, y: 0 }, 'c1');
@@ -155,7 +177,7 @@ describe('resolveSnapCandidate: INSERT_AT at member boundaries', () => {
   });
 });
 
-describe('resolveSnapCandidate: NEW_CHAIN with a free node', () => {
+describe('NEW_CHAIN with a free node', () => {
   const free = numberNode('f', '7', { x: 200, y: 0 });
   const freeRight = 200 + widthOf(free, LOCALE);
   const freeLeft = 200;
@@ -187,7 +209,7 @@ describe('resolveSnapCandidate: NEW_CHAIN with a free node', () => {
   });
 });
 
-describe('resolveSnapCandidate: nearest wins', () => {
+describe('nearest wins', () => {
   test('closer chain append beats a farther free-node new-chain', () => {
     const member = numberNode('m', '1', { x: 100, y: 0 }, 'c1');
     const c1 = chain('c1', ['m'], { x: 100, y: 0 });
@@ -221,7 +243,7 @@ describe('resolveSnapCandidate: nearest wins', () => {
   });
 });
 
-describe('resolveSnapCandidate: vertical gate is inherited from neighbours', () => {
+describe('vertical gate is inherited from neighbours', () => {
   test('a horizontally-perfect append still returns none when vertically out of range', () => {
     const member = numberNode('m', '1', { x: 100, y: 0 }, 'c1');
     const farY = tokens.nodeHeight + SNAP_VERTICAL; // excluded by strict <
@@ -235,7 +257,7 @@ describe('resolveSnapCandidate: vertical gate is inherited from neighbours', () 
   });
 });
 
-describe('resolveSnapCandidate: detach hysteresis (§8.2)', () => {
+describe('detach hysteresis (§8.2)', () => {
   // DETACH_DISTANCE (44) > SNAP_DISTANCE (28) is what stops a just-detached
   // member from immediately re-snapping into the slot it left. After detach the
   // node is free and the chain no longer lists it; place it DETACH_DISTANCE
@@ -291,7 +313,7 @@ describe('resolveSnapCandidate: detach hysteresis (§8.2)', () => {
   });
 });
 
-describe('resolveSnapCandidate: own chain excluded while still a member', () => {
+describe('own chain excluded while still a member', () => {
   test('a chain member does not resolve PREPEND/APPEND/INSERT against its own chain', () => {
     const a = numberNode('a', '1', { x: 100, y: 0 }, 'c1');
     const b = numberNode('b', '2', { x: 164, y: 0 }, 'c1');
@@ -305,3 +327,4 @@ describe('resolveSnapCandidate: own chain excluded while still a member', () => 
     expect(resolve(dragged, { c1 }, nodes)).toBeNull();
   });
 });
+}); // end describe.each neighbourFactories
