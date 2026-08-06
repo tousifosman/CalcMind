@@ -552,14 +552,15 @@ flowchart LR
     style P47 fill:#22A75B,color:#fff
     style P48 fill:#22A75B,color:#fff
     style P49 fill:#22A75B,color:#fff
-    style EXIT fill:#7030A0,color:#fff
+    style EXIT fill:#22A75B,color:#fff
 ```
 
 Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
-gate. `P4.1` carries no *task*-level dependency of its own (§10.1's pipeline just needs
-`chain.members`, which already exists), but the plan sequences the whole phase behind P3 as the
-**critical path** — shown here as a gate from P3's own phase-exit check rather than jumping the
-queue the moment P4.1's box would otherwise look open. Kept current by hand alongside the
+gate before it is demonstrated live — turns green once ticked, same as every other node. `P4.1`
+carries no *task*-level dependency of its own (§10.1's pipeline just needs `chain.members`, which
+already exists), but the plan sequences the whole phase behind P3 as the **critical path** —
+shown here as a gate from P3's own phase-exit check rather than jumping the queue the moment
+P4.1's box would otherwise look open. Kept current by hand alongside the
 acceptance-criteria boxes below — if a task's status here disagrees with its boxes, the boxes win
 and this diagram is stale.
 
@@ -769,15 +770,16 @@ flowchart LR
     style P56 fill:#22A75B,color:#fff
     style P57 fill:#22A75B,color:#fff
     style P58 fill:#22A75B,color:#fff
-    style EXIT fill:#7030A0,color:#fff
+    style EXIT fill:#22A75B,color:#fff
 ```
 
 Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
-gate. Neither `P5.1` nor `P5.3` carries a task-level dependency of its own — the phase text above
-just says "depends only on P4" — but the plan sequences both behind P4's own phase-exit check
-rather than jumping the queue the moment either task's box would otherwise look open, shown here
-as a gate from P4's tracking issue rather than an individual P4 subtask. `P5.2` / `P5.5` /
-`P5.6` / `P5.7` / `P5.4` / `P5.8` done — every task node green; phase exit check still open.
+gate before it is demonstrated live — turns green once ticked, same as every other node. Neither
+`P5.1` nor `P5.3` carries a task-level dependency of its own — the phase text above just says
+"depends only on P4" — but the plan sequences both behind P4's own phase-exit check rather than
+jumping the queue the moment either task's box would otherwise look open, shown here as a gate
+from P4's tracking issue rather than an individual P4 subtask. All eight tasks are done and the
+phase exit check is verified live — see below.
 Kept current by hand alongside the acceptance-criteria boxes below — if a task's status here
 disagrees with its boxes, the boxes win and this diagram is stale.
 
@@ -991,15 +993,16 @@ flowchart LR
     style P66 fill:#22A75B,color:#fff
     style P67 fill:#22A75B,color:#fff
     style P68 fill:#22A75B,color:#fff
-    style EXIT fill:#7030A0,color:#fff
+    style EXIT fill:#22A75B,color:#fff
 ```
 
 Green = done, amber = ready to start, grey = blocked on a dependency, purple = the phase-exit
-gate. `P4.8` (recompute on edit) is done, so `P6.1` is no longer gated on a cross-phase
-dependency — everything else here is downstream of it. `P2.9` and `P3.5` are already-done
-prerequisites for `P6.4` and `P6.7` respectively, shown as separate external nodes rather than
-folded into the P6.1 gate since they are genuine task-level deps, not a phase-level one. All
-eight P6 tasks are done; the purple exit node is the remaining hand-verification gate.
+gate before it is demonstrated live — turns green once ticked, same as every other node. `P4.8`
+(recompute on edit) is done, so `P6.1` is no longer gated on a cross-phase dependency —
+everything else here is downstream of it. `P2.9` and `P3.5` are already-done prerequisites for
+`P6.4` and `P6.7` respectively, shown as separate external nodes rather than folded into the P6.1
+gate since they are genuine task-level deps, not a phase-level one. All eight P6 tasks are done
+and the phase exit check is verified live — see below.
 Kept current by hand alongside the acceptance-criteria boxes below — if a task's status here
 disagrees with its boxes, the boxes win and this diagram is stale.
 
