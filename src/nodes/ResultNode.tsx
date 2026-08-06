@@ -1,8 +1,8 @@
-// The result cell (§1.1, §6, §11.3): derived, read-only, never directly editable. v1 renders
-// solid fill + border band only - the hue and border already say "not yours to edit," and the
-// dot texture is decorative, deferred to P7.3 (decision #9). Read-only-ness itself is enforced
-// where every mutation has to pass regardless of which view is on screen: `setNodeRaw`
-// (store/commands.ts) throws rather than silently no-opping when the target isn't a number node.
+// The result cell (§1.1, §6, §11.3): derived, read-only, never directly editable. Solid fill +
+// border band carry read-only-ness; the §1.2 dot texture is decorative on top (P7.3 / decision
+// #9). Read-only-ness itself is enforced where every mutation has to pass regardless of which
+// view is on screen: `setNodeRaw` (store/commands.ts) throws rather than silently no-opping when
+// the target isn't a number node.
 //
 // §10.4 / §9 presentation: successful values render normally; `stale` keeps the previous value
 // dimmed rather than flashing empty; engine errors render as explanations from
@@ -13,7 +13,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
 import { unlinkReference, finishEditingLabel, setNodeLabel } from '../store/commands';
-import { rolePalette, glyphColor } from '../ui/tokens';
+import { rolePalette, glyphColor, tokens } from '../ui/tokens';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
 import {
@@ -23,6 +23,7 @@ import {
   RESULT_ERROR_FONT_SIZE,
 } from '../engine/errors';
 import { Cell, glyphTextStyle } from './Cell';
+import { ResultDotTexture } from './ResultDotTexture';
 import { useSourceIdentityHue } from './useIdentityHue';
 import { useUiStore } from '../store/uiStore';
 import { useNodeSelected } from './useNodeSelected';
@@ -44,6 +45,9 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
   const locale = getDeviceLocale();
   const palette = rolePalette.result;
   const content = resultCellContent(node.derived);
+  const bandWidth = widthOf(node, locale);
+  const textureWidth = bandWidth - 2 * tokens.borderBand;
+  const textureHeight = tokens.nodeHeight - 2 * tokens.borderBand;
 
   const isCircular =
     content.mode === 'error' &&
@@ -61,7 +65,7 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
   return (
     <Cell
       testID={`result-node-${id}`}
-      width={widthOf(node, locale)}
+      width={bandWidth}
       fill={palette.fill}
       border={palette.border}
       label={node.label}
@@ -70,6 +74,14 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
       selected={selected}
       onLabelChange={(text) => setNodeLabel(id, text)}
       onLabelBlur={finishEditingLabel}
+      bandBackground={
+        <ResultDotTexture
+          testID={`result-node-${id}-texture`}
+          width={textureWidth}
+          height={textureHeight}
+          patternId={`result-dots-${id}`}
+        />
+      }
     >
       {isCircular && content.cycle ? (
         <View style={styles.circularRow} testID={`result-node-${id}-circular`}>

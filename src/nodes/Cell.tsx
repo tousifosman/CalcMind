@@ -1,9 +1,10 @@
 // Shared chrome for every node kind (§1.1, §11.3): the fixed-height, coloured-band pill and its
-// optional label. Plain RN `View`s with `borderRadius`/`borderWidth`, no SVG - the border band is
-// drawn as a border rather than a nested inset View because that's the cheapest way to get a
-// flush ring at an exact `borderBand` width without hand-computing an inner radius. Node-kind
-// components (NumberNode etc.) own their palette, width and glyph content and render through
-// this so the five of them don't each re-derive the same box model.
+// optional label. Plain RN `View`s with `borderRadius`/`borderWidth` for the common case — the
+// border band is drawn as a border rather than a nested inset View because that's the cheapest
+// way to get a flush ring at an exact `borderBand` width without hand-computing an inner radius.
+// Result cells pass an SVG `bandBackground` (dot texture, P7.3) painted under the identity ring.
+// Node-kind components (NumberNode etc.) own their palette, width and glyph content and render
+// through this so the five of them don't each re-derive the same box model.
 //
 // Identity (§11.1 / P6.5 / P6b.1): when `identityHue` is set, a ring is drawn inset on the cell
 // and the label (if any) uses that hue. References pass the hue as their fill/border instead and
@@ -56,6 +57,8 @@ interface CellProps {
   onLabelChange?: (text: string) => void;
   onLabelBlur?: () => void;
   testID?: string;
+  /** Painted inside the band, behind the identity ring and glyph (result dot texture). */
+  bandBackground?: ReactNode;
   children: ReactNode;
 }
 
@@ -71,6 +74,7 @@ export function Cell({
   onLabelChange,
   onLabelBlur,
   testID,
+  bandBackground,
   children,
 }: CellProps) {
   const captionColor = labelHue ?? identityHue ?? labelColor;
@@ -120,12 +124,13 @@ export function Cell({
         style={[
           styles.band,
           { width, borderColor: border, backgroundColor: fill },
-          // Clip the inset identity ring to the rounded corner only when present.
-          // Selection focus paints *outside* the band (negative inset), so clipping
-          // would hide it — leave overflow visible whenever focus is showing.
-          identityHue && !selected ? styles.bandClip : null,
+          // Clip inset identity ring / bandBackground to the rounded corner when
+          // either is present (P7.3). Selection focus paints *outside* the band
+          // (negative inset, P7.2), so leave overflow visible while focused.
+          (identityHue || bandBackground) && !selected ? styles.bandClip : null,
         ]}
       >
+        {bandBackground}
         {identityHue ? (
           <View
             pointerEvents="none"
