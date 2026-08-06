@@ -17,7 +17,7 @@ import {
   useSharedValue,
   type SharedValue,
 } from 'react-native-reanimated';
-import { makeSnappingNeighbours } from '../chains/bounds';
+import { makeSnappingNeighbours, type SnappingNeighbours } from '../chains/bounds';
 import { resolveSnapCandidate, type SnapOutcome } from '../chains/snapping';
 import type { ChainId, NodeId, Vec2 } from '../model/types';
 import {
@@ -111,6 +111,12 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
     mode: NodeDragMode;
     chainId: ChainId | null;
     homeAnchor: Vec2 | null;
+    /** Built once at drag start — document is immutable mid-drag (§11.4 commit
+     *  on release), so rebuilding the §8.4 spatial hash every frame would pay
+     *  O(n) bounds work for nothing. Query still runs per frame with the live
+     *  probe position. */
+    neighbours: SnappingNeighbours | null;
+    locale: string;
   } | null>(null);
 
   const beginDrag = useCallback(
@@ -138,6 +144,14 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
         chainDragDy.value = 0;
       }
 
+      const { document } = useDocumentStore.getState();
+      const locale = getDeviceLocale();
+      // Index once; moveChain never queries it.
+      const neighbours =
+        mode === 'moveChain'
+          ? null
+          : makeSnappingNeighbours(document.chains, document.nodes, locale);
+
       session.current = {
         home: { x: current.position.x, y: current.position.y },
         wasChained: current.chainId !== null,
@@ -145,6 +159,8 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
         mode,
         chainId: current.chainId,
         homeAnchor,
+        neighbours,
+        locale,
       };
       // Re-seed from the store at press time so a stale effect sync can't skew the delta.
       startX.value = current.position.x;
@@ -184,7 +200,7 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
 
       const { document } = useDocumentStore.getState();
       const current = document.nodes[nodeId];
-      if (!current) return;
+      if (!current || !sess.neighbours) return;
 
       // Probe chainId: null once detached for ordinary members (§8.2 hysteresis);
       // results keep theirs (P6.7 — see snapProbeChainId).
@@ -197,9 +213,12 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
           kind: current.kind,
         }),
       };
-      const locale = getDeviceLocale();
-      const neighbours = makeSnappingNeighbours(document.chains, document.nodes, locale);
-      const candidate = resolveSnapCandidate(probe, neighbours, document.nodes, locale);
+      const candidate = resolveSnapCandidate(
+        probe,
+        sess.neighbours,
+        document.nodes,
+        sess.locale,
+      );
       publishDragSnap(nodeId, position, candidate, null);
     },
     [nodeId],

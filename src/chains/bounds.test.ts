@@ -1,7 +1,9 @@
 import {
   SNAP_VERTICAL,
   boundsOf,
+  makeLinearSnappingNeighbours,
   makeSnappingNeighbours,
+  makeSpatialHashSnappingNeighbours,
   memberBoundaries,
   verticalOverlap,
 } from './bounds';
@@ -75,7 +77,13 @@ describe('memberBoundaries', () => {
   });
 });
 
-describe('makeSnappingNeighbours', () => {
+const neighbourFactories = [
+  ['linear', makeLinearSnappingNeighbours],
+  ['spatial-hash', makeSpatialHashSnappingNeighbours],
+  ['default (spatial-hash)', makeSnappingNeighbours],
+] as const;
+
+describe.each(neighbourFactories)('makeSnappingNeighbours (%s)', (_label, factory) => {
   test('returns only chains within the exact snap-vertical threshold and excludes the node\'s own chain', () => {
     const dragged = numberNode('dragged', '5', { x: 20, y: 0 }, null);
     const nearY = tokens.nodeHeight + SNAP_VERTICAL - 1;
@@ -91,7 +99,7 @@ describe('makeSnappingNeighbours', () => {
     };
     const ownDragged = { ...dragged, chainId: 'own' };
 
-    const neighbours = makeSnappingNeighbours(chains, nodes, 'en-US');
+    const neighbours = factory(chains, nodes, 'en-US');
 
     expect(neighbours.chainsNear(dragged).map((c) => c.id)).toEqual(['near', 'own']);
     expect(neighbours.chainsNear(ownDragged).map((c) => c.id)).toEqual(['near']);
@@ -109,8 +117,40 @@ describe('makeSnappingNeighbours', () => {
     };
     const nodes: Record<string, CalcNode> = { dragged, near, far, chained, reference };
 
-    const neighbours = makeSnappingNeighbours({}, nodes, 'en-US');
+    const neighbours = factory({}, nodes, 'en-US');
 
     expect(neighbours.freeNodesNear(dragged).map((node) => node.id)).toEqual(['near']);
+  });
+});
+
+describe('linear vs spatial-hash neighbour parity', () => {
+  test('chainsNear and freeNodesNear return the same ids for a scattered document', () => {
+    const nodes: Record<string, CalcNode> = {};
+    const chains: Record<string, Chain> = {};
+    for (let i = 0; i < 40; i += 1) {
+      const x = (i % 8) * 150;
+      const y = Math.floor(i / 8) * 100;
+      if (i % 3 === 0) {
+        const id = `f${i}`;
+        nodes[id] = numberNode(id, String(i), { x, y });
+      } else {
+        const cid = `c${i}`;
+        const a = numberNode(`a${i}`, '1', { x, y }, cid);
+        nodes[a.id] = a;
+        chains[cid] = chain(cid, [a.id], { x, y });
+      }
+    }
+    const dragged = numberNode('dragged', '9', { x: 160, y: 105 });
+    nodes[dragged.id] = dragged;
+
+    const linear = makeLinearSnappingNeighbours(chains, nodes, 'en-US');
+    const hashed = makeSpatialHashSnappingNeighbours(chains, nodes, 'en-US');
+
+    expect(hashed.chainsNear(dragged).map((c) => c.id)).toEqual(
+      linear.chainsNear(dragged).map((c) => c.id),
+    );
+    expect(hashed.freeNodesNear(dragged).map((n) => n.id)).toEqual(
+      linear.freeNodesNear(dragged).map((n) => n.id),
+    );
   });
 });
