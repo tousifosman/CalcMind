@@ -59,6 +59,10 @@ This outputs a static site to `dist/` with relative asset paths (`publicPath: '.
 
 ## Deployment
 
-`.github/workflows/deploy-web.yml` builds the web export and publishes it to GitHub Pages on every push to `main`.
+`.github/workflows/deploy-web.yml` builds the web export and publishes it to the `gh-pages` branch on every push to `main`, at the site root.
 
-**One-time setup:** in the repository's **Settings → Pages**, set "Build and deployment" → "Source" to **GitHub Actions**. After that, every push to `main` will automatically redeploy the site.
+**One-time setup:** in the repository's **Settings → Pages**, set "Build and deployment" → "Source" to **Deploy from a branch**, and pick branch `gh-pages`, folder `/ (root)`. (Deploying to a branch, rather than through `actions/deploy-pages`, is what lets PR previews below coexist with the `main` deploy — a Pages site backed by "GitHub Actions" as its source only ever has one live deployment, with no room for a second, PR-scoped one.)
+
+### PR previews
+
+`.github/workflows/deploy-pr-preview.yml` publishes a given PR's build to a temp path — `https://<user>.github.io/<repo>/pr-preview/pr-<n>/` — without merging it, so it can be reviewed live before landing. Run it manually from the Actions tab (`Deploy PR preview` → `Run workflow`), giving it the PR number; it comments the preview URL back on the PR. The preview is torn down automatically when the PR closes, or on demand by re-running the workflow with the `remove` action.

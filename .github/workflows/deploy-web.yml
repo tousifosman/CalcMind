@@ -6,16 +6,17 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
+# Pushes to gh-pages must be serialized — two concurrent runs racing to commit
+# would fight over the branch. Previews (deploy-pr-preview.yml) use their own
+# per-PR group so they don't queue behind this one.
 concurrency:
-  group: pages
-  cancel-in-progress: true
+  group: gh-pages-main
+  cancel-in-progress: false
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -33,18 +34,19 @@ jobs:
       - name: Build web export
         run: npm run build:web
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+      # Publishes to the gh-pages branch root rather than actions/deploy-pages,
+      # because deploy-pages replaces the whole Pages deployment on every run —
+      # there is no way for a second, PR-scoped deploy to coexist with it. A
+      # branch keeps main's output and each PR preview's output as separate
+      # directories on the same branch (see deploy-pr-preview.yml).
+      # `keep_files: true` is what makes that coexistence work: without it this
+      # step would delete every pr-preview/ directory on each push to main.
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          path: dist
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: dist
+          publish_branch: gh-pages
+          keep_files: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'

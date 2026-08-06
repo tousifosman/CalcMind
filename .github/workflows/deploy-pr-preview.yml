@@ -1,0 +1,141 @@
+name: Deploy PR preview
+
+# Manual by design: a maintainer runs this from the Actions tab (or `gh
+# workflow run`) against a PR that isn't merged yet, to get it reviewable at
+# a temp URL. It never fires on its own on every push — that's what
+# deploy-web.yml does for main. The `pull_request: closed` trigger below is
+# the one exception: it cleans up the preview automatically so gh-pages
+# doesn't accumulate a directory per PR forever.
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'Pull request number to preview'
+        required: true
+        type: number
+      action:
+        description: 'Deploy the preview, or take down a previously deployed one'
+        required: false
+        type: choice
+        options: [deploy, remove]
+        default: deploy
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: pr-preview-${{ github.event.pull_request.number || inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  # workflow_dispatch carries pr_number/action as inputs; pull_request:closed
+  # carries the PR number in the event payload instead and always means
+  # "remove". This job normalizes both into one set of outputs so the deploy
+  # and remove jobs below don't need to know which trigger fired.
+  determine:
+    runs-on: ubuntu-latest
+    outputs:
+      pr_number: ${{ steps.set.outputs.pr_number }}
+      action: ${{ steps.set.outputs.action }}
+    steps:
+      - id: set
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "action=remove" >> "$GITHUB_OUTPUT"
+          else
+            echo "pr_number=${{ inputs.pr_number }}" >> "$GITHUB_OUTPUT"
+            echo "action=${{ inputs.action }}" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: determine
+    if: needs.determine.outputs.action == 'deploy'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          # refs/pull/<n>/head exists on the base repo for PRs from forks too,
+          # so this works without needing the contributor's branch directly.
+          ref: refs/pull/${{ needs.determine.outputs.pr_number }}/head
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web export
+        run: npm run build:web
+
+      # webpack.config.js already emits relative asset paths in production
+      # (see its comment on `publicPath`), which is exactly what's needed to
+      # serve correctly from this nested pr-preview/pr-<n>/ path.
+      - name: Publish preview
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: dist
+          publish_branch: gh-pages
+          destination_dir: pr-preview/pr-${{ needs.determine.outputs.pr_number }}
+          keep_files: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Comment preview URL on the PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const prNumber = ${{ needs.determine.outputs.pr_number }};
+            const url = `https://${owner}.github.io/${repo}/pr-preview/pr-${prNumber}/`;
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: prNumber,
+              body: `Preview deployed: ${url}\n\nIt's rebuilt by re-running this workflow, and removed automatically once this PR closes (or manually via the \`remove\` action).`,
+            });
+
+  remove:
+    needs: determine
+    if: needs.determine.outputs.action == 'remove'
+    runs-on: ubuntu-latest
+    steps:
+      # gh-pages won't exist yet if this fires before deploy-web.yml or this
+      # workflow's `deploy` job has ever run (e.g. a PR opened and closed
+      # before the first-ever Pages deploy) — skip rather than fail.
+      - name: Check gh-pages branch exists
+        id: check
+        run: |
+          if git ls-remote --exit-code --heads "https://github.com/${{ github.repository }}.git" gh-pages >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout gh-pages
+        if: steps.check.outputs.exists == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: gh-pages
+
+      - name: Remove preview directory
+        if: steps.check.outputs.exists == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          rm -rf "pr-preview/pr-${{ needs.determine.outputs.pr_number }}"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No preview directory for PR #${{ needs.determine.outputs.pr_number }} — nothing to remove."
+          else
+            git commit -m "Remove PR preview for #${{ needs.determine.outputs.pr_number }}"
+            git push
+          fi
