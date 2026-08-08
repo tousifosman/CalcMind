@@ -282,6 +282,7 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
 
       if (sess?.mode === 'moveChain' && sess.chainId && sess.homeAnchor) {
         resetChainDragShared();
+        resetSelectionDragShared();
         clearDragSnap();
         moveChain(sess.chainId, {
           x: sess.homeAnchor.x + delta.x,
@@ -291,6 +292,7 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       }
 
       if (sess?.mode === 'moveSelection' && sess.selectionUnits) {
+        resetChainDragShared();
         resetSelectionDragShared();
         clearDragSnap();
         moveSelection(sess.selectionUnits, delta);
