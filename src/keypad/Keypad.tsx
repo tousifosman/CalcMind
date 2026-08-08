@@ -11,6 +11,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import ArrowUturnLeftIcon from 'react-native-heroicons/outline/ArrowUturnLeftIcon';
 import ArrowUturnRightIcon from 'react-native-heroicons/outline/ArrowUturnRightIcon';
+import BackspaceIcon from 'react-native-heroicons/outline/BackspaceIcon';
 import ChevronDownIcon from 'react-native-heroicons/outline/ChevronDownIcon';
 import { decimalSeparatorFor } from '../engine/format';
 import { glyphColor, rolePalette } from '../ui/tokens';
@@ -188,9 +189,14 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               onPress={() => press({ region: 'redo' })}
               testID="keypad-redo"
             />
-            {/* Swipe-across-backspace clear gesture stays on ⌫ wherever it sits (§8.5). */}
+            {/* Swipe-across-backspace clear gesture stays on this key wherever it sits (§8.5). */}
             <GestureDetector gesture={backspaceSwipe}>
-              <Key label="⌫" onPress={() => press({ region: 'backspace' })} testID="keypad-backspace" />
+              <Key
+                label="Backspace"
+                icon={<BackspaceIcon size={22} color="#333333" />}
+                onPress={() => press({ region: 'backspace' })}
+                testID="keypad-backspace"
+              />
             </GestureDetector>
           </View>
         </View>
