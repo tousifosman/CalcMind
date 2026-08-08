@@ -392,12 +392,12 @@ const styles = StyleSheet.create({
   keyLabel: {
     color: glyphColor,
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '400',
   },
   neutralKeyLabel: {
     color: '#333333',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '400',
   },
   accentColumn: {
     flex: 1,
@@ -412,7 +412,7 @@ const styles = StyleSheet.create({
   accentKeyLabel: {
     color: glyphColor,
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '400',
   },
   equalsKey: {
     backgroundColor: rolePalette.equals.fill,
