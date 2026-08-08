@@ -689,8 +689,10 @@ operators are visually separated from digits.
   nothing typed) discards it rather than leaving a blank cell on the canvas.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` on values
   (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
-- Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`.
+- Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`, `Select all`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
+- `Select all` selects every node on the canvas (same ephemeral group-selection set as
+  `Select group`). Disabled when the canvas is empty.
 - **`Label` opens an in-place caption editor on the identity source** (§11.1). The write always
   lands on the declaring number or result, so every reference that shares the identity updates
   together; successive keystrokes coalesce into one undo entry (§13).

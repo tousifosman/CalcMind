@@ -19,6 +19,7 @@ import {
   editNumberNode,
   deselectNode,
   selectGroup,
+  selectAll,
   prependToChain,
   appendToChain,
   insertIntoChain,
@@ -520,6 +521,56 @@ describe('selectGroup', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '5');
     const before = useDocumentStore.getState().undoStack.length;
     selectGroup(id);
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+  });
+});
+
+describe('selectAll', () => {
+  test('selects every node on the canvas into the group selection', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addOperatorNode({ x: 50, y: 0 }, '+');
+    const c = addNumberNode({ x: 100, y: 40 }, '9');
+
+    selectAll();
+
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([a, b, c]));
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+  });
+
+  test('keeps the current selection as the primary target when it still exists', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addNumberNode({ x: 40, y: 0 }, '2');
+    selectNode(b);
+
+    selectAll();
+
+    expect(useUiStore.getState().selectedNodeId).toBe(b);
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([a, b]));
+  });
+
+  test('discards an abandoned empty number before selecting', () => {
+    const keeper = addNumberNode({ x: 0, y: 0 }, '3');
+    const empty = addNumberNode({ x: 40, y: 0 }, '');
+    editNumberNode(empty);
+
+    selectAll();
+
+    expect(useDocumentStore.getState().document.nodes[empty]).toBeUndefined();
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([keeper]));
+    expect(useUiStore.getState().selectedNodeId).toBe(keeper);
+  });
+
+  test('empty canvas is a no-op', () => {
+    selectAll();
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
+
+  test('selectAll does not add an undo entry', () => {
+    addNumberNode({ x: 0, y: 0 }, '5');
+    const before = useDocumentStore.getState().undoStack.length;
+    selectAll();
+    // discardIfAbandoned may not delete anything here; only the create was recorded.
     expect(useDocumentStore.getState().undoStack).toHaveLength(before);
   });
 });

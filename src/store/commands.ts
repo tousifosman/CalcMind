@@ -957,6 +957,26 @@ function discardIfAbandoned(keepId: NodeId | null): void {
   }
 }
 
+/** Selects every node on the canvas (§8.6 `Select all`). Ephemeral — same store
+ *  as `Select group`; the document is not changed and no undo entry is recorded.
+ *  Discards an abandoned empty number first so a leftover blank edit cell is not
+ *  part of the selection. No-op when the canvas is already empty. */
+export function selectAll(): void {
+  discardIfAbandoned(null);
+  const { document } = useDocumentStore.getState();
+  const ids = Object.keys(document.nodes);
+  if (ids.length === 0) return;
+
+  useUiStore.getState().setGroupSelected(new Set(ids));
+  useUiStore.getState().setEditingNode(null);
+  useUiStore.getState().setEditingLabelNode(null);
+  // Keep the current keypad target when it is still present; otherwise pick any
+  // surviving node so the focus ring / keypad still have somewhere to land.
+  const current = useUiStore.getState().selectedNodeId;
+  const primary = current && document.nodes[current] ? current : ids[0];
+  useUiStore.getState().setSelectedNode(primary);
+}
+
 /** Selects any node kind without entering edit mode - the target for keypad/hardware-keyboard
  *  input (P2.8, §8.5), but not itself a text field (§8.6). */
 export function selectNode(nodeId: NodeId): void {
