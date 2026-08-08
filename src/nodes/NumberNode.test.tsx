@@ -69,6 +69,8 @@ describe('NumberNode editing', () => {
     const input = renderer.root.findByType(TextInput);
     expect(input.props.value).toBe('1,020');
     expect(input.props.showSoftInputOnFocus).toBe(false);
+    expect(input.props.inputMode).toBe('none');
+    expect(input.props.keyboardType).toBeUndefined();
     expect(renderer.root.findAllByType(Text)).toHaveLength(0);
   });
 
