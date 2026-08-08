@@ -9,6 +9,9 @@ import type { ReactNode } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
+import ArrowUturnLeftIcon from 'react-native-heroicons/outline/ArrowUturnLeftIcon';
+import ArrowUturnRightIcon from 'react-native-heroicons/outline/ArrowUturnRightIcon';
+import BackspaceIcon from 'react-native-heroicons/outline/BackspaceIcon';
 import ChevronDownIcon from 'react-native-heroicons/outline/ChevronDownIcon';
 import { decimalSeparatorFor } from '../engine/format';
 import { glyphColor, rolePalette } from '../ui/tokens';
@@ -191,26 +194,40 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               disabled={dataEntryLocked}
               testID="keypad-sign"
             />
-            <GestureDetector gesture={backspaceSwipe}>
-              <Key
-                label="⌫"
-                onPress={() => press({ region: 'backspace' })}
-                disabled={dataEntryLocked}
-                testID="keypad-backspace"
-              />
-            </GestureDetector>
-          </View>
-
-          <View style={styles.groupingRow} testID="keypad-grouping">
-            {/* Single `()` key (§8.5): occupies the same row width the old `(` / `)`
-                pair filled. Side is resolved in `dispatchEditorCommand` from chain
-                depth so one tap opens or closes as appropriate. */}
+            {/* Single `()` key (§8.5): same cell size as the other editing keys.
+                Side is resolved in `dispatchEditorCommand` from chain depth so one
+                tap opens or closes as appropriate. */}
             <Key
               label="()"
               onPress={() => press({ region: 'paren' })}
               disabled={dataEntryLocked}
               testID="keypad-paren"
             />
+          </View>
+
+          <View style={styles.historyRow} testID="keypad-history">
+            <Key
+              label="Undo"
+              icon={<ArrowUturnLeftIcon size={22} color="#333333" />}
+              onPress={() => press({ region: 'undo' })}
+              testID="keypad-undo"
+            />
+            <Key
+              label="Redo"
+              icon={<ArrowUturnRightIcon size={22} color="#333333" />}
+              onPress={() => press({ region: 'redo' })}
+              testID="keypad-redo"
+            />
+            {/* Swipe-across-backspace clear gesture stays on this key wherever it sits (§8.5). */}
+            <GestureDetector gesture={backspaceSwipe}>
+              <Key
+                label="Backspace"
+                icon={<BackspaceIcon size={22} color="#333333" />}
+                onPress={() => press({ region: 'backspace' })}
+                disabled={dataEntryLocked}
+                testID="keypad-backspace"
+              />
+            </GestureDetector>
           </View>
         </View>
 
@@ -255,6 +272,9 @@ interface KeyProps {
   onPress: () => void;
   disabled?: boolean;
   testID?: string;
+  /** When set, rendered instead of the label text; `label` stays the a11y name
+   *  (same pattern as ModeKey's Heroicons slot). */
+  icon?: ReactNode;
 }
 
 // Web only: a plain TouchableOpacity press starts with a mousedown, which blurs whatever
@@ -268,7 +288,7 @@ interface KeyProps {
 // focus with.
 const preventFocusSteal = { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() };
 
-function Key({ label, onPress, disabled, testID }: KeyProps) {
+function Key({ label, icon, onPress, disabled, testID }: KeyProps) {
   return (
     <TouchableOpacity
       style={[styles.key, disabled && styles.keyDisabled]}
@@ -276,10 +296,11 @@ function Key({ label, onPress, disabled, testID }: KeyProps) {
       disabled={disabled}
       testID={testID}
       accessibilityState={{ disabled: !!disabled }}
+      accessibilityLabel={icon ? label : undefined}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
-      <Text style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled]}>{label}</Text>
+      {icon ?? <Text style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled]}>{label}</Text>}
     </TouchableOpacity>
   );
 }
@@ -435,7 +456,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: KEY_GAP,
   },
-  groupingRow: {
+  historyRow: {
     flexDirection: 'row',
   },
   key: {
@@ -450,7 +471,7 @@ const styles = StyleSheet.create({
   keyLabel: {
     color: glyphColor,
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '400',
   },
   keyDisabled: {
     opacity: 0.35,
@@ -461,7 +482,7 @@ const styles = StyleSheet.create({
   neutralKeyLabel: {
     color: '#333333',
     fontSize: 18,
-    fontWeight: '700',
+    fontWeight: '400',
   },
   accentColumn: {
     flex: 1,
@@ -476,7 +497,7 @@ const styles = StyleSheet.create({
   accentKeyLabel: {
     color: glyphColor,
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '400',
   },
   equalsKey: {
     backgroundColor: rolePalette.equals.fill,

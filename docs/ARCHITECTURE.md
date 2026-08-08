@@ -654,17 +654,20 @@ operators are visually separated from digits.
 | Region | Keys |
 |---|---|
 | Digits | `7 8 9 / 4 5 6 / 1 2 3 / 0` |
-| Number editing | decimal separator (locale glyph, inserts canonical `.`), `+/-`, backspace |
-| Grouping | `()` — one key; inserts `(` or `)` from chain depth (prefer close when an unmatched open is closable) |
+| Number editing | decimal separator (locale glyph, inserts canonical `.`), `+/-`, `()` |
+| History | undo, redo, backspace |
 | Operators (accent column) | `÷ × − + =` |
 | Mode strip | dismiss keypad, documents, functions *(later)*, graph *(later)*, **Clear all** |
 
 - Keys act on the **selected node** if there is one, otherwise they create a new node at the
   caret/last-tap point.
-- The grouping key is a single **`()`** (not separate `(` / `)`). Each press inserts whichever
+- The grouping key is a single **`()`** on the number-editing row (same cell size as `+/-` /
+  decimal; not a wide bottom-row key, and not separate `(` / `)`). Each press inserts whichever
   side fits the chain through the selection: `)` when there is an unmatched open and a close is
   grammatical (after a number, reference, or close paren); otherwise `(`. Hardware `(`/`)` still
   map to an explicit side.
+- The history row exposes **undo** and **redo** next to backspace — the same commands as
+  `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` (or `Y`).
 - Pressing `=` on a chain selects the new **result** (not the `=` glyph) so the next operator
   is ready for continuation without an extra tap.
 - **Continuation shortcut (§8.7).** With a result selected, pressing an operator does *not* edit
