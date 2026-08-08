@@ -1001,9 +1001,11 @@ export function selectAll(): void {
 }
 
 /** Selects any node kind without entering edit mode - the target for keypad/hardware-keyboard
- *  input (P2.8, §8.5), but not itself a text field (§8.6). */
+ *  input (P2.8, §8.5), but not itself a text field (§8.6). Replaces any prior
+ *  `Select group` highlight — a single-node tap/key move is not a group selection. */
 export function selectNode(nodeId: NodeId): void {
   discardIfAbandoned(nodeId);
+  useUiStore.getState().clearGroupSelected();
   useUiStore.getState().setEditingNode(null);
   useUiStore.getState().setEditingLabelNode(null);
   useUiStore.getState().setSelectedNode(nodeId);
@@ -1012,6 +1014,7 @@ export function selectNode(nodeId: NodeId): void {
 /** Selects a number node and opens its in-place text editor (§8.6, P2.6). */
 export function editNumberNode(nodeId: NodeId): void {
   discardIfAbandoned(nodeId);
+  useUiStore.getState().clearGroupSelected();
   useUiStore.getState().setEditingLabelNode(null);
   useUiStore.getState().setSelectedNode(nodeId);
   useUiStore.getState().setEditingNode(nodeId);
@@ -1020,6 +1023,7 @@ export function editNumberNode(nodeId: NodeId): void {
 /** Clears selection and, if the node being edited is an empty number, discards it (§8.6). */
 export function deselectNode(): void {
   discardIfAbandoned(null);
+  useUiStore.getState().clearGroupSelected();
   useUiStore.getState().setSelectedNode(null);
   useUiStore.getState().setEditingNode(null);
   useUiStore.getState().setEditingLabelNode(null);
@@ -1102,6 +1106,7 @@ export function editNodeLabel(nodeId: NodeId): void {
     finishEditingLabel();
   }
   discardIfAbandoned(sourceId);
+  useUiStore.getState().clearGroupSelected();
   useUiStore.getState().setEditingNode(null);
   useUiStore.getState().setSelectedNode(sourceId);
   useUiStore.getState().setEditingLabelNode(sourceId);

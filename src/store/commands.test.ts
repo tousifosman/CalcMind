@@ -524,6 +524,37 @@ describe('selectGroup', () => {
     selectGroup(id);
     expect(useDocumentStore.getState().undoStack).toHaveLength(before);
   });
+
+  test('selectNode / editNumberNode / deselectNode clear a prior group highlight', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addOperatorNode({ x: 50, y: 0 }, '+');
+    const c = addNumberNode({ x: 84, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.ch = { id: 'ch', members: [a, b, c], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'ch';
+      draft.nodes[b].chainId = 'ch';
+      draft.nodes[c].chainId = 'ch';
+    });
+    const other = addNumberNode({ x: 0, y: 80 }, '9');
+
+    selectGroup(b);
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(3);
+
+    selectNode(other);
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBe(other);
+
+    selectGroup(b);
+    editNumberNode(a);
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBe(a);
+    expect(useUiStore.getState().editingNodeId).toBe(a);
+
+    selectGroup(b);
+    deselectNode();
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
 });
 
 describe('selectAll', () => {

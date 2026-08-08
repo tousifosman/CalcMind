@@ -20,9 +20,11 @@ import { tokens, labelColor, selectionFocusColor } from '../ui/tokens';
 export const IDENTITY_RING_WIDTH = tokens.borderBand;
 
 /** Selection focus ring paints just outside the structural band so it stays visible on
- *  every role fill (P7.2: "Focus is always visible"). */
-export const SELECTION_FOCUS_WIDTH = 2;
-export const SELECTION_FOCUS_OUTSET = 3;
+ *  every role fill (P7.2: "Focus is always visible"). Outset clears the light role
+ *  border; width is thick enough to read at chain scale. The selected node's wrapper
+ *  also elevates z-index so flush neighbours cannot cover this ring. */
+export const SELECTION_FOCUS_WIDTH = 3;
+export const SELECTION_FOCUS_OUTSET = 4;
 
 /**
  * Web-only: stop Space/Enter bubbling to a GestureDetector ancestor (§11.1 / P6b.1).
@@ -131,7 +133,11 @@ export function Cell({
         ]}
       >
         {bandBackground}
-        {identityHue ? (
+        {/* Identity ring is inset; while selected the outset focus ring already
+         *  marks the cell, so skip the inner hue ring — double chrome reads as a
+         *  second "focus" border (especially the blue first palette swatch).
+         *  Hue still shows via caption colour and connectors (§11.1). */}
+        {identityHue && !selected ? (
           <View
             pointerEvents="none"
             testID={testID ? `${testID}-identity-ring` : undefined}

@@ -55,11 +55,17 @@ import {
   type NodeDragMode,
   type SelectionUnits,
 } from './dragLifecycle';
+import { useNodeSelected } from './useNodeSelected';
 
 /** Screen pixels of movement before a press becomes a node drag. Below this,
  *  Canvas's Tap still wins (select / create); above it, the node claims the gesture
  *  and should stop the canvas pan from also moving. */
 const NODE_DRAG_ACTIVATION_DISTANCE = 6;
+
+/** Idle selected / group-selected node stacks above flush chain neighbours so
+ *  Cell's outset focus ring is not painted under the next member (P7.2 follow-up).
+ *  Below connectors (500) and a live drag (1000). */
+export const SELECTED_NODE_Z_INDEX = 10;
 
 export interface NodeDragHandle {
   gesture: ReturnType<typeof Gesture.Pan>;
@@ -92,6 +98,11 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
   const { zoom } = useCanvasViewport();
   const node = useNode(nodeId);
   const editingThis = useUiStore((state) => state.editingNodeId === nodeId);
+  // Selection elevates idle z-index (see SELECTED_NODE_Z_INDEX). Read here rather
+  // than in NodeLayer so the animated style can clear it explicitly on every frame —
+  // omitting zIndex after a drag would leave 1000 stuck, same class of bug as the
+  // transform reset below.
+  const selected = useNodeSelected(nodeId);
 
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -396,8 +407,10 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
     });
 
   const animatedStyle = useAnimatedStyle(() => {
-    // Always set transform explicitly — returning `{}` leaves the previous translate
-    // stuck on the view after release (seen in Playwright: left updated, matrix remained).
+    // Always set transform *and* zIndex explicitly — returning `{}` leaves the
+    // previous translate stuck on the view after release (seen in Playwright:
+    // left updated, matrix remained), and the same applies to a drag-time zIndex
+    // of 1000 if idle frames omit it.
     if (dragging.value) {
       return {
         zIndex: 1000,
@@ -426,8 +439,11 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
         ],
       };
     }
-    return { zIndex: 0, transform: [{ translateX: 0 }, { translateY: 0 }] };
-  });
+    return {
+      zIndex: selected ? SELECTED_NODE_Z_INDEX : 0,
+      transform: [{ translateX: 0 }, { translateY: 0 }],
+    };
+  }, [selected]);
 
   return { gesture, animatedStyle, dragging };
 }

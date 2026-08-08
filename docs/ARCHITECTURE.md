@@ -279,6 +279,7 @@ are Tydlig Software AB's and the publication's.
 | Native filesystem | **@dr.pogodin/react-native-fs** | MIT | Maintained fork of `react-native-fs`; the original is unmaintained. |
 | Web storage | **idb-keyval** | MIT | Thin IndexedDB wrapper; localStorage is too small and synchronous. |
 | SVG | **react-native-svg** | MIT | Load-bearing for connector beziers (P6.6) and the result dot texture (P7.3) (§11.3). |
+| Icons | **react-native-heroicons** ([Heroicons](https://github.com/tailwindlabs/heroicons)) | MIT | Tailwind Labs' SVG set, packaged for `react-native-svg` so the same import works on native and web. Prefer `react-native-heroicons/{outline,solid,mini,micro}` over `@heroicons/react`, which emits DOM `<svg>` and breaks the native target. |
 | Tests | Jest (already configured) + **fast-check** | MIT | Table-driven engine tests; property tests for parser/formatter round-trips. |
 
 No dependency here bills by usage, gates features behind a plan, or requires an account.
@@ -664,6 +665,8 @@ operators are visually separated from digits.
   side fits the chain through the selection: `)` when there is an unmatched open and a close is
   grammatical (after a number, reference, or close paren); otherwise `(`. Hardware `(`/`)` still
   map to an explicit side.
+- Pressing `=` on a chain selects the new **result** (not the `=` glyph) so the next operator
+  is ready for continuation without an extra tap.
 - **Continuation shortcut (§8.7).** With a result selected, pressing an operator does *not* edit
   the result — it starts a new chain that references it.
 - Tapping empty canvas creates a number node there, in edit mode, and shows the keypad if it
@@ -684,18 +687,26 @@ operators are visually separated from digits.
 
 - Tap selects a node; the selected node is the target for keypad input. Tapping a number node
   additionally opens it for in-place text editing (caret, digits, decimal, backspace) — every
-  other kind is selected but not itself a text field.
+  other kind is selected but not itself a text field. **Focus is always visible:** a white
+  outset ring on the cell marks the keypad target, including read-only results (continuation
+  still needs a selected result, §8.7). The selected node's wrapper stacks above flush chain
+  neighbours so the ring is not painted under the next member. While selected, the inset
+  identity ring (§11.1) is omitted so focus is a single chrome layer; hue still reads from the
+  caption and connectors.
 - `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
   nothing typed) discards it rather than leaving a blank cell on the canvas.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` on values
   (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`, `Select all`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
+  The group highlight is cleared by the next single-node selection, edit, or deselect (tap
+  another cell, Escape, keypad navigation) — it must not stick after the user has moved on.
 - `Select all` selects every node on the canvas (same ephemeral group-selection set as
   `Select group`). Disabled when the canvas is empty. Dragging any selected node then
   translates the whole selection — every selected chain (via its anchor) and every
   selected free node — by the same delta, in one undo entry. A single-chain
-  `Select group` still uses the ordinary MovingChain path.
+  `Select group` still uses the ordinary MovingChain path. The same clear-on-single-select
+  rule applies.
 - **`Label` opens an in-place caption editor on the identity source** (§11.1). The write always
   lands on the declaring number or result, so every reference that shares the identity updates
   together; successive keystrokes coalesce into one undo entry (§13).
@@ -994,6 +1005,11 @@ mid-drag chrome. Mid-drag it reads `uiStore.dragSnap` (including `movingChainId`
 endpoints track the finger before the store commits on release — same ephemeral feed
 `NodeLayer` uses for the insertion gap. The dependency has been load-bearing since P6.6; the
 result texture reuses it.
+
+Chrome icons (toolbar, mode strip, dialogs) use **Heroicons** via `react-native-heroicons`,
+which renders through the same `react-native-svg` dependency. Import from a style subpath
+(`outline` / `solid` / `mini` / `micro`); deep imports
+(`react-native-heroicons/outline/TrashIcon`) keep the web bundle from pulling the whole set.
 
 ### 11.4 Performance budget
 
