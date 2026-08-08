@@ -160,11 +160,15 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
           onKeyPress={handleKeyPress}
           onBlur={deselectNode}
           autoFocus
-          keyboardType="numeric"
           // Custom keypad is the soft-input surface (§8.5); keep the TextInput focused for
-          // caret + hardware keys, but do not raise the OS keyboard on top of ours. Deferred
-          // from P2.6 until P2.8 wired keypad presses into the same edit target.
+          // caret + hardware keys, but do not raise the OS keyboard on top of ours.
+          // `showSoftInputOnFocus={false}` alone is not enough on mobile web: RN-web only
+          // maps it to `virtualkeyboardpolicy="manual"`, which Safari ignores, while
+          // `keyboardType="numeric"` still emits `inputMode="numeric"` and opens the OS
+          // pad. `inputMode="none"` is the HTML/RN signal Safari (and native) respect;
+          // leave `keyboardType` unset so it cannot reintroduce a numeric inputMode.
           showSoftInputOnFocus={false}
+          inputMode="none"
           // Belt and braces alongside the raw-listener workaround in the effect above:
           // react-native-web also defaults a single-line TextInput to blurring on Enter via
           // its own deferred setTimeout, which this app never wants (Enter is fully handled
