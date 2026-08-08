@@ -668,6 +668,8 @@ operators are visually separated from digits.
   map to an explicit side.
 - The history row exposes **undo** and **redo** next to backspace — the same commands as
   `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` (or `Y`).
+- Pressing `=` on a chain selects the new **result** (not the `=` glyph) so the next operator
+  is ready for continuation without an extra tap.
 - **Continuation shortcut (§8.7).** With a result selected, pressing an operator does *not* edit
   the result — it starts a new chain that references it.
 - Tapping empty canvas creates a number node there, in edit mode, and shows the keypad if it
@@ -688,13 +690,20 @@ operators are visually separated from digits.
 
 - Tap selects a node; the selected node is the target for keypad input. Tapping a number node
   additionally opens it for in-place text editing (caret, digits, decimal, backspace) — every
-  other kind is selected but not itself a text field.
+  other kind is selected but not itself a text field. **Focus is always visible:** a white
+  outset ring on the cell marks the keypad target, including read-only results (continuation
+  still needs a selected result, §8.7). The selected node's wrapper stacks above flush chain
+  neighbours so the ring is not painted under the next member. While selected, the inset
+  identity ring (§11.1) is omitted so focus is a single chrome layer; hue still reads from the
+  caption and connectors.
 - `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
   nothing typed) discards it rather than leaving a blank cell on the canvas.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` on values
   (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
+  The group highlight is cleared by the next single-node selection, edit, or deselect (tap
+  another cell, Escape, keypad navigation) — it must not stick after the user has moved on.
 - **`Label` opens an in-place caption editor on the identity source** (§11.1). The write always
   lands on the declaring number or result, so every reference that shares the identity updates
   together; successive keystrokes coalesce into one undo entry (§13).

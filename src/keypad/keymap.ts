@@ -353,8 +353,9 @@ export function dispatchEditorCommand(command: EditorCommand): void {
       }
     } else if (selectedNode) {
       deleteNode(selectedNode.id);
-      useUiStore.getState().setSelectedNode(null);
-      useUiStore.getState().setEditingNode(null);
+      // Prefer deselectNode so a leftover Select-group highlight clears with the
+      // primary selection (same contract as Escape / tap-elsewhere).
+      deselectNode();
     }
     return;
   }
@@ -421,7 +422,15 @@ export function dispatchEditorCommand(command: EditorCommand): void {
 
     case 'equals': {
       if (selectedNode) {
-        selectNode(appendEqualsNode(selectedNode.id));
+        // §8.7: after `=` the natural next action is continuation (operator on the
+        // result). Select the new result when one exists; fall back to `=` only
+        // when the chain did not evaluate (no result member).
+        const equalsId = appendEqualsNode(selectedNode.id);
+        const doc = useDocumentStore.getState().document;
+        const chainId = doc.nodes[equalsId]?.chainId;
+        const chain = chainId ? doc.chains[chainId] : undefined;
+        const resultId = chain?.members.find((id) => doc.nodes[id]?.kind === 'result');
+        selectNode(resultId ?? equalsId);
         return;
       }
       selectNode(addEqualsNode(caretPoint));
