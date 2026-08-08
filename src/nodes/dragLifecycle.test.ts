@@ -90,6 +90,17 @@ describe('resolveSelectionUnits / isMultiUnitSelection', () => {
     });
     expect(units.chainIds).toEqual(['c1']);
     expect(units.freeNodeIds).toEqual(['free']);
+    // One chain + one free node is already multi-unit (Select all path).
+    expect(isMultiUnitSelection(units)).toBe(true);
+  });
+
+  test('a single chain with no free nodes is not multi-unit (Select group)', () => {
+    const units = resolveSelectionUnits(new Set(['a', 'b']), {
+      a: { chainId: 'c1' },
+      b: { chainId: 'c1' },
+    });
+    expect(units.chainIds).toEqual(['c1']);
+    expect(units.freeNodeIds).toEqual([]);
     expect(isMultiUnitSelection(units)).toBe(false);
   });
 
