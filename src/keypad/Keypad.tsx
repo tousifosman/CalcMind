@@ -5,9 +5,13 @@
 // it does not itself create or edit nodes. `onKeyPress` is wired to `keymap.ts`'s
 // `dispatchEditorCommand` (P2.8), the same function the hardware-keyboard listener in
 // `AppShell.tsx` calls, so on-screen and hardware input can't diverge.
+import type { ReactNode } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
+import ArrowUturnLeftIcon from 'react-native-heroicons/outline/ArrowUturnLeftIcon';
+import ArrowUturnRightIcon from 'react-native-heroicons/outline/ArrowUturnRightIcon';
+import ChevronDownIcon from 'react-native-heroicons/outline/ChevronDownIcon';
 import { decimalSeparatorFor } from '../engine/format';
 import { glyphColor, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
@@ -119,7 +123,12 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   return (
     <View style={styles.container} testID="keypad">
       <View style={styles.modeStrip}>
-        <ModeKey label="⌄" onPress={hideKeypad} testID="keypad-mode-dismiss" />
+        <ModeKey
+          label="Dismiss keypad"
+          icon={<ChevronDownIcon size={18} color="#333333" />}
+          onPress={hideKeypad}
+          testID="keypad-mode-dismiss"
+        />
         {/* Documents (P5) and functions/graph (§10.2, §17.2) have no feature behind them
             yet - all three render disabled rather than functional-looking but inert. */}
         <ModeKey label="Documents" disabled testID="keypad-mode-documents" />
@@ -168,14 +177,14 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
 
           <View style={styles.historyRow} testID="keypad-history">
             <Key
-              label="↶"
-              accessibilityLabel="Undo"
+              label="Undo"
+              icon={<ArrowUturnLeftIcon size={22} color="#333333" />}
               onPress={() => press({ region: 'undo' })}
               testID="keypad-undo"
             />
             <Key
-              label="↷"
-              accessibilityLabel="Redo"
+              label="Redo"
+              icon={<ArrowUturnRightIcon size={22} color="#333333" />}
               onPress={() => press({ region: 'redo' })}
               testID="keypad-redo"
             />
@@ -202,8 +211,9 @@ interface KeyProps {
   label: string;
   onPress: () => void;
   testID?: string;
-  /** Spoken name when `label` is a glyph (e.g. undo/redo arrows). */
-  accessibilityLabel?: string;
+  /** When set, rendered instead of the label text; `label` stays the a11y name
+   *  (same pattern as ModeKey's Heroicons slot). */
+  icon?: ReactNode;
 }
 
 // Web only: a plain TouchableOpacity press starts with a mousedown, which blurs whatever
@@ -217,17 +227,17 @@ interface KeyProps {
 // focus with.
 const preventFocusSteal = { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() };
 
-function Key({ label, onPress, testID, accessibilityLabel }: KeyProps) {
+function Key({ label, icon, onPress, testID }: KeyProps) {
   return (
     <TouchableOpacity
       style={styles.key}
       onPress={onPress}
       testID={testID}
-      accessibilityLabel={accessibilityLabel}
+      accessibilityLabel={icon ? label : undefined}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
-      <Text style={styles.neutralKeyLabel}>{label}</Text>
+      {icon ?? <Text style={styles.neutralKeyLabel}>{label}</Text>}
     </TouchableOpacity>
   );
 }
@@ -276,11 +286,14 @@ function EqualsKey({ onPress, testID }: { onPress: () => void; testID?: string }
 
 function ModeKey({
   label,
+  icon,
   onPress,
   disabled,
   testID,
 }: {
   label: string;
+  /** When set, rendered instead of the label text; `label` stays the a11y name. */
+  icon?: ReactNode;
   onPress?: () => void;
   disabled?: boolean;
   testID?: string;
@@ -291,9 +304,12 @@ function ModeKey({
       onPress={onPress}
       disabled={disabled}
       testID={testID}
+      accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
     >
-      <Text style={[styles.modeKeyLabel, disabled && styles.modeKeyLabelDisabled]}>{label}</Text>
+      {icon ?? (
+        <Text style={[styles.modeKeyLabel, disabled && styles.modeKeyLabelDisabled]}>{label}</Text>
+      )}
     </TouchableOpacity>
   );
 }

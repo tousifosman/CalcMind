@@ -134,13 +134,16 @@ describe('Keypad', () => {
       .findAllByType('Text' as never)
       .map((node) => node.children[0]);
     expect(editingLabels).toEqual(['.', '+/-', '()']);
-    // Bottom history row is undo, redo, backspace — left to right.
-    const historyLabels = findByTestID(renderer, 'keypad-history')
-      .findAllByType('Text' as never)
-      .map((node) => node.children[0]);
-    expect(historyLabels).toEqual(['↶', '↷', '⌫']);
-    expect(findByTestID(renderer, 'keypad-undo').props.accessibilityLabel).toBe('Undo');
-    expect(findByTestID(renderer, 'keypad-redo').props.accessibilityLabel).toBe('Redo');
+    // Bottom history row is undo, redo, backspace — left to right. Undo/redo are
+    // Heroicons (arrow-uturn-left / right); only ⌫ still renders a Text glyph.
+    const history = findByTestID(renderer, 'keypad-history');
+    expect(history.findAllByType('Text' as never).map((node) => node.children[0])).toEqual(['⌫']);
+    const undo = findByTestID(renderer, 'keypad-undo');
+    const redo = findByTestID(renderer, 'keypad-redo');
+    expect(undo.props.accessibilityLabel).toBe('Undo');
+    expect(redo.props.accessibilityLabel).toBe('Redo');
+    expect(undo.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
+    expect(redo.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
   });
 });
 
