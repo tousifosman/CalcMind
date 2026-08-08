@@ -2,7 +2,7 @@ import { useDocumentStore } from '../store/documentStore';
 import { useUiStore } from '../store/uiStore';
 import { addNumberNode, addOperatorNode, addParenNode, selectNode, editNumberNode, setNodeRaw, deleteNode, appendEqualsNode } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
-import { commandFromHardwareKey, dispatchEditorCommand } from './keymap';
+import { commandFromHardwareKey, dispatchEditorCommand, resolveParenSide } from './keymap';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
 
@@ -224,6 +224,60 @@ describe('dispatchEditorCommand: completing a full chain by typing (§8.5, P2.8 
     expect(kinds).toEqual(['number', 'operator', 'paren', 'number', 'operator', 'number', 'paren', 'equals', 'result']);
     const result = doc.nodes[chain.members[chain.members.length - 1]];
     expect(result).toMatchObject({ kind: 'result', derived: { display: '14' } });
+  });
+
+  test('on-screen () (no side) opens after an operator and closes after a number', () => {
+    // Same expression as above, but via the merged keypad key that omits `side`.
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'operator', op: '×' });
+    dispatchEditorCommand({ region: 'paren' }); // → open
+    dispatchEditorCommand({ region: 'digit', value: '3' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '4' });
+    dispatchEditorCommand({ region: 'paren' }); // → close
+    dispatchEditorCommand({ region: 'equals' });
+
+    const doc = useDocumentStore.getState().document;
+    const chainIds = Object.keys(doc.chains);
+    expect(chainIds).toHaveLength(1);
+    const chain = doc.chains[chainIds[0]!];
+    const sides = chain!.members
+      .map((id) => doc.nodes[id])
+      .filter((n) => n?.kind === 'paren')
+      .map((n) => (n!.kind === 'paren' ? n.side : null));
+    expect(sides).toEqual(['open', 'close']);
+    const result = doc.nodes[chain!.members[chain!.members.length - 1]!];
+    expect(result).toMatchObject({ kind: 'result', derived: { display: '14' } });
+  });
+});
+
+describe('resolveParenSide (§8.5 smart () key)', () => {
+  test('with nothing selected, opens', () => {
+    expect(resolveParenSide(undefined, {}, {})).toBe('open');
+  });
+
+  test('after a free number (no chain), opens — for n( implicit mul', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '12');
+    const doc = useDocumentStore.getState().document;
+    expect(resolveParenSide(doc.nodes[id], doc.nodes, doc.chains)).toBe('open');
+  });
+
+  test('after a number with unmatched open, closes', () => {
+    dispatchEditorCommand({ region: 'paren', side: 'open' });
+    dispatchEditorCommand({ region: 'digit', value: '3' });
+    const selectedId = useUiStore.getState().selectedNodeId!;
+    const doc = useDocumentStore.getState().document;
+    expect(resolveParenSide(doc.nodes[selectedId], doc.nodes, doc.chains)).toBe('close');
+  });
+
+  test('after an operator, opens even when depth > 0', () => {
+    dispatchEditorCommand({ region: 'paren', side: 'open' });
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    // Selection is the empty placeholder after `+`.
+    const selectedId = useUiStore.getState().selectedNodeId!;
+    const doc = useDocumentStore.getState().document;
+    expect(resolveParenSide(doc.nodes[selectedId], doc.nodes, doc.chains)).toBe('open');
   });
 });
 

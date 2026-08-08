@@ -21,6 +21,7 @@ import {
   editNumberNode,
   deselectNode,
 } from '../store/commands';
+import { isEvaluableRaw } from '../engine/validate';
 import { CalcNode, NodeId, NumberNode, OperatorSymbol, ParenSide } from '../model/types';
 
 export type Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
@@ -30,7 +31,9 @@ export type KeypadKey =
   | { region: 'decimal' }
   | { region: 'sign' }
   | { region: 'backspace' }
-  | { region: 'paren'; side: ParenSide }
+  /** On-screen `()` omits `side`; dispatch picks open/close via {@link resolveParenSide}.
+   *  Hardware `(`/`)` always supply an explicit side. */
+  | { region: 'paren'; side?: ParenSide }
   | { region: 'operator'; op: OperatorSymbol }
   | { region: 'equals' };
 
@@ -114,6 +117,62 @@ export function commandFromHardwareKey(key: string, mods: KeyMods = {}): EditorC
 
 function isStructural(command: EditorCommand): boolean {
   return command.region === 'operator' || command.region === 'paren' || command.region === 'equals';
+}
+
+/**
+ * Which side the on-screen `()` key should insert (§8.5). Prefers `)` when the
+ * chain through the selection has unmatched opens *and* a close is legal there
+ * (after a number / reference / close paren); otherwise `(`. Hardware `(`/`)`
+ * bypass this and keep explicit sides.
+ *
+ * Exported for unit tests — the keypad only reports `{ region: 'paren' }` and
+ * {@link dispatchEditorCommand} is the sole caller in production.
+ */
+export function resolveParenSide(
+  selected: CalcNode | undefined,
+  nodes: Record<NodeId, CalcNode>,
+  chains: Record<string, { members: readonly NodeId[] }>,
+): ParenSide {
+  if (!selected?.chainId) return 'open';
+  const chain = chains[selected.chainId];
+  if (!chain) return 'open';
+
+  const end = chain.members.indexOf(selected.id);
+  if (end === -1) return 'open';
+
+  let depth = 0;
+  let expectingOperand = true;
+  for (let i = 0; i <= end; i++) {
+    const node = nodes[chain.members[i]!];
+    if (!node) continue;
+    if (node.kind === 'equals' || node.kind === 'result') break;
+    if (node.kind === 'paren' && node.side === 'open') {
+      // Implicit mul before `(` (§10.2) — open is always legal; resets to operand.
+      depth += 1;
+      expectingOperand = true;
+      continue;
+    }
+    if (node.kind === 'paren' && node.side === 'close') {
+      depth -= 1;
+      expectingOperand = false;
+      continue;
+    }
+    if (node.kind === 'operator') {
+      expectingOperand = true;
+      continue;
+    }
+    // number | reference. Mid-typing stubs ("", "-", ".") after an operator are
+    // the empty placeholder `appendOperatorAndNumber` leaves selected — they are
+    // not a completed operand, so `()` must still open (e.g. `(1 +` then `()`).
+    if (node.kind === 'number' && !isEvaluableRaw(node.raw)) {
+      continue;
+    }
+    expectingOperand = false;
+  }
+
+  // Prefer closing when there is something to close and a close is grammatical.
+  if (depth > 0 && !expectingOperand) return 'close';
+  return 'open';
 }
 
 function focusNode(node: CalcNode): void {
@@ -251,21 +310,32 @@ export function dispatchEditorCommand(command: EditorCommand): void {
   // placeholder was sitting in, not fall through and start a disconnected one anchored
   // back at the last tap point. Verified live: without this, `2 × (3 + 4) =` silently
   // evaluated only `(3 + 4)`, dropping `2 ×` into an orphaned Incomplete chain.
+  //
+  // The on-screen `()` key omits `side`; resolve it against the placeholder's chain
+  // *before* discarding so the open-after-operator case still wins.
   if (isStructural(command) && editingNumber && editingNumber.raw === '') {
-    if (command.region === 'paren' && command.side === 'open' && editingNumber.chainId) {
-      const chainId = editingNumber.chainId;
-      deleteNode(editingNumber.id);
-      const chain = useDocumentStore.getState().document.chains[chainId];
-      // `appendOperatorAndNumber` always appends the operator and this placeholder together
-      // onto a chain that had >= 1 member already (or creates one with exactly the anchor),
-      // so deleting just the placeholder leaves >= 2 members behind - never the 1-member
-      // state that dissolves a chain. Written explicitly rather than relying on that
-      // invariant never changing: if it ever does and the chain is gone, fall through to
-      // the ordinary discard-and-deselect path below instead of risking a crash.
-      const anchorId = chain && chain.members.length > 0 ? chain.members[chain.members.length - 1] : undefined;
-      if (anchorId) {
-        selectNode(appendParenNode(anchorId, 'open'));
-        return;
+    if (command.region === 'paren' && editingNumber.chainId) {
+      const doc = useDocumentStore.getState().document;
+      const side =
+        command.side ?? resolveParenSide(editingNumber, doc.nodes, doc.chains);
+      if (side === 'open') {
+        const chainId = editingNumber.chainId;
+        deleteNode(editingNumber.id);
+        const chain = useDocumentStore.getState().document.chains[chainId];
+        // `appendOperatorAndNumber` always appends the operator and this placeholder together
+        // onto a chain that had >= 1 member already (or creates one with exactly the anchor),
+        // so deleting just the placeholder leaves >= 2 members behind - never the 1-member
+        // state that dissolves a chain. Written explicitly rather than relying on that
+        // invariant never changing: if it ever does and the chain is gone, fall through to
+        // the ordinary discard-and-deselect path below instead of risking a crash.
+        const anchorId =
+          chain && chain.members.length > 0
+            ? chain.members[chain.members.length - 1]
+            : undefined;
+        if (anchorId) {
+          selectNode(appendParenNode(anchorId, 'open'));
+          return;
+        }
       }
     }
     deselectNode();
@@ -328,11 +398,14 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     }
 
     case 'paren': {
+      const doc = useDocumentStore.getState().document;
+      const side =
+        command.side ?? resolveParenSide(selectedNode, doc.nodes, doc.chains);
       if (selectedNode) {
-        selectNode(appendParenNode(selectedNode.id, command.side));
+        selectNode(appendParenNode(selectedNode.id, side));
         return;
       }
-      selectNode(addParenNode(caretPoint, command.side));
+      selectNode(addParenNode(caretPoint, side));
       return;
     }
 
