@@ -136,12 +136,16 @@ describe('Keypad', () => {
     expect(editingLabels).toEqual(['.', '+/-', '()']);
     // Bottom history row is undo, redo, backspace — left to right. Undo/redo are
     // Heroicons (arrow-uturn-left / right); only ⌫ still renders a Text glyph.
+    // `findByProps({ testID })` hits the Key composite (label = a11y name); the
+    // spoken accessibilityLabel lives on the inner Touchable, same as ModeKey.
     const history = findByTestID(renderer, 'keypad-history');
     expect(history.findAllByType('Text' as never).map((node) => node.children[0])).toEqual(['⌫']);
     const undo = findByTestID(renderer, 'keypad-undo');
     const redo = findByTestID(renderer, 'keypad-redo');
-    expect(undo.props.accessibilityLabel).toBe('Undo');
-    expect(redo.props.accessibilityLabel).toBe('Redo');
+    expect(undo.props.label).toBe('Undo');
+    expect(redo.props.label).toBe('Redo');
+    expect(undo.props.icon).toBeTruthy();
+    expect(redo.props.icon).toBeTruthy();
     expect(undo.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
     expect(redo.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
   });
