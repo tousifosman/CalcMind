@@ -166,8 +166,10 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           </View>
 
           <View style={styles.groupingRow} testID="keypad-grouping">
-            <Key label="(" onPress={() => press({ region: 'paren', side: 'open' })} testID="keypad-paren-open" />
-            <Key label=")" onPress={() => press({ region: 'paren', side: 'close' })} testID="keypad-paren-close" />
+            {/* Single `()` key (§8.5): occupies the same row width the old `(` / `)`
+                pair filled. Side is resolved in `dispatchEditorCommand` from chain
+                depth so one tap opens or closes as appropriate. */}
+            <Key label="()" onPress={() => press({ region: 'paren' })} testID="keypad-paren" />
           </View>
         </View>
 
