@@ -279,6 +279,7 @@ are Tydlig Software AB's and the publication's.
 | Native filesystem | **@dr.pogodin/react-native-fs** | MIT | Maintained fork of `react-native-fs`; the original is unmaintained. |
 | Web storage | **idb-keyval** | MIT | Thin IndexedDB wrapper; localStorage is too small and synchronous. |
 | SVG | **react-native-svg** | MIT | Load-bearing for connector beziers (P6.6) and the result dot texture (P7.3) (§11.3). |
+| Icons | **react-native-heroicons** ([Heroicons](https://github.com/tailwindlabs/heroicons)) | MIT | Tailwind Labs' SVG set, packaged for `react-native-svg` so the same import works on native and web. Prefer `react-native-heroicons/{outline,solid,mini,micro}` over `@heroicons/react`, which emits DOM `<svg>` and breaks the native target. |
 | Tests | Jest (already configured) + **fast-check** | MIT | Table-driven engine tests; property tests for parser/formatter round-trips. |
 
 No dependency here bills by usage, gates features behind a plan, or requires an account.
@@ -989,6 +990,11 @@ mid-drag chrome. Mid-drag it reads `uiStore.dragSnap` (including `movingChainId`
 endpoints track the finger before the store commits on release — same ephemeral feed
 `NodeLayer` uses for the insertion gap. The dependency has been load-bearing since P6.6; the
 result texture reuses it.
+
+Chrome icons (toolbar, mode strip, dialogs) use **Heroicons** via `react-native-heroicons`,
+which renders through the same `react-native-svg` dependency. Import from a style subpath
+(`outline` / `solid` / `mini` / `micro`); deep imports
+(`react-native-heroicons/outline/TrashIcon`) keep the web bundle from pulling the whole set.
 
 ### 11.4 Performance budget
 
