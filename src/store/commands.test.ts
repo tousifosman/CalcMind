@@ -605,6 +605,22 @@ describe('selectAll', () => {
     // discardIfAbandoned may not delete anything here; only the create was recorded.
     expect(useDocumentStore.getState().undoStack).toHaveLength(before);
   });
+
+  test('selectNode / deselectNode clear a prior Select-all highlight', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addNumberNode({ x: 40, y: 0 }, '2');
+    selectAll();
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([a, b]));
+
+    selectNode(a);
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBe(a);
+
+    selectAll();
+    deselectNode();
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
 });
 
 describe('P3.4 chain mutations: prepend / append / insert / newChain / detach', () => {
