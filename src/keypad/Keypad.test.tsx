@@ -26,7 +26,7 @@ describe('Keypad', () => {
     expect(renderer.root.findAllByProps({ testID: 'keypad' })).toHaveLength(0);
   });
 
-  test('renders every region from §8.5: digits, number editing, grouping, operators, mode strip', () => {
+  test('renders every region from §8.5: digits, number editing, history, operators, mode strip', () => {
     let renderer!: ReactTestRenderer;
     act(() => {
       renderer = create(<Keypad />);
@@ -37,10 +37,13 @@ describe('Keypad', () => {
     }
     expect(findByTestID(renderer, 'keypad-decimal')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-sign')).toBeTruthy();
-    expect(findByTestID(renderer, 'keypad-backspace')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-paren')).toBeTruthy();
     expect(renderer.root.findAllByProps({ testID: 'keypad-paren-open' })).toHaveLength(0);
     expect(renderer.root.findAllByProps({ testID: 'keypad-paren-close' })).toHaveLength(0);
+    expect(findByTestID(renderer, 'keypad-history')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-undo')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-redo')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-backspace')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-op-divide')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-op-multiply')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-op-subtract')).toBeTruthy();
@@ -109,6 +112,8 @@ describe('Keypad', () => {
       findByTestID(renderer, 'keypad-paren').props.onPress();
       findByTestID(renderer, 'keypad-backspace').props.onPress();
       findByTestID(renderer, 'keypad-sign').props.onPress();
+      findByTestID(renderer, 'keypad-undo').props.onPress();
+      findByTestID(renderer, 'keypad-redo').props.onPress();
     });
 
     expect(presses).toEqual([
@@ -118,10 +123,35 @@ describe('Keypad', () => {
       { region: 'paren' },
       { region: 'backspace' },
       { region: 'sign' },
+      { region: 'undo' },
+      { region: 'redo' },
     ]);
 
     const parenLabel = findByTestID(renderer, 'keypad-paren').findByType('Text' as never);
     expect(parenLabel.children).toEqual(['()']);
+    // `()` shares the number-editing row with decimal / +/- (same Key cell size).
+    const editingLabels = findByTestID(renderer, 'keypad-number-editing')
+      .findAllByType('Text' as never)
+      .map((node) => node.children[0]);
+    expect(editingLabels).toEqual(['.', '+/-', '()']);
+    // Bottom history row is undo, redo, backspace — left to right, all Heroicons
+    // (arrow-uturn-left / right, backspace). No Text glyphs in this row.
+    // `findByProps({ testID })` hits the Key composite (label = a11y name); the
+    // spoken accessibilityLabel lives on the inner Touchable, same as ModeKey.
+    const history = findByTestID(renderer, 'keypad-history');
+    expect(history.findAllByType('Text' as never)).toHaveLength(0);
+    const undo = findByTestID(renderer, 'keypad-undo');
+    const redo = findByTestID(renderer, 'keypad-redo');
+    const backspace = findByTestID(renderer, 'keypad-backspace');
+    expect(undo.props.label).toBe('Undo');
+    expect(redo.props.label).toBe('Redo');
+    expect(backspace.props.label).toBe('Backspace');
+    expect(undo.props.icon).toBeTruthy();
+    expect(redo.props.icon).toBeTruthy();
+    expect(backspace.props.icon).toBeTruthy();
+    expect(undo.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
+    expect(redo.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
+    expect(backspace.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
   });
 });
 
