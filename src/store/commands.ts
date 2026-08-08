@@ -916,6 +916,29 @@ export function moveChain(chainId: ChainId, anchor: Vec2): void {
   });
 }
 
+/** Translate every unit in a multi-node selection by the same delta (§8.6 Select all).
+ *  Chains move via `anchor` + reflow; free nodes via `position`. One undo entry.
+ *  No-op when `delta` is zero. */
+export function moveSelection(
+  units: { chainIds: readonly ChainId[]; freeNodeIds: readonly NodeId[] },
+  delta: Vec2,
+): void {
+  if (delta.x === 0 && delta.y === 0) return;
+  useDocumentStore.getState().applyCommand((draft) => {
+    for (const chainId of units.chainIds) {
+      const chain = draft.chains[chainId];
+      if (!chain) continue;
+      chain.anchor = { x: chain.anchor.x + delta.x, y: chain.anchor.y + delta.y };
+      reflowChain(draft, chainId);
+    }
+    for (const id of units.freeNodeIds) {
+      const node = draft.nodes[id];
+      if (!node || node.chainId !== null) continue;
+      node.position = { x: node.position.x + delta.x, y: node.position.y + delta.y };
+    }
+  });
+}
+
 /** Selects every node in the same chain as `nodeId` (§8.6, P2.9). Nodes that are
  *  not chain members — i.e. free nodes with `chainId === null` — count as a group
  *  of one. This is purely ephemeral UI state; the document is not changed. */

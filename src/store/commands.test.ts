@@ -28,6 +28,7 @@ import {
   commitSnapOutcome,
   moveFreeNode,
   moveChain,
+  moveSelection,
   unlinkFromParent,
   unlinkReference,
   repointReference,
@@ -1090,6 +1091,47 @@ describe('moveChain', () => {
     moveChain('ghost', { x: 1, y: 2 });
     moveChain('c1', { x: 10, y: 20 });
     expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+  });
+});
+
+describe('moveSelection', () => {
+  test('translates every listed chain and free node in one undo entry', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const op = addOperatorNode({ x: 0, y: 0 }, '+');
+    const b = addNumberNode({ x: 0, y: 0 }, '2');
+    const free = addNumberNode({ x: 50, y: 60 }, '9');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.c1 = { id: 'c1', members: [a, op, b], anchor: { x: 100, y: 40 } };
+      draft.nodes[a].chainId = 'c1';
+      draft.nodes[op].chainId = 'c1';
+      draft.nodes[b].chainId = 'c1';
+      const positions = layoutChain(draft.chains.c1, draft.nodes, 'en-US');
+      for (const id of [a, op, b]) {
+        const pos = positions[id];
+        if (pos) draft.nodes[id].position = pos;
+      }
+    });
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    moveSelection({ chainIds: ['c1'], freeNodeIds: [free] }, { x: 30, y: -10 });
+
+    const { document, undoStack } = useDocumentStore.getState();
+    expect(document.chains.c1.anchor).toEqual({ x: 130, y: 30 });
+    expect(document.nodes[a].position).toEqual({ x: 130, y: 30 });
+    expect(document.nodes[free].position).toEqual({ x: 80, y: 50 });
+    expect(undoStack).toHaveLength(1);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.chains.c1.anchor).toEqual({ x: 100, y: 40 });
+    expect(useDocumentStore.getState().document.nodes[free].position).toEqual({ x: 50, y: 60 });
+  });
+
+  test('zero delta is a no-op', () => {
+    const free = addNumberNode({ x: 10, y: 20 }, '1');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    moveSelection({ chainIds: [], freeNodeIds: [free] }, { x: 0, y: 0 });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+    expect(useDocumentStore.getState().document.nodes[free].position).toEqual({ x: 10, y: 20 });
   });
 });
 

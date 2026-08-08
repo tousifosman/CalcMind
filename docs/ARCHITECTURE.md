@@ -692,7 +692,10 @@ operators are visually separated from digits.
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`, `Select all`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
 - `Select all` selects every node on the canvas (same ephemeral group-selection set as
-  `Select group`). Disabled when the canvas is empty.
+  `Select group`). Disabled when the canvas is empty. Dragging any selected node then
+  translates the whole selection — every selected chain (via its anchor) and every
+  selected free node — by the same delta, in one undo entry. A single-chain
+  `Select group` still uses the ordinary MovingChain path.
 - **`Label` opens an in-place caption editor on the identity source** (§11.1). The write always
   lands on the declaring number or result, so every reference that shares the identity updates
   together; successive keystrokes coalesce into one undo entry (§13).

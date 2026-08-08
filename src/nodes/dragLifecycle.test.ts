@@ -3,7 +3,9 @@ import {
   CHAIN_MOVE_HOLD_MS,
   crossedDetachDistance,
   decideDragRelease,
+  isMultiUnitSelection,
   resolveNodeDragMode,
+  resolveSelectionUnits,
   snapProbeChainId,
   worldDistance,
 } from './dragLifecycle';
@@ -75,6 +77,38 @@ describe('resolveNodeDragMode', () => {
         longPressMovesChain: false,
       }),
     ).toBe('detachMember');
+  });
+});
+
+describe('resolveSelectionUnits / isMultiUnitSelection', () => {
+  test('collapses selected members into distinct chains and free nodes', () => {
+    const units = resolveSelectionUnits(new Set(['a', 'b', 'free', 'ghost']), {
+      a: { chainId: 'c1' },
+      b: { chainId: 'c1' },
+      c: { chainId: 'c2' },
+      free: { chainId: null },
+    });
+    expect(units.chainIds).toEqual(['c1']);
+    expect(units.freeNodeIds).toEqual(['free']);
+    expect(isMultiUnitSelection(units)).toBe(false);
+  });
+
+  test('Select all across two chains is multi-unit', () => {
+    const units = resolveSelectionUnits(new Set(['a', 'b']), {
+      a: { chainId: 'c1' },
+      b: { chainId: 'c2' },
+    });
+    expect(isMultiUnitSelection(units)).toBe(true);
+  });
+
+  test('two free nodes are multi-unit', () => {
+    const units = resolveSelectionUnits(new Set(['a', 'b']), {
+      a: { chainId: null },
+      b: { chainId: null },
+    });
+    expect(units.chainIds).toEqual([]);
+    expect(units.freeNodeIds).toEqual(['a', 'b']);
+    expect(isMultiUnitSelection(units)).toBe(true);
   });
 });
 
