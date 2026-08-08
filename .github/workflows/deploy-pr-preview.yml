@@ -12,7 +12,12 @@ on:
       pr_number:
         description: 'Pull request number to preview'
         required: true
-        type: number
+        # string, not number: workflow_dispatch's `number` type is a float
+        # under the hood, and GitHub serializes it into expressions as
+        # "133.0" rather than "133" — which broke refs/pull/<n>/head lookups.
+        # pr_number is only ever used as text here (ref paths, directory
+        # names, comment strings), so there's no reason to risk that.
+        type: string
       action:
         description: 'Deploy the preview, or take down a previously deployed one'
         required: false
