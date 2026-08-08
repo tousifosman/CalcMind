@@ -1063,6 +1063,7 @@ export function editNodeLabel(nodeId: NodeId): void {
     finishEditingLabel();
   }
   discardIfAbandoned(sourceId);
+  useUiStore.getState().clearGroupSelected();
   useUiStore.getState().setEditingNode(null);
   useUiStore.getState().setSelectedNode(sourceId);
   useUiStore.getState().setEditingLabelNode(sourceId);

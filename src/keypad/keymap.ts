@@ -352,8 +352,9 @@ export function dispatchEditorCommand(command: EditorCommand): void {
       }
     } else if (selectedNode) {
       deleteNode(selectedNode.id);
-      useUiStore.getState().setSelectedNode(null);
-      useUiStore.getState().setEditingNode(null);
+      // Prefer deselectNode so a leftover Select-group highlight clears with the
+      // primary selection (same contract as Escape / tap-elsewhere).
+      deselectNode();
     }
     return;
   }
