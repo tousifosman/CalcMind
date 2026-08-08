@@ -146,7 +146,7 @@ describe('swipe-to-clear confirmation (P2.10, decision #15)', () => {
     expect(renderer.root.findAllByProps({ testID: 'keypad-clear-confirm' })).toHaveLength(0);
   });
 
-  test('the confirmation dialog appears once requested', () => {
+  test('the confirmation dialog appears once requested and hides the keypad keys', () => {
     let renderer!: ReactTestRenderer;
     act(() => {
       renderer = create(<Keypad />);
@@ -157,6 +157,26 @@ describe('swipe-to-clear confirmation (P2.10, decision #15)', () => {
     });
 
     expect(findByTestID(renderer, 'keypad-clear-confirm')).toBeTruthy();
+    expect(renderer.root.findAllByProps({ testID: 'keypad-digits' })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ testID: 'keypad-mode-clear-all' })).toHaveLength(0);
+  });
+
+  test('cancelling the confirmation restores the keypad keys', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    act(() => {
+      useUiStore.getState().requestClearConfirm();
+    });
+    act(() => {
+      findByTestID(renderer, 'keypad-clear-confirm-cancel').props.onPress();
+    });
+
+    expect(renderer.root.findAllByProps({ testID: 'keypad-clear-confirm' })).toHaveLength(0);
+    expect(findByTestID(renderer, 'keypad-digits')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-mode-clear-all')).toBeTruthy();
   });
 
   test('confirming clears every node in one undo entry and closes the dialog', () => {

@@ -287,6 +287,8 @@ parity with the reference app, but it is too easy to miss.
 - [x] Only confirming clears; cancel leaves the document byte-identical (decision #15).
 - [x] Clearing is still a single undo entry via `clearDocument` (§13) — no second command path.
 - [x] Button is disabled when the canvas is already empty.
+- [x] While the confirmation is visible the keypad chrome (mode strip + keys) is hidden; Cancel or
+      Clear restores it.
 - [x] Verified live: press Clear all → confirm → canvas empty; undo restores.
 
 ### Phase exit check — P7

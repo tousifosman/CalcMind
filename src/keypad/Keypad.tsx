@@ -88,6 +88,34 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     }
   });
 
+  // While the wipe confirm is up, hide the keypad chrome (mode strip + keys) so
+  // the dialog is the only bottom UI — keys would only distract from Cancel/Clear.
+  if (clearConfirmVisible) {
+    return (
+      <View style={styles.container} testID="keypad">
+        <View style={styles.confirmOverlay} testID="keypad-clear-confirm">
+          <Text style={styles.confirmMessage}>Clear the whole canvas?</Text>
+          <View style={styles.confirmActions}>
+            <TouchableOpacity
+              style={styles.confirmCancel}
+              onPress={dismissClearConfirm}
+              testID="keypad-clear-confirm-cancel"
+            >
+              <Text style={styles.confirmCancelLabel}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.confirmClear}
+              onPress={confirmClear}
+              testID="keypad-clear-confirm-clear"
+            >
+              <Text style={styles.confirmClearLabel}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container} testID="keypad">
       <View style={styles.modeStrip}>
@@ -151,28 +179,6 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           <EqualsKey onPress={() => press({ region: 'equals' })} testID="keypad-equals" />
         </View>
       </View>
-
-      {clearConfirmVisible && (
-        <View style={styles.confirmOverlay} testID="keypad-clear-confirm">
-          <Text style={styles.confirmMessage}>Clear the whole canvas?</Text>
-          <View style={styles.confirmActions}>
-            <TouchableOpacity
-              style={styles.confirmCancel}
-              onPress={dismissClearConfirm}
-              testID="keypad-clear-confirm-cancel"
-            >
-              <Text style={styles.confirmCancelLabel}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.confirmClear}
-              onPress={confirmClear}
-              testID="keypad-clear-confirm-clear"
-            >
-              <Text style={styles.confirmClearLabel}>Clear</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
     </View>
   );
 }
@@ -373,7 +379,6 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   confirmOverlay: {
-    marginTop: 10,
     padding: 12,
     borderRadius: 8,
     backgroundColor: '#FFFFFF',

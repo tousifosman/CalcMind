@@ -673,6 +673,8 @@ operators are visually separated from digits.
   wiping a canvas on a stray swipe is not recoverable enough to be worth the speed, even with undo.
   The mode strip also exposes a **Clear all** button that raises the same confirmation (decision
   #15) — the gesture stays for parity with the reference app; the button is the discoverable path.
+  While that confirm is visible the keypad chrome (mode strip and keys) is hidden so Cancel/Clear
+  are the only bottom UI; dismissing or confirming restores the keypad.
 
 ### 8.6 Selection and context menus
 
