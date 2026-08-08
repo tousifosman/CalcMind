@@ -664,6 +664,8 @@ operators are visually separated from digits.
   side fits the chain through the selection: `)` when there is an unmatched open and a close is
   grammatical (after a number, reference, or close paren); otherwise `(`. Hardware `(`/`)` still
   map to an explicit side.
+- Pressing `=` on a chain selects the new **result** (not the `=` glyph) so the next operator
+  is ready for continuation without an extra tap.
 - **Continuation shortcut (§8.7).** With a result selected, pressing an operator does *not* edit
   the result — it starts a new chain that references it.
 - Tapping empty canvas creates a number node there, in edit mode, and shows the keypad if it

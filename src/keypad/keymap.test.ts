@@ -175,6 +175,9 @@ describe('dispatchEditorCommand: completing a full chain by typing (§8.5, P2.8 
       sourceChainId: chain.id,
       derived: { display: '46' },
     });
+    // Focus lands on the result so the next operator can continue (§8.7) without
+    // an extra tap on the read-only cell.
+    expect(useUiStore.getState().selectedNodeId).toBe(chain.members[4]);
   });
 
   test('an operator on a selected symbol node (not a number) still continues the chain', () => {
@@ -292,7 +295,8 @@ describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () =
     const afterEquals = useDocumentStore.getState().document;
     const result = Object.values(afterEquals.nodes).find((n) => n.kind === 'result');
     expect(result).toBeDefined();
-    selectNode(result!.id);
+    // `=` already focused the result — no extra selectNode before continuation.
+    expect(useUiStore.getState().selectedNodeId).toBe(result!.id);
 
     dispatchEditorCommand({ region: 'operator', op: '×' });
 
