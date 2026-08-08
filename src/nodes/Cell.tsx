@@ -133,7 +133,11 @@ export function Cell({
         ]}
       >
         {bandBackground}
-        {identityHue ? (
+        {/* Identity ring is inset; while selected the outset focus ring already
+         *  marks the cell, so skip the inner hue ring — double chrome reads as a
+         *  second "focus" border (especially the blue first palette swatch).
+         *  Hue still shows via caption colour and connectors (§11.1). */}
+        {identityHue && !selected ? (
           <View
             pointerEvents="none"
             testID={testID ? `${testID}-identity-ring` : undefined}

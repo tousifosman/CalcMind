@@ -1,10 +1,16 @@
 import React from 'react';
 import { act } from 'react-test-renderer';
+import { NumberNode } from './NumberNode';
 import { OperatorNode } from './OperatorNode';
 import { ResultNode } from './ResultNode';
 import { useDocumentStore } from '../store/documentStore';
 import { useUiStore } from '../store/uiStore';
-import { addOperatorNode, selectNode, selectGroup } from '../store/commands';
+import {
+  addNumberNode,
+  addOperatorNode,
+  selectNode,
+  selectGroup,
+} from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
 import { selectionFocusColor } from '../ui/tokens';
 import { SELECTED_NODE_Z_INDEX } from './useNodeDrag';
@@ -79,6 +85,25 @@ describe('selection focus ring (P7.2)', () => {
     ).toEqual(
       expect.arrayContaining([expect.objectContaining({ borderColor: selectionFocusColor })]),
     );
+  });
+
+  test('selection hides the inset identity ring — outer focus ring alone is enough', () => {
+    // Label grants identity (§11.1) without needing a reference graph.
+    const a = addNumberNode({ x: 0, y: 0 }, '32');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.nodes[a]!.label = 'n';
+    });
+
+    const renderer = renderNode(<NumberNode id={a} />);
+    expect(findHostByTestID(renderer.root, `number-node-${a}-identity-ring`)).toBeTruthy();
+
+    act(() => {
+      selectNode(a);
+    });
+    expect(findHostByTestID(renderer.root, `number-node-${a}-selection-focus`)).toBeTruthy();
+    expect(
+      renderer.root.findAllByProps({ testID: `number-node-${a}-identity-ring` }),
+    ).toHaveLength(0);
   });
 
   test('group selection also shows the focus ring on each member', () => {

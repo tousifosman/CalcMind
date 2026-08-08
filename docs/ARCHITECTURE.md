@@ -689,7 +689,9 @@ operators are visually separated from digits.
   other kind is selected but not itself a text field. **Focus is always visible:** a white
   outset ring on the cell marks the keypad target, including read-only results (continuation
   still needs a selected result, §8.7). The selected node's wrapper stacks above flush chain
-  neighbours so the ring is not painted under the next member.
+  neighbours so the ring is not painted under the next member. While selected, the inset
+  identity ring (§11.1) is omitted so focus is a single chrome layer; hue still reads from the
+  caption and connectors.
 - `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
   nothing typed) discards it rather than leaving a blank cell on the canvas.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` on values
