@@ -375,7 +375,7 @@ describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () =
     dispatchEditorCommand({ region: 'equals' });
 
     const result = Object.values(useDocumentStore.getState().document.nodes).find((n) => n.kind === 'result')!;
-    selectNode(result.id);
+    expect(useUiStore.getState().selectedNodeId).toBe(result.id);
     dispatchEditorCommand({ region: 'operator', op: '×' });
     dispatchEditorCommand({ region: 'digit', value: '2' });
     dispatchEditorCommand({ region: 'equals' });
