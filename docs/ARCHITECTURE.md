@@ -656,7 +656,7 @@ operators are visually separated from digits.
 | Number editing | decimal separator (locale glyph, inserts canonical `.`), `+/-`, backspace |
 | Grouping | `(` `)` |
 | Operators (accent column) | `÷ × − + =` |
-| Mode strip | dismiss keypad, documents, functions *(later)*, graph *(later)* |
+| Mode strip | dismiss keypad, documents, functions *(later)*, graph *(later)*, **Clear all** |
 
 - Keys act on the **selected node** if there is one, otherwise they create a new node at the
   caret/last-tap point.
@@ -671,6 +671,10 @@ operators are visually separated from digits.
   (↑/↓), `_` / `F9` toggle sign, and `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` (or `Y`) undo/redo.
 - **Swipe across backspace clears the document** (Tydlig's gesture). Ours requires a confirm —
   wiping a canvas on a stray swipe is not recoverable enough to be worth the speed, even with undo.
+  The mode strip also exposes a **Clear all** button that raises the same confirmation (decision
+  #15) — the gesture stays for parity with the reference app; the button is the discoverable path.
+  While that confirm is visible the keypad chrome (mode strip and keys) is hidden so Cancel/Clear
+  are the only bottom UI; dismissing or confirming restores the keypad.
 
 ### 8.6 Selection and context menus
 
@@ -1213,7 +1217,7 @@ it unclear which parts were claims about the present and which were intentions.
 | 12 | Identity hues derived, never persisted | Deterministic from traversal order, so stable across loads without occupying the schema (§11.1) | Users want to pin a specific colour to a value |
 | 13 | All connectors shown, not just selected | Tydlig hides them and the review names that as confusing (§11.1) | Density testing shows it is too noisy — then fade, don't hide |
 | 14 | Always-on pills | Taken from the supplied reference; makes structure permanently legible | The canvas reads as too busy with real content |
-| 15 | Swipe-to-clear requires confirmation | Tydlig's bare swipe wipes a document; too destructive for one stray gesture even with undo (§8.5) | Never |
+| 15 | Swipe-to-clear / Clear all require confirmation | Tydlig's bare swipe wipes a document; too destructive for one stray gesture even with undo. The mode-strip Clear all button shares the same confirm (§8.5) | Never |
 | 16 | Typing builds chains directly, not through P3's snapping | Typing always knows exactly which chain to extend (whichever the selected node belongs to), so it appends deterministically (`store/commands.ts`'s `appendMembersToChain`) instead of running §8.2-8.4's geometric candidate search, which exists to disambiguate a *dragged* node's several nearby neighbours (P2.8) | P3's chain layout pass changes how `Chain.anchor`/positions are derived and this stops matching it |
 | 17 | Plain drag detaches; long-press-then-drag moves chain | Detach/rearrange is the frequent edit and must not require a dwell; lifting a whole expression is deliberate. Opposite mapping tried interactively (P3.7); both work, this one won (§8.3, §17.1) | Real-device use shows accidental detaches dominate over accidental chain moves |
 

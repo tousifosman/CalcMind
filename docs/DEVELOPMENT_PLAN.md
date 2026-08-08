@@ -77,7 +77,7 @@ flowchart LR
 | ~~**P5**~~ | ~~Persistence~~ | — | **Done** — 8/8, phase exit check verified live |
 | ~~**P6**~~ | ~~Linking~~ | — | **Done** — 8/8, phase exit check verified live |
 | ~~**P6b**~~ | ~~Labels + slider~~ | — | **Done** — 4/4, phase exit check verified live |
-| **P7** | Polish | 7 | In progress — P7.1–P7.3, P7.6 done; 3/7 remaining |
+| **P7** | Polish | 8 | In progress — P7.1–P7.3, P7.6, P7.8 done; 3/8 remaining |
 
 Sequencing notes, carried over from §15:
 
@@ -137,6 +137,7 @@ flowchart LR
     P75["P7.5<br/>Screen-reader support<br/>#121"]
     P76["P7.6<br/>Spatial hash<br/>#122"]
     P77["P7.7<br/>Device performance<br/>#123"]
+    P78["P7.8<br/>Clear all button"]
     EXIT(["Phase exit check<br/>#124"])
 
     P5EXIT --> P71
@@ -149,6 +150,7 @@ flowchart LR
     P32 --> P76
     P5EXIT --> P77
     P6bEXIT --> P77
+    P210["P2.10<br/>Swipe-to-clear<br/>#18"] --> P78
 
     P71 --> EXIT
     P72 --> EXIT
@@ -157,6 +159,7 @@ flowchart LR
     P75 --> EXIT
     P76 --> EXIT
     P77 --> EXIT
+    P78 --> EXIT
 
     style P5EXIT fill:#22A75B,color:#fff
     style P6bEXIT fill:#22A75B,color:#fff
@@ -164,6 +167,7 @@ flowchart LR
     style P32 fill:#22A75B,color:#fff
     style P65 fill:#22A75B,color:#fff
     style P66 fill:#22A75B,color:#fff
+    style P210 fill:#22A75B,color:#fff
     style P71 fill:#22A75B,color:#fff
     style P72 fill:#22A75B,color:#fff
     style P73 fill:#22A75B,color:#fff
@@ -171,6 +175,7 @@ flowchart LR
     style P75 fill:#F0A020,color:#fff
     style P76 fill:#22A75B,color:#fff
     style P77 fill:#F0A020,color:#fff
+    style P78 fill:#22A75B,color:#fff
     style EXIT fill:#7030A0,color:#fff
 ```
 
@@ -178,8 +183,8 @@ Green = done, amber = ready to start, grey = blocked on a dependency, purple = t
 gate. `P7.1`, `P7.4`, and `P7.7` carry no task-level dependency of their own — the phase text
 above just says "gated on P5 + P6b" — but the plan sequences them behind both phases' own exit
 checks rather than jumping the queue the moment each task's box would otherwise look open, shown
-here as gates from P5's and P6b's tracking issues. P7.1–P7.3 and P7.6 are done; P7.4, P7.5, and
-P7.7 remain. Kept current by hand alongside the acceptance-criteria boxes below — if a
+here as gates from P5's and P6b's tracking issues. P7.1–P7.3, P7.6, and P7.8 are done; P7.4,
+P7.5, and P7.7 remain. Kept current by hand alongside the acceptance-criteria boxes below — if a
 task's status here disagrees with its boxes, the boxes win and this diagram is stale.
 
 ### P7.1 — Undo/redo audit
@@ -270,11 +275,27 @@ survived.
 - [ ] Numbers recorded in the journal. If the budget is missed, that is a finding and a revision,
       not a silent adjustment to the target.
 
+### P7.8 — Clear all button
+
+**Objective.** A discoverable Clear all control — swipe-across-backspace (P2.10) stays for
+parity with the reference app, but it is too easy to miss.
+**Architecture.** §8.5 (mode strip + swipe-to-clear), decision #15 (confirm before wipe).
+**Touches.** `src/keypad/Keypad.tsx`, tests.
+**Depends on.** P2.10.
+
+- [x] Mode strip exposes a **Clear all** button that raises the same confirmation as swipe-to-clear.
+- [x] Only confirming clears; cancel leaves the document byte-identical (decision #15).
+- [x] Clearing is still a single undo entry via `clearDocument` (§13) — no second command path.
+- [x] Button is disabled when the canvas is already empty.
+- [x] While the confirmation is visible the keypad chrome (mode strip + keys) is hidden; Cancel or
+      Clear restores it.
+- [x] Verified live: press Clear all → confirm → canvas empty; undo restores.
+
 ### Phase exit check — P7
 
 > Undo/redo across all commands with edit coalescing; full keyboard support; result dot texture;
 > light/dark theme; identity palette checked for deuteranopia/protanopia; screen-reader labels
-> announce node kind, value, label, and link parent.
+> announce node kind, value, label, and link parent; Clear all button with confirmation.
 
 - [ ] All of the above demonstrated, with the a11y checks done using real assistive tech.
 

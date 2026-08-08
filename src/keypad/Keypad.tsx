@@ -11,6 +11,7 @@ import { runOnJS } from 'react-native-reanimated';
 import { decimalSeparatorFor } from '../engine/format';
 import { glyphColor, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
+import { useDocumentStore } from '../store/documentStore';
 import { clearDocument } from '../store/commands';
 import { Digit, KeypadKey } from './keymap';
 
@@ -57,6 +58,12 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   const clearConfirmVisible = useUiStore((state) => state.clearConfirmVisible);
   const requestClearConfirm = useUiStore((state) => state.requestClearConfirm);
   const dismissClearConfirm = useUiStore((state) => state.dismissClearConfirm);
+  // Empty-canvas gate for the Clear all mode-strip button — disabled when there
+  // is nothing to wipe, so the affordance does not invite a no-op confirm.
+  const documentEmpty = useDocumentStore((state) => {
+    const { nodes, chains } = state.document;
+    return Object.keys(nodes).length === 0 && Object.keys(chains).length === 0;
+  });
 
   if (!visible) {
     return null;
@@ -67,7 +74,8 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   }
 
   // Only confirming clears (decision #15) - cancel just closes the prompt and
-  // leaves the document exactly as it was.
+  // leaves the document exactly as it was. Shared by the mode-strip Clear all
+  // button and the swipe-across-backspace gesture.
   function confirmClear() {
     clearDocument();
     dismissClearConfirm();
@@ -80,6 +88,34 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     }
   });
 
+  // While the wipe confirm is up, hide the keypad chrome (mode strip + keys) so
+  // the dialog is the only bottom UI — keys would only distract from Cancel/Clear.
+  if (clearConfirmVisible) {
+    return (
+      <View style={styles.container} testID="keypad">
+        <View style={styles.confirmOverlay} testID="keypad-clear-confirm">
+          <Text style={styles.confirmMessage}>Clear the whole canvas?</Text>
+          <View style={styles.confirmActions}>
+            <TouchableOpacity
+              style={styles.confirmCancel}
+              onPress={dismissClearConfirm}
+              testID="keypad-clear-confirm-cancel"
+            >
+              <Text style={styles.confirmCancelLabel}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.confirmClear}
+              onPress={confirmClear}
+              testID="keypad-clear-confirm-clear"
+            >
+              <Text style={styles.confirmClearLabel}>Clear</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container} testID="keypad">
       <View style={styles.modeStrip}>
@@ -89,6 +125,15 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
         <ModeKey label="Documents" disabled testID="keypad-mode-documents" />
         <ModeKey label="ƒ(x)" disabled testID="keypad-mode-functions" />
         <ModeKey label="Graph" disabled testID="keypad-mode-graph" />
+        {/* Discoverable clear (P7.8). Same confirm gate as swipe-across-backspace
+            (decision #15); disabled on an empty canvas so the affordance does not
+            invite a no-op confirm. */}
+        <ModeKey
+          label="Clear all"
+          onPress={requestClearConfirm}
+          disabled={documentEmpty}
+          testID="keypad-mode-clear-all"
+        />
       </View>
 
       <View style={styles.body}>
@@ -134,28 +179,6 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           <EqualsKey onPress={() => press({ region: 'equals' })} testID="keypad-equals" />
         </View>
       </View>
-
-      {clearConfirmVisible && (
-        <View style={styles.confirmOverlay} testID="keypad-clear-confirm">
-          <Text style={styles.confirmMessage}>Clear the whole canvas?</Text>
-          <View style={styles.confirmActions}>
-            <TouchableOpacity
-              style={styles.confirmCancel}
-              onPress={dismissClearConfirm}
-              testID="keypad-clear-confirm-cancel"
-            >
-              <Text style={styles.confirmCancelLabel}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.confirmClear}
-              onPress={confirmClear}
-              testID="keypad-clear-confirm-clear"
-            >
-              <Text style={styles.confirmClearLabel}>Clear</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
     </View>
   );
 }
@@ -356,7 +379,6 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   confirmOverlay: {
-    marginTop: 10,
     padding: 12,
     borderRadius: 8,
     backgroundColor: '#FFFFFF',
