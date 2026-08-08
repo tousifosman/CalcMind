@@ -35,18 +35,19 @@ export type KeypadKey =
    *  Hardware `(`/`)` always supply an explicit side. */
   | { region: 'paren'; side?: ParenSide }
   | { region: 'operator'; op: OperatorSymbol }
-  | { region: 'equals' };
+  | { region: 'equals' }
+  | { region: 'undo' }
+  | { region: 'redo' };
 
 /** Hardware/web-keyboard-only commands with no on-screen keypad equivalent (§8.5: "arrows
- *  move selection along a chain", Escape deselects; P7.2 adds between-chain arrows and
- *  undo/redo). Unioned with `KeypadKey` so both input sources share one command type and
- *  one dispatch function. */
+ *  move selection along a chain", Escape deselects; P7.2 adds between-chain arrows).
+ *  Undo/redo are also on the keypad history row; they stay here as `KeypadKey` members
+ *  so hardware Ctrl/Cmd+Z shares the same command. Unioned with `KeypadKey` so both
+ *  input sources share one command type and one dispatch function. */
 export type EditorCommand =
   | KeypadKey
   | { region: 'escape' }
-  | { region: 'arrow'; direction: 'left' | 'right' | 'up' | 'down' }
-  | { region: 'undo' }
-  | { region: 'redo' };
+  | { region: 'arrow'; direction: 'left' | 'right' | 'up' | 'down' };
 
 /** Modifier flags from a hardware `KeyboardEvent` (P7.2). */
 export interface KeyMods {

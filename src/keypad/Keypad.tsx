@@ -160,16 +160,19 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               testID="keypad-decimal"
             />
             <Key label="+/-" onPress={() => press({ region: 'sign' })} testID="keypad-sign" />
+            {/* Single `()` key (§8.5): same cell size as the other editing keys.
+                Side is resolved in `dispatchEditorCommand` from chain depth so one
+                tap opens or closes as appropriate. */}
+            <Key label="()" onPress={() => press({ region: 'paren' })} testID="keypad-paren" />
+          </View>
+
+          <View style={styles.historyRow} testID="keypad-history">
+            <Key label="Undo" onPress={() => press({ region: 'undo' })} testID="keypad-undo" />
+            <Key label="Redo" onPress={() => press({ region: 'redo' })} testID="keypad-redo" />
+            {/* Swipe-across-backspace clear gesture stays on ⌫ wherever it sits (§8.5). */}
             <GestureDetector gesture={backspaceSwipe}>
               <Key label="⌫" onPress={() => press({ region: 'backspace' })} testID="keypad-backspace" />
             </GestureDetector>
-          </View>
-
-          <View style={styles.groupingRow} testID="keypad-grouping">
-            {/* Single `()` key (§8.5): occupies the same row width the old `(` / `)`
-                pair filled. Side is resolved in `dispatchEditorCommand` from chain
-                depth so one tap opens or closes as appropriate. */}
-            <Key label="()" onPress={() => press({ region: 'paren' })} testID="keypad-paren" />
           </View>
         </View>
 
@@ -339,7 +342,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: KEY_GAP,
   },
-  groupingRow: {
+  historyRow: {
     flexDirection: 'row',
   },
   key: {

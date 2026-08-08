@@ -26,7 +26,7 @@ describe('Keypad', () => {
     expect(renderer.root.findAllByProps({ testID: 'keypad' })).toHaveLength(0);
   });
 
-  test('renders every region from §8.5: digits, number editing, grouping, operators, mode strip', () => {
+  test('renders every region from §8.5: digits, number editing, history, operators, mode strip', () => {
     let renderer!: ReactTestRenderer;
     act(() => {
       renderer = create(<Keypad />);
@@ -37,10 +37,13 @@ describe('Keypad', () => {
     }
     expect(findByTestID(renderer, 'keypad-decimal')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-sign')).toBeTruthy();
-    expect(findByTestID(renderer, 'keypad-backspace')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-paren')).toBeTruthy();
     expect(renderer.root.findAllByProps({ testID: 'keypad-paren-open' })).toHaveLength(0);
     expect(renderer.root.findAllByProps({ testID: 'keypad-paren-close' })).toHaveLength(0);
+    expect(findByTestID(renderer, 'keypad-history')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-undo')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-redo')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-backspace')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-op-divide')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-op-multiply')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-op-subtract')).toBeTruthy();
@@ -109,6 +112,8 @@ describe('Keypad', () => {
       findByTestID(renderer, 'keypad-paren').props.onPress();
       findByTestID(renderer, 'keypad-backspace').props.onPress();
       findByTestID(renderer, 'keypad-sign').props.onPress();
+      findByTestID(renderer, 'keypad-undo').props.onPress();
+      findByTestID(renderer, 'keypad-redo').props.onPress();
     });
 
     expect(presses).toEqual([
@@ -118,10 +123,19 @@ describe('Keypad', () => {
       { region: 'paren' },
       { region: 'backspace' },
       { region: 'sign' },
+      { region: 'undo' },
+      { region: 'redo' },
     ]);
 
     const parenLabel = findByTestID(renderer, 'keypad-paren').findByType('Text' as never);
     expect(parenLabel.children).toEqual(['()']);
+    // `()` shares the number-editing row with decimal / +/- (same Key cell size).
+    expect(findByTestID(renderer, 'keypad-number-editing').findAllByProps({ testID: 'keypad-paren' })).toHaveLength(1);
+    // Bottom history row is undo, redo, backspace — left to right.
+    const historyLabels = findByTestID(renderer, 'keypad-history')
+      .findAllByType('Text' as never)
+      .map((node) => node.children[0]);
+    expect(historyLabels).toEqual(['Undo', 'Redo', '⌫']);
   });
 });
 
