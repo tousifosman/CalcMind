@@ -21,6 +21,7 @@ import {
   editNumberNode,
   deselectNode,
 } from '../store/commands';
+import { isEvaluableRaw } from '../engine/validate';
 import { CalcNode, NodeId, NumberNode, OperatorSymbol, ParenSide } from '../model/types';
 
 export type Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
@@ -160,7 +161,12 @@ export function resolveParenSide(
       expectingOperand = true;
       continue;
     }
-    // number | reference
+    // number | reference. Mid-typing stubs ("", "-", ".") after an operator are
+    // the empty placeholder `appendOperatorAndNumber` leaves selected — they are
+    // not a completed operand, so `()` must still open (e.g. `(1 +` then `()`).
+    if (node.kind === 'number' && !isEvaluableRaw(node.raw)) {
+      continue;
+    }
     expectingOperand = false;
   }
 
