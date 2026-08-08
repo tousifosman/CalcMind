@@ -487,7 +487,8 @@ describe('dispatchEditorCommand: arrows move selection along a chain (§8.5)', (
 
     dispatchEditorCommand({ region: 'arrow', direction: 'right' });
     expect(useUiStore.getState().selectedNodeId).toBe(c);
-    expect(useUiStore.getState().editingNodeId).toBe(c); // c is a number - lands in edit mode
+    // Numbers are selected without editing so a following operator can continue (§8.7).
+    expect(useUiStore.getState().editingNodeId).toBeNull();
 
     dispatchEditorCommand({ region: 'arrow', direction: 'right' });
     expect(useUiStore.getState().selectedNodeId).toBe(c); // already at the end
@@ -495,6 +496,7 @@ describe('dispatchEditorCommand: arrows move selection along a chain (§8.5)', (
     dispatchEditorCommand({ region: 'arrow', direction: 'left' });
     dispatchEditorCommand({ region: 'arrow', direction: 'left' });
     expect(useUiStore.getState().selectedNodeId).toBe(a);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
     dispatchEditorCommand({ region: 'arrow', direction: 'left' });
     expect(useUiStore.getState().selectedNodeId).toBe(a); // already at the start
   });
@@ -543,7 +545,7 @@ describe('dispatchEditorCommand: arrows move selection between chains (P7.2)', (
     dispatchEditorCommand({ region: 'arrow', direction: 'down' });
     // Nearest bottom member to x=0 is d at x=50
     expect(useUiStore.getState().selectedNodeId).toBe(d);
-    expect(useUiStore.getState().editingNodeId).toBe(d);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
 
     selectNode(c); // x=80 on the top chain
     dispatchEditorCommand({ region: 'arrow', direction: 'down' });
