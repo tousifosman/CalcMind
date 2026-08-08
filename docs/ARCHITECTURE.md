@@ -684,7 +684,10 @@ operators are visually separated from digits.
 
 - Tap selects a node; the selected node is the target for keypad input. Tapping a number node
   additionally opens it for in-place text editing (caret, digits, decimal, backspace) — every
-  other kind is selected but not itself a text field.
+  other kind is selected but not itself a text field. **Focus is always visible:** a white
+  outset ring on the cell marks the keypad target, including read-only results (continuation
+  still needs a selected result, §8.7). The selected node's wrapper stacks above flush chain
+  neighbours so the ring is not painted under the next member.
 - `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
   nothing typed) discards it rather than leaving a blank cell on the canvas.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` on values
