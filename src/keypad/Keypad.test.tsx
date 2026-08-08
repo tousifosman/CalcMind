@@ -130,7 +130,10 @@ describe('Keypad', () => {
     const parenLabel = findByTestID(renderer, 'keypad-paren').findByType('Text' as never);
     expect(parenLabel.children).toEqual(['()']);
     // `()` shares the number-editing row with decimal / +/- (same Key cell size).
-    expect(findByTestID(renderer, 'keypad-number-editing').findAllByProps({ testID: 'keypad-paren' })).toHaveLength(1);
+    const editingLabels = findByTestID(renderer, 'keypad-number-editing')
+      .findAllByType('Text' as never)
+      .map((node) => node.children[0]);
+    expect(editingLabels).toEqual(['.', '+/-', '()']);
     // Bottom history row is undo, redo, backspace — left to right.
     const historyLabels = findByTestID(renderer, 'keypad-history')
       .findAllByType('Text' as never)
