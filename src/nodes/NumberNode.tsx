@@ -161,6 +161,10 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
           onBlur={deselectNode}
           autoFocus
           keyboardType="numeric"
+          // Custom keypad is the soft-input surface (§8.5); keep the TextInput focused for
+          // caret + hardware keys, but do not raise the OS keyboard on top of ours. Deferred
+          // from P2.6 until P2.8 wired keypad presses into the same edit target.
+          showSoftInputOnFocus={false}
           // Belt and braces alongside the raw-listener workaround in the effect above:
           // react-native-web also defaults a single-line TextInput to blurring on Enter via
           // its own deferred setTimeout, which this app never wants (Enter is fully handled
