@@ -1,9 +1,10 @@
 // App shell: providers that must wrap everything else, plus the top-level tap dispatch that
 // turns "the user tapped somewhere on the canvas" into a domain action (§8.6, P2.6): hit-test
-// the tap's world point against the document's nodes, then either select what was hit or
-// create a fresh number node in edit mode where there wasn't one. This replaces P2.7's
-// placeholder - every tap toggled the keypad, because nothing else was on the canvas yet to
-// tap on (see the P2.7 addendum in docs/journal/2026-08-03.md) - now that there is.
+// the tap's world point against the document's nodes, then either select what was hit (numbers
+// included — edit mode opens on the first digit/decimal/sign so §8.7 continuation stays one
+// operator away) or create a fresh number node in edit mode where there wasn't one. This
+// replaces P2.7's placeholder - every tap toggled the keypad, because nothing else was on the
+// canvas yet to tap on (see the P2.7 addendum in docs/journal/2026-08-03.md) - now that there is.
 // See docs/ARCHITECTURE.md §5.1. Theme injection lands with light/dark support in P7.
 import { useEffect } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -124,11 +125,10 @@ export function AppShell() {
           return;
         }
       }
-      if (hit.kind === 'number') {
-        editNumberNode(hit.id);
-      } else {
-        selectNode(hit.id);
-      }
+      // Numbers are selected without entering edit mode so a following operator can
+      // §8.7-continue from them (same as results). A digit/decimal/sign opens the
+      // in-place editor via `dispatchEditorCommand`.
+      selectNode(hit.id);
     } else {
       const id = addNumberNode(worldPoint, '');
       editNumberNode(id);

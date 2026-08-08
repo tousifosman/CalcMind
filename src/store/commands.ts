@@ -222,37 +222,41 @@ export function appendOperatorAndNumber(
   return { operatorId: operatorNode.id, numberId: numberNode.id };
 }
 
-/** World offset of a continuation chain from its source result (§8.7).
+/** World offset of a continuation chain from its source value (§8.7).
  *  Proportions taken from `docs/assets/linking-model.svg`: roughly half a cell right and
- *  one-and-a-half cells down from the result's top-left. */
+ *  one-and-a-half cells down from the source's top-left. */
 export const CONTINUATION_OFFSET = {
   x: tokens.nodeHeight * 0.5,
   y: tokens.nodeHeight * 1.5,
 } as const;
 
 /**
- * §8.7 Continuation: with result `R` selected, operator `⊕` creates a new chain
- * below-right of `R` containing `[ reference→R , ⊕ ]`. Returns the new operator id so
- * the dispatcher can select it — the next digit then lands in a fresh number via the
- * normal append path. Never edits `R`.
+ * §8.7 Continuation: with a value `V` (number or result) selected, operator `⊕`
+ * creates a new chain below-right of `V` containing `[ reference→V , ⊕ ]`. Returns
+ * the new operator id so the dispatcher can select it — the next digit then lands
+ * in a fresh number via the normal append path. Never edits `V`.
+ *
+ * Numbers are included so a labelled / standalone value can seed a link without
+ * first pressing `=` (identity already treats numbers as sources, §11.1). Drag-to-link
+ * stays result-only so ordinary number snaps can still move into chains (§8.3).
  */
-export function continueFromResult(
-  resultNodeId: NodeId,
+export function continueFromValue(
+  valueNodeId: NodeId,
   op: OperatorSymbol,
 ): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId } {
-  const result = useDocumentStore.getState().document.nodes[resultNodeId];
-  if (!result || result.kind !== 'result') {
+  const value = useDocumentStore.getState().document.nodes[valueNodeId];
+  if (!value || (value.kind !== 'result' && value.kind !== 'number')) {
     throw new Error(
-      `continueFromResult: node ${resultNodeId} is not a result (got ${result?.kind ?? 'missing'})`,
+      `continueFromValue: node ${valueNodeId} is not a number or result (got ${value?.kind ?? 'missing'})`,
     );
   }
 
-  const reference = createReferenceNode({ x: 0, y: 0 }, resultNodeId);
+  const reference = createReferenceNode({ x: 0, y: 0 }, valueNodeId);
   const operator = createOperatorNode({ x: 0, y: 0 }, op);
   const chainId = createChainId();
   const anchor = {
-    x: result.position.x + CONTINUATION_OFFSET.x,
-    y: result.position.y + CONTINUATION_OFFSET.y,
+    x: value.position.x + CONTINUATION_OFFSET.x,
+    y: value.position.y + CONTINUATION_OFFSET.y,
   };
 
   useDocumentStore.getState().applyCommand((draft) => {
@@ -269,6 +273,15 @@ export function continueFromResult(
   });
 
   return { chainId, referenceId: reference.id, operatorId: operator.id };
+}
+
+/** @deprecated Use {@link continueFromValue} — kept as a thin alias for call sites
+ *  that still say "result" while the behaviour accepts any value. */
+export function continueFromResult(
+  resultNodeId: NodeId,
+  op: OperatorSymbol,
+): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId } {
+  return continueFromValue(resultNodeId, op);
 }
 
 /** setNodeRaw coalescing window (§13): keystrokes to the same node within this

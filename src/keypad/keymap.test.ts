@@ -284,7 +284,7 @@ describe('resolveParenSide (§8.5 smart () key)', () => {
   });
 });
 
-describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () => {
+describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () => {
   test('operator with a result selected creates [reference→R, ⊕] below-right and selects the operator', () => {
     dispatchEditorCommand({ region: 'digit', value: '1' });
     dispatchEditorCommand({ region: 'digit', value: '0' });
@@ -320,6 +320,63 @@ describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () =
     const selectedId = useUiStore.getState().selectedNodeId;
     expect(selectedId).toBe(contChain.members[1]);
     expect(doc.nodes[result!.id]!.kind).toBe('result');
+  });
+
+  test('operator with a selected (not editing) number creates [reference→N, ⊕]', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    const numberId = useUiStore.getState().selectedNodeId!;
+    expect(useDocumentStore.getState().document.nodes[numberId]).toMatchObject({
+      kind: 'number',
+      raw: '12',
+    });
+
+    // Tap/arrow equivalent: select without editing so the next operator continues.
+    selectNode(numberId);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+
+    const doc = useDocumentStore.getState().document;
+    const refs = Object.values(doc.nodes).filter((n) => n.kind === 'reference');
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({ kind: 'reference', targetNodeId: numberId });
+    const contChain = doc.chains[refs[0]!.chainId!]!;
+    expect(contChain.members).toHaveLength(2);
+    expect(doc.nodes[contChain.members[1]!]).toMatchObject({ kind: 'operator', op: '+' });
+    expect(useUiStore.getState().selectedNodeId).toBe(contChain.members[1]);
+    // Source stays put.
+    expect(doc.nodes[numberId]).toMatchObject({ kind: 'number', raw: '12' });
+  });
+
+  test('operator while editing a number still appends in-chain (typing 5+3)', () => {
+    dispatchEditorCommand({ region: 'digit', value: '5' });
+    expect(useUiStore.getState().editingNodeId).not.toBeNull();
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '3' });
+
+    const doc = useDocumentStore.getState().document;
+    const numbers = Object.values(doc.nodes).filter((n) => n.kind === 'number');
+    expect(numbers).toHaveLength(2);
+    expect(Object.values(doc.nodes).filter((n) => n.kind === 'reference')).toHaveLength(0);
+    expect(numbers.map((n) => n.raw).sort()).toEqual(['3', '5']);
+    // One chain: 5 + 3
+    expect(Object.keys(doc.chains)).toHaveLength(1);
+  });
+
+  test('digit on a selected (not editing) number opens edit and appends', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    const numberId = useUiStore.getState().selectedNodeId!;
+    selectNode(numberId);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+
+    expect(useUiStore.getState().editingNodeId).toBe(numberId);
+    expect(useDocumentStore.getState().document.nodes[numberId]).toMatchObject({
+      kind: 'number',
+      raw: '12',
+    });
   });
 
   test('digit / paren / equals with a result selected still no-op (result is read-only)', () => {

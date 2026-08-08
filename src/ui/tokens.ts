@@ -44,7 +44,7 @@ export const insertionCaretColor = '#F3F4F6';
 /** Keyboard/pointer selection focus ring (P7.2 / §8.6). Pure white on the dark canvas —
  *  role borders are themselves light tints, so a near-white grey read as part of the
  *  structural band; full white keeps the keypad target obvious on operators and
- *  read-only results (continuation still needs a selected result, §8.7). */
+ *  read-only results and selected-but-not-editing numbers (continuation, §8.7). */
 export const selectionFocusColor = '#FFFFFF';
 
 /** Result cells get a dot texture on top of their fill: a 4x4 unit tile with

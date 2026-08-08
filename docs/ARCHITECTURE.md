@@ -173,7 +173,8 @@ developer's:
   automatically."
 - **Linked numbers** — "With a result selected, press any operation to make a linked number **on
   the line below**. You can also **drag a result** to create a link." Both paths, confirmed: the
-  continuation shortcut in §8.7 *and* drag-to-link.
+  continuation shortcut in §8.7 *and* drag-to-link. CalcMind also lets continuation start from a
+  selected number (not only a result) so a value can be linked without pressing `=` first.
 - **Text labels** — "Add a text label to a number to describe what it represents. **Like a
   spreadsheet, but with freedom.**"
 - **Value sliders** — "Use the slider on any number to tweak its value and see how results and
@@ -670,8 +671,8 @@ operators are visually separated from digits.
   `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` (or `Y`).
 - Pressing `=` on a chain selects the new **result** (not the `=` glyph) so the next operator
   is ready for continuation without an extra tap.
-- **Continuation shortcut (§8.7).** With a result selected, pressing an operator does *not* edit
-  the result — it starts a new chain that references it.
+- **Continuation shortcut (§8.7).** With a result — or a number that is selected but not being
+  edited — pressing an operator starts a new chain that references that value.
 - Tapping empty canvas creates a number node there, in edit mode, and shows the keypad if it
   was hidden (§8.6) — superseding the placeholder from when nothing was on the canvas yet to
   tap on. Dismissing the keypad is the mode strip's chevron key.
@@ -688,14 +689,16 @@ operators are visually separated from digits.
 
 ### 8.6 Selection and context menus
 
-- Tap selects a node; the selected node is the target for keypad input. Tapping a number node
-  additionally opens it for in-place text editing (caret, digits, decimal, backspace) — every
-  other kind is selected but not itself a text field. **Focus is always visible:** a white
-  outset ring on the cell marks the keypad target, including read-only results (continuation
-  still needs a selected result, §8.7). The selected node's wrapper stacks above flush chain
-  neighbours so the ring is not painted under the next member. While selected, the inset
-  identity ring (§11.1) is omitted so focus is a single chrome layer; hue still reads from the
-  caption and connectors.
+- Tap selects a node; the selected node is the target for keypad input. Numbers are selected
+  *without* entering edit mode so a following operator can continue from them (§8.7); the first
+  digit, decimal, or sign key opens in-place text editing (caret, digits, decimal, backspace).
+  Every other kind is selected but not itself a text field. Fresh numbers created by typing with
+  nothing selected (or by tapping empty canvas) still open in edit mode so `5 + 3` keeps
+  appending in-chain. **Focus is always visible:** a white outset ring on the cell marks the
+  keypad target, including read-only results and selected-but-not-editing numbers (continuation,
+  §8.7). The selected node's wrapper stacks above flush chain neighbours so the ring is not
+  painted under the next member. While selected, the inset identity ring (§11.1) is omitted so
+  focus is a single chrome layer; hue still reads from the caption and connectors.
 - `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
   nothing typed) discards it rather than leaving a blank cell on the canvas.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` on values
@@ -710,25 +713,32 @@ operators are visually separated from digits.
 
 ### 8.7 Continuation: how links are normally made
 
-Dragging is not the fast path. Observed in Tydlig and adopted here:
+Dragging is not the fast path. Observed in Tydlig for results and extended here to numbers so a
+value can be linked without first pressing `=`:
 
 ```
-given: chain C ending in result R, and R is selected
+given: a value V (number or result) is selected, and V is not being edited
 when:  the user presses an operator ⊕
-then:  create chain C' below-right of C, containing
-         [ reference→R , ⊕ ]
+then:  create chain C' below-right of V, containing
+         [ reference→V , ⊕ ]
        select C' so the next digits land in a fresh number node
-       draw a connector from R to the reference, in R's identity hue
+       draw a connector from V to the reference, in V's identity hue
 ```
 
-This is the single most important interaction in the app: it turns "I have an answer" into "…and
+A number that *is* being edited still appends the operator in-chain — that is how `5 + 3` is
+typed. Tap or arrow selection leaves the number selected-but-not-editing, which is the
+continuation-ready state (mirroring a selected result).
+
+This is the single most important interaction in the app: it turns "I have a value" into "…and
 now I keep working with it" in one keystroke, and it is what produces the linked trees that make
 the canvas worth having.
 
 **The other path is drag-to-link (§11).** Dragging result `R` onto another chain (or onto a free
 node to form a new chain) uses the same §8.3 snap outcomes — no special case in `snapping.ts` —
 but the commit inserts a fresh **reference** to `R` rather than moving `R`. The source chain keeps
-its result; a miss (no candidate) cancels so `R` never becomes a free node.
+its result; a miss (no candidate) cancels so `R` never becomes a free node. Number drags stay on
+the ordinary snap/move path so chaining by drag is unchanged — only continuation (and
+result-drag) create links.
 
 ### 8.8 Value slider
 
@@ -907,8 +917,9 @@ flowchart TD
   `DanglingReference` state rather than cascading deletes into the user's other work.
   `deleteNode` / `removeResultNodesForChain` stamp `lastKnownDisplay` via
   `prepareReferencesForDeletion` (`engine/reference.ts`) before the target is removed.
-- References are created two ways: continuation (§8.7) and **dragging a result** into another
-  chain (same §8.3 snap outcomes; the commit inserts a reference and leaves the result in place).
+- References are created two ways: continuation from a number or result (§8.7) and **dragging a
+  result** into another chain (same §8.3 snap outcomes; the commit inserts a reference and leaves
+  the result in place). Number drags still move/snap; they do not insert references.
 
 `src/engine/graph.ts` owns the cascade: `buildDependencyGraph` / `topologicalOrder`
 (vertices are chains; edges keyed `(sourceNodeId, referenceNodeId)`, §11.1), and

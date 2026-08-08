@@ -11,6 +11,7 @@ import {
   appendEqualsNode,
   appendOperatorAndNumber,
   continueFromResult,
+  continueFromValue,
   CONTINUATION_OFFSET,
   setNodeRaw,
   deleteNode,
@@ -1210,14 +1211,14 @@ describe('P4.7 result node lifecycle', () => {
   });
 });
 
-describe('continueFromResult (P4.9, §8.7)', () => {
-  test('builds [reference→R, ⊕] below-right of R in one undo entry', () => {
+describe('continueFromValue (P4.9, §8.7)', () => {
+  test('builds [reference→R, ⊕] below-right of a result in one undo entry', () => {
     const a = addNumberNode({ x: 10, y: 20 }, '7');
     appendEqualsNode(a);
     const result = Object.values(useDocumentStore.getState().document.nodes).find((n) => n.kind === 'result')!;
     useDocumentStore.setState({ undoStack: [], redoStack: [] });
 
-    const { chainId, referenceId, operatorId } = continueFromResult(result.id, '+');
+    const { chainId, referenceId, operatorId } = continueFromValue(result.id, '+');
 
     const doc = useDocumentStore.getState().document;
     expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId]);
@@ -1248,9 +1249,33 @@ describe('continueFromResult (P4.9, §8.7)', () => {
     ]);
   });
 
-  test('rejects a non-result target', () => {
-    const a = addNumberNode({ x: 0, y: 0 }, '1');
-    expect(() => continueFromResult(a, '+')).toThrow(/not a result/);
+  test('builds [reference→N, ⊕] from a number value (no equals required)', () => {
+    const n = addNumberNode({ x: 40, y: 80 }, '12');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    const { chainId, referenceId, operatorId } = continueFromValue(n, '×');
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: n,
+      chainId,
+    });
+    expect(doc.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '×', chainId });
+    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId]);
+    expect(doc.chains[chainId]!.anchor).toEqual({
+      x: 40 + CONTINUATION_OFFSET.x,
+      y: 80 + CONTINUATION_OFFSET.y,
+    });
+    // Source number is untouched — still free, still '12'.
+    expect(doc.nodes[n]).toMatchObject({ kind: 'number', raw: '12', chainId: null });
+  });
+
+  test('rejects a non-value target', () => {
+    const op = addOperatorNode({ x: 0, y: 0 }, '+');
+    expect(() => continueFromValue(op, '+')).toThrow(/not a number or result/);
+    // Alias still routes through the same check.
+    expect(() => continueFromResult(op, '+')).toThrow(/not a number or result/);
   });
 });
 
