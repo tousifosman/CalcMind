@@ -694,6 +694,8 @@ operators are visually separated from digits.
   (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
+  The group highlight is cleared by the next single-node selection, edit, or deselect (tap
+  another cell, Escape, keypad navigation) — it must not stick after the user has moved on.
 - **`Label` opens an in-place caption editor on the identity source** (§11.1). The write always
   lands on the declaring number or result, so every reference that shares the identity updates
   together; successive keystrokes coalesce into one undo entry (§13).
