@@ -706,7 +706,10 @@ operators are visually separated from digits.
   translates the whole selection — every selected chain (via its anchor) and every
   selected free node — by the same delta, in one undo entry. A single-chain
   `Select group` still uses the ordinary MovingChain path. The same clear-on-single-select
-  rule applies.
+  rule applies. While the whole canvas is selected, keypad **data-entry** keys (digits,
+  operators, `=`, decimal, sign, backspace, `()`) are grayed out — there is no single
+  edit target. The mode strip (dismiss / Documents / functions / graph / Clear all) stays
+  live, and hardware undo/redo / Escape still work.
 - **`Label` opens an in-place caption editor on the identity source** (§11.1). The write always
   lands on the declaring number or result, so every reference that shares the identity updates
   together; successive keystrokes coalesce into one undo entry (§13).
