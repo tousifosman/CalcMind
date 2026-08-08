@@ -138,7 +138,9 @@ describe('Keypad', () => {
     const historyLabels = findByTestID(renderer, 'keypad-history')
       .findAllByType('Text' as never)
       .map((node) => node.children[0]);
-    expect(historyLabels).toEqual(['Undo', 'Redo', '⌫']);
+    expect(historyLabels).toEqual(['↶', '↷', '⌫']);
+    expect(findByTestID(renderer, 'keypad-undo').props.accessibilityLabel).toBe('Undo');
+    expect(findByTestID(renderer, 'keypad-redo').props.accessibilityLabel).toBe('Redo');
   });
 });
 

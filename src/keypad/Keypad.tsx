@@ -167,8 +167,18 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           </View>
 
           <View style={styles.historyRow} testID="keypad-history">
-            <Key label="Undo" onPress={() => press({ region: 'undo' })} testID="keypad-undo" />
-            <Key label="Redo" onPress={() => press({ region: 'redo' })} testID="keypad-redo" />
+            <Key
+              label="↶"
+              accessibilityLabel="Undo"
+              onPress={() => press({ region: 'undo' })}
+              testID="keypad-undo"
+            />
+            <Key
+              label="↷"
+              accessibilityLabel="Redo"
+              onPress={() => press({ region: 'redo' })}
+              testID="keypad-redo"
+            />
             {/* Swipe-across-backspace clear gesture stays on ⌫ wherever it sits (§8.5). */}
             <GestureDetector gesture={backspaceSwipe}>
               <Key label="⌫" onPress={() => press({ region: 'backspace' })} testID="keypad-backspace" />
@@ -192,6 +202,8 @@ interface KeyProps {
   label: string;
   onPress: () => void;
   testID?: string;
+  /** Spoken name when `label` is a glyph (e.g. undo/redo arrows). */
+  accessibilityLabel?: string;
 }
 
 // Web only: a plain TouchableOpacity press starts with a mousedown, which blurs whatever
@@ -205,12 +217,13 @@ interface KeyProps {
 // focus with.
 const preventFocusSteal = { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() };
 
-function Key({ label, onPress, testID }: KeyProps) {
+function Key({ label, onPress, testID, accessibilityLabel }: KeyProps) {
   return (
     <TouchableOpacity
       style={styles.key}
       onPress={onPress}
       testID={testID}
+      accessibilityLabel={accessibilityLabel}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
