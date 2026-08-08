@@ -654,12 +654,16 @@ operators are visually separated from digits.
 |---|---|
 | Digits | `7 8 9 / 4 5 6 / 1 2 3 / 0` |
 | Number editing | decimal separator (locale glyph, inserts canonical `.`), `+/-`, backspace |
-| Grouping | `(` `)` |
+| Grouping | `()` — one key; inserts `(` or `)` from chain depth (prefer close when an unmatched open is closable) |
 | Operators (accent column) | `÷ × − + =` |
 | Mode strip | dismiss keypad, documents, functions *(later)*, graph *(later)*, **Clear all** |
 
 - Keys act on the **selected node** if there is one, otherwise they create a new node at the
   caret/last-tap point.
+- The grouping key is a single **`()`** (not separate `(` / `)`). Each press inserts whichever
+  side fits the chain through the selection: `)` when there is an unmatched open and a close is
+  grammatical (after a number, reference, or close paren); otherwise `(`. Hardware `(`/`)` still
+  map to an explicit side.
 - **Continuation shortcut (§8.7).** With a result selected, pressing an operator does *not* edit
   the result — it starts a new chain that references it.
 - Tapping empty canvas creates a number node there, in edit mode, and shows the keypad if it

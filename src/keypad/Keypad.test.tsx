@@ -38,8 +38,9 @@ describe('Keypad', () => {
     expect(findByTestID(renderer, 'keypad-decimal')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-sign')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-backspace')).toBeTruthy();
-    expect(findByTestID(renderer, 'keypad-paren-open')).toBeTruthy();
-    expect(findByTestID(renderer, 'keypad-paren-close')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-paren')).toBeTruthy();
+    expect(renderer.root.findAllByProps({ testID: 'keypad-paren-open' })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ testID: 'keypad-paren-close' })).toHaveLength(0);
     expect(findByTestID(renderer, 'keypad-op-divide')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-op-multiply')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-op-subtract')).toBeTruthy();
@@ -105,7 +106,7 @@ describe('Keypad', () => {
       findByTestID(renderer, 'keypad-digit-7').props.onPress();
       findByTestID(renderer, 'keypad-op-multiply').props.onPress();
       findByTestID(renderer, 'keypad-equals').props.onPress();
-      findByTestID(renderer, 'keypad-paren-open').props.onPress();
+      findByTestID(renderer, 'keypad-paren').props.onPress();
       findByTestID(renderer, 'keypad-backspace').props.onPress();
       findByTestID(renderer, 'keypad-sign').props.onPress();
     });
@@ -114,10 +115,13 @@ describe('Keypad', () => {
       { region: 'digit', value: '7' },
       { region: 'operator', op: '×' },
       { region: 'equals' },
-      { region: 'paren', side: 'open' },
+      { region: 'paren' },
       { region: 'backspace' },
       { region: 'sign' },
     ]);
+
+    const parenLabel = findByTestID(renderer, 'keypad-paren').findByType('Text' as never);
+    expect(parenLabel.children).toEqual(['()']);
   });
 });
 
