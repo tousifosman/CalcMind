@@ -702,8 +702,10 @@ operators are visually separated from digits.
   (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
-  The group highlight is cleared by the next single-node selection, edit, or deselect (tap
-  another cell, Escape, keypad navigation) — it must not stick after the user has moved on.
+  Double-tap / double-click any cell is the fast path to the same command (dwell-free, no
+  context menu); long-press → `Select group` remains. The group highlight is cleared by the
+  next single-node selection, edit, or deselect (tap another cell, Escape, keypad navigation)
+  — it must not stick after the user has moved on.
 - **`Label` opens an in-place caption editor on the identity source** (§11.1). The write always
   lands on the declaring number or result, so every reference that shares the identity updates
   together; successive keystrokes coalesce into one undo entry (§13).
@@ -1252,9 +1254,9 @@ detaches a member; long-press (≥200 ms) then drag moves the whole chain (ancho
 opposite mapping was tried interactively (Playwright/CDP against the web build) and both
 gestures work mechanically; the shipped mapping won because detach/rearrange is the frequent
 edit and should not require a dwell, while lifting a whole expression is a deliberate act that
-fits long-press. `Select group` remains the dwell-free alternative (§8.6). Context menu at
-500 ms still wins over move-chain (P2.9). Flip point is `LONG_PRESS_MOVES_CHAIN` in
-`src/nodes/dragLifecycle.ts`.
+fits long-press. `Select group` — via double-tap/double-click on any cell, or the context-menu
+item — remains the dwell-free alternative (§8.6). Context menu at 500 ms still wins over
+move-chain (P2.9). Flip point is `LONG_PRESS_MOVES_CHAIN` in `src/nodes/dragLifecycle.ts`.
 
 ### 17.2 Everything else
 2. ~~**Keypad model**~~ — **resolved** (§8.5). Tydlig's dismissible, non-fullscreen keypad with a
