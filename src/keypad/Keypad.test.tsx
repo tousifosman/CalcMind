@@ -2,12 +2,23 @@ import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { Keypad, KeypadKey, isClearSwipe } from './Keypad';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
-import { addNumberNode } from '../store/commands';
+import {
+  addNumberNode,
+  addOperatorNode,
+  appendEqualsNode,
+  appendOperatorAndNumber,
+  selectGroup,
+  setNodeRaw,
+} from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
 
 beforeEach(() => {
   act(() => {
-    useUiStore.setState({ keypadVisible: true, clearConfirmVisible: false });
+    useUiStore.setState({
+      keypadVisible: true,
+      clearConfirmVisible: false,
+      groupSelectedIds: new Set(),
+    });
     useDocumentStore.setState({ document: createEmptyDocument(), undoStack: [], redoStack: [] });
   });
 });
@@ -318,5 +329,60 @@ describe('Clear all mode-strip button (P7.8)', () => {
     expect(useDocumentStore.getState().document.nodes[id]).toBeUndefined();
     expect(useDocumentStore.getState().undoStack).toHaveLength(stackBefore + 1);
     expect(useUiStore.getState().clearConfirmVisible).toBe(false);
+  });
+});
+
+describe('group-mode keypad (§8.5)', () => {
+  test('Select group without a result keeps only undo / redo / backspace', () => {
+    let op!: string;
+    act(() => {
+      const a = addNumberNode({ x: 0, y: 0 }, '1');
+      op = addOperatorNode({ x: 50, y: 0 }, '+');
+      const b = addNumberNode({ x: 84, y: 0 }, '2');
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.chains.ch = { id: 'ch', members: [a, op, b], anchor: { x: 0, y: 0 } };
+        draft.nodes[a].chainId = 'ch';
+        draft.nodes[op].chainId = 'ch';
+        draft.nodes[b].chainId = 'ch';
+      });
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+      selectGroup(op);
+    });
+
+    expect(findByTestID(renderer, 'keypad-history')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-undo')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-redo')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-backspace')).toBeTruthy();
+    expect(renderer.root.findAllByProps({ testID: 'keypad-digits' })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ testID: 'keypad-number-editing' })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ testID: 'keypad-operators' })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ testID: 'keypad-equals' })).toHaveLength(0);
+  });
+
+  test('Select group with a result also shows operators but not equals', () => {
+    let op!: string;
+    act(() => {
+      const a = addNumberNode({ x: 0, y: 0 }, '1');
+      const built = appendOperatorAndNumber(a, '+');
+      op = built.operatorId;
+      setNodeRaw(built.numberId, '2');
+      appendEqualsNode(built.numberId);
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+      selectGroup(op);
+    });
+
+    expect(findByTestID(renderer, 'keypad-history')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-operators')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-op-add')).toBeTruthy();
+    expect(renderer.root.findAllByProps({ testID: 'keypad-equals' })).toHaveLength(0);
+    expect(renderer.root.findAllByProps({ testID: 'keypad-digits' })).toHaveLength(0);
   });
 });

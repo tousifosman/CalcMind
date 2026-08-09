@@ -18,9 +18,10 @@ import { glyphColor, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
 import { clearDocument } from '../store/commands';
-import { Digit, KeypadKey } from './keymap';
+import { Digit, KeypadKey, groupContainsResult } from './keymap';
 
 export type { Digit, KeypadKey } from './keymap';
+export { groupContainsResult } from './keymap';
 
 interface KeypadProps {
   /** BCP-47 locale, used only to show the decimal key's glyph (§10.3); the key still
@@ -63,16 +64,24 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   const clearConfirmVisible = useUiStore((state) => state.clearConfirmVisible);
   const requestClearConfirm = useUiStore((state) => state.requestClearConfirm);
   const dismissClearConfirm = useUiStore((state) => state.dismissClearConfirm);
+  const groupSelectedIds = useUiStore((state) => state.groupSelectedIds);
   // Empty-canvas gate for the Clear all mode-strip button — disabled when there
   // is nothing to wipe, so the affordance does not invite a no-op confirm.
   const documentEmpty = useDocumentStore((state) => {
     const { nodes, chains } = state.document;
     return Object.keys(nodes).length === 0 && Object.keys(chains).length === 0;
   });
+  const nodes = useDocumentStore((state) => state.document.nodes);
 
   if (!visible) {
     return null;
   }
+
+  // §8.5 group mode: Select group shrinks the keypad to history (undo / redo /
+  // backspace). When the group includes a result, keep the operator column for
+  // §8.7 continuation; equals and every digit/editing key stay hidden.
+  const groupMode = groupSelectedIds.size > 0;
+  const showGroupOperators = groupMode && groupContainsResult(groupSelectedIds, nodes);
 
   function press(key: KeypadKey) {
     onKeyPress?.(key);
@@ -148,33 +157,37 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
 
       <View style={styles.body}>
         <View style={styles.mainColumn}>
-          <View style={styles.digitGrid} testID="keypad-digits">
-            {DIGIT_ROWS.map((row) => (
-              <View style={styles.digitRow} key={row.join('')}>
-                {row.map((value) => (
-                  <DigitKey key={value} value={value} onPress={() => press({ region: 'digit', value })} />
+          {!groupMode ? (
+            <>
+              <View style={styles.digitGrid} testID="keypad-digits">
+                {DIGIT_ROWS.map((row) => (
+                  <View style={styles.digitRow} key={row.join('')}>
+                    {row.map((value) => (
+                      <DigitKey key={value} value={value} onPress={() => press({ region: 'digit', value })} />
+                    ))}
+                  </View>
                 ))}
+                <View style={styles.digitRow}>
+                  <View style={styles.digitSpacer} />
+                  <DigitKey value="0" onPress={() => press({ region: 'digit', value: '0' })} />
+                  <View style={styles.digitSpacer} />
+                </View>
               </View>
-            ))}
-            <View style={styles.digitRow}>
-              <View style={styles.digitSpacer} />
-              <DigitKey value="0" onPress={() => press({ region: 'digit', value: '0' })} />
-              <View style={styles.digitSpacer} />
-            </View>
-          </View>
 
-          <View style={styles.editingRow} testID="keypad-number-editing">
-            <Key
-              label={decimalSeparatorFor(locale)}
-              onPress={() => press({ region: 'decimal' })}
-              testID="keypad-decimal"
-            />
-            <Key label="+/-" onPress={() => press({ region: 'sign' })} testID="keypad-sign" />
-            {/* Single `()` key (§8.5): same cell size as the other editing keys.
-                Side is resolved in `dispatchEditorCommand` from chain depth so one
-                tap opens or closes as appropriate. */}
-            <Key label="()" onPress={() => press({ region: 'paren' })} testID="keypad-paren" />
-          </View>
+              <View style={styles.editingRow} testID="keypad-number-editing">
+                <Key
+                  label={decimalSeparatorFor(locale)}
+                  onPress={() => press({ region: 'decimal' })}
+                  testID="keypad-decimal"
+                />
+                <Key label="+/-" onPress={() => press({ region: 'sign' })} testID="keypad-sign" />
+                {/* Single `()` key (§8.5): same cell size as the other editing keys.
+                    Side is resolved in `dispatchEditorCommand` from chain depth so one
+                    tap opens or closes as appropriate. */}
+                <Key label="()" onPress={() => press({ region: 'paren' })} testID="keypad-paren" />
+              </View>
+            </>
+          ) : null}
 
           <View style={styles.historyRow} testID="keypad-history">
             <Key
@@ -201,13 +214,17 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           </View>
         </View>
 
-        <View style={styles.accentColumn} testID="keypad-operators">
-          <OperatorKey label="÷" onPress={() => press({ region: 'operator', op: '÷' })} testID="keypad-op-divide" />
-          <OperatorKey label="×" onPress={() => press({ region: 'operator', op: '×' })} testID="keypad-op-multiply" />
-          <OperatorKey label="−" onPress={() => press({ region: 'operator', op: '-' })} testID="keypad-op-subtract" />
-          <OperatorKey label="+" onPress={() => press({ region: 'operator', op: '+' })} testID="keypad-op-add" />
-          <EqualsKey onPress={() => press({ region: 'equals' })} testID="keypad-equals" />
-        </View>
+        {!groupMode || showGroupOperators ? (
+          <View style={styles.accentColumn} testID="keypad-operators">
+            <OperatorKey label="÷" onPress={() => press({ region: 'operator', op: '÷' })} testID="keypad-op-divide" />
+            <OperatorKey label="×" onPress={() => press({ region: 'operator', op: '×' })} testID="keypad-op-multiply" />
+            <OperatorKey label="−" onPress={() => press({ region: 'operator', op: '-' })} testID="keypad-op-subtract" />
+            <OperatorKey label="+" onPress={() => press({ region: 'operator', op: '+' })} testID="keypad-op-add" />
+            {!groupMode ? (
+              <EqualsKey onPress={() => press({ region: 'equals' })} testID="keypad-equals" />
+            ) : null}
+          </View>
+        ) : null}
       </View>
     </View>
   );

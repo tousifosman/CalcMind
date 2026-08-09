@@ -14,6 +14,7 @@ import {
   CONTINUATION_OFFSET,
   setNodeRaw,
   deleteNode,
+  deleteGroup,
   clearDocument,
   selectNode,
   editNumberNode,
@@ -511,6 +512,23 @@ describe('selectGroup', () => {
     expect(useUiStore.getState().selectedNodeId).toBe(b);
   });
 
+  test('selectGroup prefers a result in the chain as the primary keypad target', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const { operatorId: op, numberId: b } = appendOperatorAndNumber(a, '+');
+    setNodeRaw(b, '2');
+    const eq = appendEqualsNode(b);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+
+    selectGroup(op);
+
+    expect(useUiStore.getState().groupSelectedIds).toEqual(
+      new Set([a, op, b, eq, result.id]),
+    );
+    expect(useUiStore.getState().selectedNodeId).toBe(result.id);
+  });
+
   test('calling selectGroup on a non-existent node is a no-op', () => {
     selectGroup('ghost');
     expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
@@ -552,6 +570,37 @@ describe('selectGroup', () => {
     deselectNode();
     expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
     expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
+});
+
+describe('deleteGroup', () => {
+  test('deletes every id in one undo entry and dissolves the chain', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addOperatorNode({ x: 50, y: 0 }, '+');
+    const c = addNumberNode({ x: 84, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.ch = { id: 'ch', members: [a, b, c], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'ch';
+      draft.nodes[b].chainId = 'ch';
+      draft.nodes[c].chainId = 'ch';
+    });
+    const before = useDocumentStore.getState().undoStack.length;
+
+    deleteGroup([a, b, c]);
+
+    expect(useDocumentStore.getState().document.nodes[a]).toBeUndefined();
+    expect(useDocumentStore.getState().document.nodes[b]).toBeUndefined();
+    expect(useDocumentStore.getState().document.nodes[c]).toBeUndefined();
+    expect(useDocumentStore.getState().document.chains.ch).toBeUndefined();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before + 1);
+  });
+
+  test('empty input is a no-op', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '7');
+    const before = useDocumentStore.getState().undoStack.length;
+    deleteGroup([]);
+    expect(useDocumentStore.getState().document.nodes[id]).toBeDefined();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
   });
 });
 

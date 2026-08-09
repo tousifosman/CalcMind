@@ -685,6 +685,10 @@ operators are visually separated from digits.
   #15) — the gesture stays for parity with the reference app; the button is the discoverable path.
   While that confirm is visible the keypad chrome (mode strip and keys) is hidden so Cancel/Clear
   are the only bottom UI; dismissing or confirming restores the keypad.
+- **Group mode.** While a Select-group highlight is active (§8.6), the keypad hides digits,
+  number-editing keys, and `=`. Only undo / redo / backspace remain. If the group includes a
+  result, the operator column (`÷ × − +`) stays available for §8.7 continuation. Backspace
+  deletes the whole group in one undo entry.
 
 ### 8.6 Selection and context menus
 
@@ -703,9 +707,10 @@ operators are visually separated from digits.
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
   Double-tap / double-click any cell is the fast path to the same command (dwell-free, no
-  context menu); long-press → `Select group` remains. The group highlight is cleared by the
-  next single-node selection, edit, or deselect (tap another cell, Escape, keypad navigation)
-  — it must not stick after the user has moved on.
+  context menu); long-press → `Select group` remains. When the group includes a result, that
+  result becomes the primary keypad target so an operator press continues from it (§8.7). The
+  group highlight is cleared by the next single-node selection, edit, or deselect (tap another
+  cell, Escape, keypad navigation) — it must not stick after the user has moved on.
 - **`Label` opens an in-place caption editor on the identity source** (§11.1). The write always
   lands on the declaring number or result, so every reference that shares the identity updates
   together; successive keystrokes coalesce into one undo entry (§13).
