@@ -1271,11 +1271,34 @@ describe('continueFromValue (P4.9, §8.7)', () => {
     expect(doc.nodes[n]).toMatchObject({ kind: 'number', raw: '12', chainId: null });
   });
 
+  test('builds [reference→Ref, ⊕] from a live linked cell', () => {
+    const n = addNumberNode({ x: 10, y: 20 }, '3');
+    const { referenceId: parentRef } = continueFromValue(n, '+');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    const { chainId, referenceId, operatorId } = continueFromValue(parentRef, '×');
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: parentRef,
+      chainId,
+    });
+    expect(doc.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '×', chainId });
+    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId]);
+    // Parent link stays in its own chain.
+    expect(doc.nodes[parentRef]).toMatchObject({ kind: 'reference', targetNodeId: n });
+  });
+
   test('rejects a non-value target', () => {
     const op = addOperatorNode({ x: 0, y: 0 }, '+');
-    expect(() => continueFromValue(op, '+')).toThrow(/not a number or result/);
+    expect(() => continueFromValue(op, '+')).toThrow(
+      /not a number, result, or live reference/,
+    );
     // Alias still routes through the same check.
-    expect(() => continueFromResult(op, '+')).toThrow(/not a number or result/);
+    expect(() => continueFromResult(op, '+')).toThrow(
+      /not a number, result, or live reference/,
+    );
   });
 });
 

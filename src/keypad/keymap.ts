@@ -362,11 +362,12 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     return;
   }
 
-  // §8.7 Continuation: operator on a selected result, or on a selected number that is
-  // *not* being edited, starts a new chain referencing that value. Results stay
-  // read-only for every other key. Numbers being edited still append in-chain so
-  // typing `5 + 3` is unchanged — only a select-without-edit (tap / arrow) then
-  // operator creates the link.
+  // §8.7 Continuation: operator on a selected result or live reference, or on a
+  // selected number that is *not* being edited, starts a new chain referencing
+  // that value. Results stay read-only for every other key. Linked cells
+  // (references) reject digits (keypad disables them) but still accept `=` /
+  // paren so drag-to-link can finish the chain the reference was dropped into.
+  // Numbers being edited still append in-chain so typing `5 + 3` is unchanged.
   if (selectedNode?.kind === 'result') {
     if (command.region === 'operator') {
       const { operatorId } = continueFromValue(selectedNode.id, command.op);
@@ -374,7 +375,26 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     }
     return;
   }
-  if (
+  if (selectedNode?.kind === 'reference') {
+    const targetExists =
+      useDocumentStore.getState().document.nodes[selectedNode.targetNodeId] !==
+      undefined;
+    if (command.region === 'operator') {
+      if (targetExists) {
+        const { operatorId } = continueFromValue(selectedNode.id, command.op);
+        selectNode(operatorId);
+      }
+      return;
+    }
+    if (
+      command.region === 'digit' ||
+      command.region === 'decimal' ||
+      command.region === 'sign'
+    ) {
+      return;
+    }
+    // equals / paren fall through to the append path below.
+  } else if (
     selectedNode?.kind === 'number' &&
     !editingNumber &&
     command.region === 'operator'

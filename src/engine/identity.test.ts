@@ -97,6 +97,18 @@ describe('identitySourceId / labelForNode (P6b.1)', () => {
     expect(labelForNode(nodes, 'ref')).toBe('Initial Deposit');
   });
 
+  test('nested reference→reference still resolves to the ultimate value', () => {
+    const nodes = {
+      n1: number('n1', '3', 'Seed'),
+      ref1: reference('ref1', 'n1'),
+      ref2: reference('ref2', 'ref1'),
+    };
+    expect(identitySourceId(nodes, 'ref2')).toBe('n1');
+    expect(labelForNode(nodes, 'ref2')).toBe('Seed');
+    // Intermediate link is not its own identity — only the ultimate source.
+    expect(identityBearingNodeIds(nodes)).toEqual(['n1']);
+  });
+
   test('dangling reference and non-values have no identity source', () => {
     const nodes: Record<string, CalcNode> = {
       ref: reference('ref', 'ghost'),

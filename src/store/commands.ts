@@ -231,23 +231,29 @@ export const CONTINUATION_OFFSET = {
 } as const;
 
 /**
- * §8.7 Continuation: with a value `V` (number or result) selected, operator `⊕`
- * creates a new chain below-right of `V` containing `[ reference→V , ⊕ ]`. Returns
- * the new operator id so the dispatcher can select it — the next digit then lands
- * in a fresh number via the normal append path. Never edits `V`.
+ * §8.7 Continuation: with a value `V` (number, result, or live reference) selected,
+ * operator `⊕` creates a new chain below-right of `V` containing `[ reference→V , ⊕ ]`.
+ * Returns the new operator id so the dispatcher can select it — the next digit then
+ * lands in a fresh number via the normal append path. Never edits `V`.
  *
- * Numbers are included so a labelled / standalone value can seed a link without
- * first pressing `=` (identity already treats numbers as sources, §11.1). Drag-to-link
- * stays result-only so ordinary number snaps can still move into chains (§8.3).
+ * Numbers and live references are included so a value (or an existing link to one)
+ * can seed another link without first pressing `=`. Drag-to-link stays result-only
+ * so ordinary number snaps can still move into chains (§8.3).
  */
 export function continueFromValue(
   valueNodeId: NodeId,
   op: OperatorSymbol,
 ): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId } {
-  const value = useDocumentStore.getState().document.nodes[valueNodeId];
-  if (!value || (value.kind !== 'result' && value.kind !== 'number')) {
+  const nodes = useDocumentStore.getState().document.nodes;
+  const value = nodes[valueNodeId];
+  const isLiveReference =
+    value?.kind === 'reference' && nodes[value.targetNodeId] !== undefined;
+  if (
+    !value ||
+    (value.kind !== 'result' && value.kind !== 'number' && !isLiveReference)
+  ) {
     throw new Error(
-      `continueFromValue: node ${valueNodeId} is not a number or result (got ${value?.kind ?? 'missing'})`,
+      `continueFromValue: node ${valueNodeId} is not a number, result, or live reference (got ${value?.kind ?? 'missing'})`,
     );
   }
 

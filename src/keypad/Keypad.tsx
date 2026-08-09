@@ -69,6 +69,13 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     const { nodes, chains } = state.document;
     return Object.keys(nodes).length === 0 && Object.keys(chains).length === 0;
   });
+  // Linked cells (references) are read-only values — digit keys would otherwise
+  // append a number at the end of their chain. Operators still continue (§8.7).
+  const selectedNodeId = useUiStore((state) => state.selectedNodeId);
+  const numberKeysDisabled = useDocumentStore((state) => {
+    if (!selectedNodeId) return false;
+    return state.document.nodes[selectedNodeId]?.kind === 'reference';
+  });
 
   if (!visible) {
     return null;
@@ -152,13 +159,22 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
             {DIGIT_ROWS.map((row) => (
               <View style={styles.digitRow} key={row.join('')}>
                 {row.map((value) => (
-                  <DigitKey key={value} value={value} onPress={() => press({ region: 'digit', value })} />
+                  <DigitKey
+                    key={value}
+                    value={value}
+                    disabled={numberKeysDisabled}
+                    onPress={() => press({ region: 'digit', value })}
+                  />
                 ))}
               </View>
             ))}
             <View style={styles.digitRow}>
               <View style={styles.digitSpacer} />
-              <DigitKey value="0" onPress={() => press({ region: 'digit', value: '0' })} />
+              <DigitKey
+                value="0"
+                disabled={numberKeysDisabled}
+                onPress={() => press({ region: 'digit', value: '0' })}
+              />
               <View style={styles.digitSpacer} />
             </View>
           </View>
@@ -248,16 +264,26 @@ function Key({ label, icon, onPress, testID }: KeyProps) {
   );
 }
 
-function DigitKey({ value, onPress }: { value: string; onPress: () => void }) {
+function DigitKey({
+  value,
+  onPress,
+  disabled,
+}: {
+  value: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
   return (
     <TouchableOpacity
-      style={styles.digitKey}
-      onPress={onPress}
+      style={[styles.digitKey, disabled && styles.digitKeyDisabled]}
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
       testID={`keypad-digit-${value}`}
+      accessibilityState={{ disabled: !!disabled }}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
-      <Text style={styles.keyLabel}>{value}</Text>
+      <Text style={[styles.keyLabel, disabled && styles.digitKeyLabelDisabled]}>{value}</Text>
     </TouchableOpacity>
   );
 }
@@ -372,6 +398,13 @@ const styles = StyleSheet.create({
     backgroundColor: rolePalette.number.fill,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  digitKeyDisabled: {
+    backgroundColor: '#DADADA',
+    opacity: 0.55,
+  },
+  digitKeyLabelDisabled: {
+    color: '#888888',
   },
   editingRow: {
     flexDirection: 'row',

@@ -23,14 +23,17 @@ export function nodeHasLabel(node: CalcNode): boolean {
 export function identitySourceId(
   nodes: Record<NodeId, CalcNode>,
   nodeId: NodeId,
+  /** Cycle guard for nested reference→reference chains (§8.7 continuation from a link). */
+  visiting: Set<NodeId> = new Set(),
 ): NodeId | null {
+  if (visiting.has(nodeId)) return null;
+  visiting.add(nodeId);
   const node = nodes[nodeId];
   if (!node) return null;
   if (node.kind === 'reference') {
-    const target = nodes[node.targetNodeId];
-    if (!target) return null;
-    if (target.kind === 'number' || target.kind === 'result') return target.id;
-    return null;
+    // Walk through nested links so a continuation seeded from a reference still
+    // shares the ultimate number/result's identity hue and caption.
+    return identitySourceId(nodes, node.targetNodeId, visiting);
   }
   if (node.kind === 'number' || node.kind === 'result') return node.id;
   return null;
@@ -79,15 +82,19 @@ export function referencedNodeIds(
 export function identityBearingNodeIds(
   nodes: Record<NodeId, CalcNode>,
 ): NodeId[] {
-  const referenced = referencedNodeIds(nodes);
-  const ids: NodeId[] = [];
-  for (const [id, node] of Object.entries(nodes)) {
-    if (nodeHasLabel(node) || referenced.has(id)) {
-      ids.push(id);
+  // Ultimate value sources only — a reference targeting another reference must
+  // not invent a second identity for the intermediate link cell.
+  const ids = new Set<NodeId>();
+  for (const node of Object.values(nodes)) {
+    if (nodeHasLabel(node) && (node.kind === 'number' || node.kind === 'result')) {
+      ids.add(node.id);
+    }
+    if (node.kind === 'reference') {
+      const source = identitySourceId(nodes, node.id);
+      if (source) ids.add(source);
     }
   }
-  ids.sort();
-  return ids;
+  return [...ids].sort();
 }
 
 /**

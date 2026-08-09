@@ -2,7 +2,7 @@ import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { Keypad, KeypadKey, isClearSwipe } from './Keypad';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
-import { addNumberNode } from '../store/commands';
+import { addNumberNode, continueFromValue, selectNode } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
 
 beforeEach(() => {
@@ -82,6 +82,30 @@ describe('Keypad', () => {
     expect(findByTestID(renderer, 'keypad-mode-graph').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-mode-documents').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-mode-dismiss').props.disabled).toBeFalsy();
+  });
+
+  test('digit keys disable while a linked cell is selected', () => {
+    const presses: KeypadKey[] = [];
+    const n = addNumberNode({ x: 0, y: 0 }, '3');
+    const { referenceId } = continueFromValue(n, '+');
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      selectNode(referenceId);
+      renderer = create(<Keypad onKeyPress={(key) => presses.push(key)} />);
+    });
+
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-digit-0').props.disabled).toBe(true);
+    act(() => {
+      findByTestID(renderer, 'keypad-digit-5').props.onPress?.();
+    });
+    expect(presses).toEqual([]);
+
+    act(() => {
+      selectNode(n);
+    });
+    // Re-render picks up the selection change.
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBeFalsy();
   });
 
   test('dismissing via the mode strip hides the keypad, outside undo history', () => {

@@ -364,6 +364,61 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(Object.keys(doc.chains)).toHaveLength(1);
   });
 
+  test('operator with a selected linked cell creates a new continuation from it', () => {
+    dispatchEditorCommand({ region: 'digit', value: '3' });
+    const numberId = useUiStore.getState().selectedNodeId!;
+    selectNode(numberId);
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+
+    const firstRef = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'reference',
+    )!;
+    // Finish the first continuation chain so selection is elsewhere, then re-select the link.
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    selectNode(firstRef.id);
+
+    const chainLenBefore = useDocumentStore.getState().document.chains[firstRef.chainId!]!
+      .members.length;
+
+    dispatchEditorCommand({ region: 'operator', op: '×' });
+
+    const doc = useDocumentStore.getState().document;
+    const refs = Object.values(doc.nodes).filter((n) => n.kind === 'reference');
+    expect(refs).toHaveLength(2);
+    const child = refs.find((r) => r.targetNodeId === firstRef.id)!;
+    expect(child).toBeDefined();
+    expect(child.chainId).not.toBe(firstRef.chainId);
+    // Parent chain must not have grown — that was the "adds a cell at the end" bug.
+    expect(doc.chains[firstRef.chainId!]!.members).toHaveLength(chainLenBefore);
+    expect(useUiStore.getState().selectedNodeId).toBe(
+      doc.chains[child.chainId!]!.members[1],
+    );
+  });
+
+  test('digit with a linked cell selected no-ops (does not append at chain end)', () => {
+    dispatchEditorCommand({ region: 'digit', value: '3' });
+    const numberId = useUiStore.getState().selectedNodeId!;
+    selectNode(numberId);
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    const ref = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'reference',
+    )!;
+    selectNode(ref.id);
+    const before = useDocumentStore.getState().undoStack.length;
+    const membersBefore = useDocumentStore.getState().document.chains[ref.chainId!]!.members
+      .length;
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+    dispatchEditorCommand({ region: 'decimal' });
+    dispatchEditorCommand({ region: 'sign' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(useDocumentStore.getState().document.chains[ref.chainId!]!.members).toHaveLength(
+      membersBefore,
+    );
+    expect(useUiStore.getState().selectedNodeId).toBe(ref.id);
+  });
+
   test('digit on a selected (not editing) number opens edit and appends', () => {
     dispatchEditorCommand({ region: 'digit', value: '1' });
     const numberId = useUiStore.getState().selectedNodeId!;
