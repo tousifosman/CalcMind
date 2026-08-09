@@ -73,11 +73,16 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   // would otherwise no-op silently (results) or append at chain end (operators /
   // references). Operators on a result/reference/number still continue (§8.7).
   const selectedNodeId = useUiStore((state) => state.selectedNodeId);
-  const numberKeysDisabled = useDocumentStore((state) => {
-    if (!selectedNodeId) return false;
-    const kind = state.document.nodes[selectedNodeId]?.kind;
-    return kind === 'reference' || kind === 'result' || kind === 'operator';
-  });
+  const selectedKind = useDocumentStore((state) =>
+    selectedNodeId ? state.document.nodes[selectedNodeId]?.kind : undefined,
+  );
+  const numberKeysDisabled =
+    selectedKind === 'reference' ||
+    selectedKind === 'result' ||
+    selectedKind === 'operator';
+  // Number-editing row (., +/-, ()) is for operands; hide it while an operator
+  // is selected (operator keys still replace the symbol).
+  const numberEditingKeysDisabled = selectedKind === 'operator';
 
   if (!visible) {
     return null;
@@ -185,13 +190,24 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
             <Key
               label={decimalSeparatorFor(locale)}
               onPress={() => press({ region: 'decimal' })}
+              disabled={numberEditingKeysDisabled}
               testID="keypad-decimal"
             />
-            <Key label="+/-" onPress={() => press({ region: 'sign' })} testID="keypad-sign" />
+            <Key
+              label="+/-"
+              onPress={() => press({ region: 'sign' })}
+              disabled={numberEditingKeysDisabled}
+              testID="keypad-sign"
+            />
             {/* Single `()` key (§8.5): same cell size as the other editing keys.
                 Side is resolved in `dispatchEditorCommand` from chain depth so one
                 tap opens or closes as appropriate. */}
-            <Key label="()" onPress={() => press({ region: 'paren' })} testID="keypad-paren" />
+            <Key
+              label="()"
+              onPress={() => press({ region: 'paren' })}
+              disabled={numberEditingKeysDisabled}
+              testID="keypad-paren"
+            />
           </View>
 
           <View style={styles.historyRow} testID="keypad-history">
@@ -235,6 +251,7 @@ interface KeyProps {
   label: string;
   onPress: () => void;
   testID?: string;
+  disabled?: boolean;
   /** When set, rendered instead of the label text; `label` stays the a11y name
    *  (same pattern as ModeKey's Heroicons slot). */
   icon?: ReactNode;
@@ -251,17 +268,23 @@ interface KeyProps {
 // focus with.
 const preventFocusSteal = { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() };
 
-function Key({ label, icon, onPress, testID }: KeyProps) {
+function Key({ label, icon, onPress, testID, disabled }: KeyProps) {
   return (
     <TouchableOpacity
-      style={styles.key}
-      onPress={onPress}
+      style={[styles.key, disabled && styles.keyDisabled]}
+      onPress={disabled ? undefined : onPress}
+      disabled={disabled}
       testID={testID}
       accessibilityLabel={icon ? label : undefined}
+      accessibilityState={{ disabled: !!disabled }}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
-      {icon ?? <Text style={styles.neutralKeyLabel}>{label}</Text>}
+      {icon ?? (
+        <Text style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled]}>
+          {label}
+        </Text>
+      )}
     </TouchableOpacity>
   );
 }
@@ -423,6 +446,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#DADADA',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  keyDisabled: {
+    opacity: 0.55,
+  },
+  keyLabelDisabled: {
+    color: '#888888',
   },
   keyLabel: {
     color: glyphColor,

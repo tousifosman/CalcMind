@@ -451,6 +451,8 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     }
 
     case 'paren': {
+      // Operator cells reject `()` the same way they reject digits (keypad hides it).
+      if (selectedNode?.kind === 'operator') return;
       const doc = useDocumentStore.getState().document;
       const side =
         command.side ?? resolveParenSide(selectedNode, doc.nodes, doc.chains);

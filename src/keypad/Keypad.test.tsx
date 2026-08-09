@@ -121,17 +121,23 @@ describe('Keypad', () => {
       selectNode(operatorId);
     });
     expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBe(true);
 
     act(() => {
       selectNode(freeOp);
     });
     expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
 
     act(() => {
       selectNode(n);
     });
     // Re-render picks up the selection change.
     expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBeFalsy();
   });
 
   test('dismissing via the mode strip hides the keypad, outside undo history', () => {

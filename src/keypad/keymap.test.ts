@@ -417,6 +417,21 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(useUiStore.getState().selectedNodeId).toBe(op.id);
   });
 
+  test('paren with an operator selected no-ops', () => {
+    dispatchEditorCommand({ region: 'digit', value: '5' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    const op = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'operator',
+    )!;
+    selectNode(op.id);
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'paren', side: 'open' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(useUiStore.getState().selectedNodeId).toBe(op.id);
+  });
+
   test('digit with an operator selected no-ops (does not append at chain end)', () => {
     dispatchEditorCommand({ region: 'digit', value: '5' });
     dispatchEditorCommand({ region: 'operator', op: '+' });
