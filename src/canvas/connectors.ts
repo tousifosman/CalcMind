@@ -24,6 +24,11 @@ export interface ConnectorDragOverride {
   position: Vec2;
   /** When set, offset every other member of this chain by the same delta. */
   movingChainId: ChainId | null;
+  /** §8.6 Select all: offset every listed chain member and free node by the same delta. */
+  movingSelection?: {
+    chainIds: readonly ChainId[];
+    freeNodeIds: readonly NodeId[];
+  } | null;
 }
 
 /** Collapse a source's fan to a count badge when it has more than this many
@@ -246,6 +251,23 @@ export function nodesWithDragOverride(
     for (const [id, node] of Object.entries(nodes)) {
       if (id === drag.nodeId) continue;
       if (node.chainId !== drag.movingChainId) continue;
+      next[id] = {
+        ...node,
+        position: { x: node.position.x + dx, y: node.position.y + dy },
+      };
+    }
+  }
+
+  const selection = drag.movingSelection;
+  if (selection) {
+    const chainSet = new Set(selection.chainIds);
+    const freeSet = new Set(selection.freeNodeIds);
+    for (const [id, node] of Object.entries(nodes)) {
+      if (id === drag.nodeId) continue;
+      if (next[id] !== nodes[id]) continue; // already offset via movingChainId
+      const inSelectedChain =
+        node.chainId !== null && chainSet.has(node.chainId);
+      if (!inSelectedChain && !freeSet.has(id)) continue;
       next[id] = {
         ...node,
         position: { x: node.position.x + dx, y: node.position.y + dy },

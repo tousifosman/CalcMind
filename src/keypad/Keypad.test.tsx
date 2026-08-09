@@ -6,14 +6,27 @@ import {
   addNumberNode,
   addOperatorNode,
   appendEqualsNode,
+<<<<<<< HEAD
   continueFromValue,
   selectNode,
+=======
+  appendOperatorAndNumber,
+  selectAll,
+  selectGroup,
+  setNodeRaw,
+>>>>>>> origin/main
 } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
 
 beforeEach(() => {
   act(() => {
-    useUiStore.setState({ keypadVisible: true, clearConfirmVisible: false });
+    useUiStore.setState({
+      keypadVisible: true,
+      clearConfirmVisible: false,
+      groupSelectedIds: new Set(),
+      selectedNodeId: null,
+      editingNodeId: null,
+    });
     useDocumentStore.setState({ document: createEmptyDocument(), undoStack: [], redoStack: [] });
   });
 });
@@ -374,5 +387,101 @@ describe('Clear all mode-strip button (P7.8)', () => {
     expect(useDocumentStore.getState().document.nodes[id]).toBeUndefined();
     expect(useDocumentStore.getState().undoStack).toHaveLength(stackBefore + 1);
     expect(useUiStore.getState().clearConfirmVisible).toBe(false);
+  });
+});
+
+describe('group-mode keypad (§8.5)', () => {
+  test('Select group without a result disables digits, editing, operators, and equals', () => {
+    let op!: string;
+    act(() => {
+      const a = addNumberNode({ x: 0, y: 0 }, '1');
+      op = addOperatorNode({ x: 50, y: 0 }, '+');
+      const b = addNumberNode({ x: 84, y: 0 }, '2');
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.chains.ch = { id: 'ch', members: [a, op, b], anchor: { x: 0, y: 0 } };
+        draft.nodes[a].chainId = 'ch';
+        draft.nodes[op].chainId = 'ch';
+        draft.nodes[b].chainId = 'ch';
+      });
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+      selectGroup(op);
+    });
+
+    expect(findByTestID(renderer, 'keypad-undo').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-redo').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-digit-7').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-op-add').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBe(true);
+  });
+
+  test('Select group with a result keeps operators enabled and equals disabled', () => {
+    let op!: string;
+    act(() => {
+      const a = addNumberNode({ x: 0, y: 0 }, '1');
+      const built = appendOperatorAndNumber(a, '+');
+      op = built.operatorId;
+      setNodeRaw(built.numberId, '2');
+      appendEqualsNode(built.numberId);
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+      selectGroup(op);
+    });
+
+    expect(findByTestID(renderer, 'keypad-op-add').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-op-multiply').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-digit-1').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBeFalsy();
+  });
+});
+
+describe('Select all locks data-entry keys (§8.6)', () => {
+  test('digits, operators, editing and grouping keys disable; mode strip stays live', () => {
+    const presses: KeypadKey[] = [];
+    act(() => {
+      addNumberNode({ x: 0, y: 0 }, '1');
+      addNumberNode({ x: 40, y: 0 }, '2');
+      selectAll();
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad onKeyPress={(key) => presses.push(key)} />);
+    });
+
+    for (const digit of ['0', '1', '7']) {
+      expect(findByTestID(renderer, `keypad-digit-${digit}`).props.disabled).toBe(true);
+    }
+    for (const id of [
+      'keypad-decimal',
+      'keypad-sign',
+      'keypad-backspace',
+      'keypad-paren',
+      'keypad-op-add',
+      'keypad-op-multiply',
+      'keypad-equals',
+    ]) {
+      expect(findByTestID(renderer, id).props.disabled).toBe(true);
+    }
+
+    // Mode strip remains interactive (top-row action items).
+    expect(findByTestID(renderer, 'keypad-mode-dismiss').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-mode-clear-all').props.disabled).toBe(false);
+
+    act(() => {
+      findByTestID(renderer, 'keypad-digit-7').props.onPress?.();
+      findByTestID(renderer, 'keypad-op-add').props.onPress?.();
+    });
+    expect(presses).toEqual([]);
   });
 });

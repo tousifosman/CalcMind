@@ -18,9 +18,10 @@ import { glyphColor, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
 import { clearDocument } from '../store/commands';
-import { Digit, KeypadKey } from './keymap';
+import { Digit, KeypadKey, groupContainsResult } from './keymap';
 
 export type { Digit, KeypadKey } from './keymap';
+export { groupContainsResult } from './keymap';
 
 interface KeypadProps {
   /** BCP-47 locale, used only to show the decimal key's glyph (§10.3); the key still
@@ -63,12 +64,15 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   const clearConfirmVisible = useUiStore((state) => state.clearConfirmVisible);
   const requestClearConfirm = useUiStore((state) => state.requestClearConfirm);
   const dismissClearConfirm = useUiStore((state) => state.dismissClearConfirm);
+  const groupSelectedIds = useUiStore((state) => state.groupSelectedIds);
+  const allSelected = useUiStore((state) => state.allSelected);
   // Empty-canvas gate for the Clear all mode-strip button — disabled when there
   // is nothing to wipe, so the affordance does not invite a no-op confirm.
   const documentEmpty = useDocumentStore((state) => {
     const { nodes, chains } = state.document;
     return Object.keys(nodes).length === 0 && Object.keys(chains).length === 0;
   });
+<<<<<<< HEAD
   // Results, operators, and linked cells are not number-edit targets — digit keys
   // would otherwise no-op silently (results) or append at chain end (operators /
   // references). Operators on a result/reference/number still continue (§8.7).
@@ -83,12 +87,26 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   // Number-editing row (., +/-, ()) is for operands; hide it while an operator
   // is selected (operator keys still replace the symbol).
   const numberEditingKeysDisabled = selectedKind === 'operator';
+=======
+  const nodes = useDocumentStore((state) => state.document.nodes);
+  // Select all (§8.6): data-entry keys have no single target — gray them out.
+  // Mode strip (and hardware undo/redo) stay available.
+  const dataEntryLocked = allSelected;
+>>>>>>> origin/main
 
   if (!visible) {
     return null;
   }
 
+  // §8.5 group mode: Select group disables everything except history (undo /
+  // redo / backspace). When the group includes a result, operators stay enabled
+  // for §8.7 continuation; equals and every digit/editing key stay disabled.
+  const groupMode = groupSelectedIds.size > 0 && !dataEntryLocked;
+  const operatorsEnabled =
+    !dataEntryLocked && (!groupMode || groupContainsResult(groupSelectedIds, nodes));
+
   function press(key: KeypadKey) {
+    if (dataEntryLocked) return;
     onKeyPress?.(key);
   }
 
@@ -100,12 +118,14 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     dismissClearConfirm();
   }
 
-  const backspaceSwipe = Gesture.Pan().onEnd((e) => {
-    'worklet';
-    if (isClearSwipe(e.translationX, e.translationY)) {
-      runOnJS(requestClearConfirm)();
-    }
-  });
+  const backspaceSwipe = Gesture.Pan()
+    .enabled(!dataEntryLocked)
+    .onEnd((e) => {
+      'worklet';
+      if (isClearSwipe(e.translationX, e.translationY)) {
+        runOnJS(requestClearConfirm)();
+      }
+    });
 
   // While the wipe confirm is up, hide the keypad chrome (mode strip + keys) so
   // the dialog is the only bottom UI — keys would only distract from Cancel/Clear.
@@ -169,8 +189,13 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                   <DigitKey
                     key={value}
                     value={value}
+<<<<<<< HEAD
                     disabled={numberKeysDisabled}
                     onPress={() => press({ region: 'digit', value })}
+=======
+                    onPress={() => press({ region: 'digit', value })}
+                    disabled={dataEntryLocked || groupMode}
+>>>>>>> origin/main
                   />
                 ))}
               </View>
@@ -179,8 +204,13 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               <View style={styles.digitSpacer} />
               <DigitKey
                 value="0"
+<<<<<<< HEAD
                 disabled={numberKeysDisabled}
                 onPress={() => press({ region: 'digit', value: '0' })}
+=======
+                onPress={() => press({ region: 'digit', value: '0' })}
+                disabled={dataEntryLocked || groupMode}
+>>>>>>> origin/main
               />
               <View style={styles.digitSpacer} />
             </View>
@@ -192,21 +222,36 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               onPress={() => press({ region: 'decimal' })}
               disabled={numberEditingKeysDisabled}
               testID="keypad-decimal"
+              disabled={dataEntryLocked || groupMode}
             />
+            <Key
+              label="+/-"
+              onPress={() => press({ region: 'sign' })}
+              testID="keypad-sign"
+              disabled={dataEntryLocked || groupMode}
+            />
+<<<<<<< HEAD
             <Key
               label="+/-"
               onPress={() => press({ region: 'sign' })}
               disabled={numberEditingKeysDisabled}
               testID="keypad-sign"
             />
+=======
+>>>>>>> origin/main
             {/* Single `()` key (§8.5): same cell size as the other editing keys.
                 Side is resolved in `dispatchEditorCommand` from chain depth so one
                 tap opens or closes as appropriate. */}
             <Key
               label="()"
               onPress={() => press({ region: 'paren' })}
+<<<<<<< HEAD
               disabled={numberEditingKeysDisabled}
               testID="keypad-paren"
+=======
+              testID="keypad-paren"
+              disabled={dataEntryLocked || groupMode}
+>>>>>>> origin/main
             />
           </View>
 
@@ -229,6 +274,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                 label="Backspace"
                 icon={<BackspaceIcon size={22} color="#333333" />}
                 onPress={() => press({ region: 'backspace' })}
+                disabled={dataEntryLocked}
                 testID="keypad-backspace"
               />
             </GestureDetector>
@@ -236,11 +282,35 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
         </View>
 
         <View style={styles.accentColumn} testID="keypad-operators">
-          <OperatorKey label="÷" onPress={() => press({ region: 'operator', op: '÷' })} testID="keypad-op-divide" />
-          <OperatorKey label="×" onPress={() => press({ region: 'operator', op: '×' })} testID="keypad-op-multiply" />
-          <OperatorKey label="−" onPress={() => press({ region: 'operator', op: '-' })} testID="keypad-op-subtract" />
-          <OperatorKey label="+" onPress={() => press({ region: 'operator', op: '+' })} testID="keypad-op-add" />
-          <EqualsKey onPress={() => press({ region: 'equals' })} testID="keypad-equals" />
+          <OperatorKey
+            label="÷"
+            onPress={() => press({ region: 'operator', op: '÷' })}
+            testID="keypad-op-divide"
+            disabled={!operatorsEnabled}
+          />
+          <OperatorKey
+            label="×"
+            onPress={() => press({ region: 'operator', op: '×' })}
+            testID="keypad-op-multiply"
+            disabled={!operatorsEnabled}
+          />
+          <OperatorKey
+            label="−"
+            onPress={() => press({ region: 'operator', op: '-' })}
+            testID="keypad-op-subtract"
+            disabled={!operatorsEnabled}
+          />
+          <OperatorKey
+            label="+"
+            onPress={() => press({ region: 'operator', op: '+' })}
+            testID="keypad-op-add"
+            disabled={!operatorsEnabled}
+          />
+          <EqualsKey
+            onPress={() => press({ region: 'equals' })}
+            testID="keypad-equals"
+            disabled={dataEntryLocked || groupMode}
+          />
         </View>
       </View>
     </View>
@@ -272,7 +342,11 @@ function Key({ label, icon, onPress, testID, disabled }: KeyProps) {
   return (
     <TouchableOpacity
       style={[styles.key, disabled && styles.keyDisabled]}
+<<<<<<< HEAD
       onPress={disabled ? undefined : onPress}
+=======
+      onPress={onPress}
+>>>>>>> origin/main
       disabled={disabled}
       testID={testID}
       accessibilityLabel={icon ? label : undefined}
@@ -281,9 +355,13 @@ function Key({ label, icon, onPress, testID, disabled }: KeyProps) {
       {...skipTabOrder}
     >
       {icon ?? (
+<<<<<<< HEAD
         <Text style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled]}>
           {label}
         </Text>
+=======
+        <Text style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled]}>{label}</Text>
+>>>>>>> origin/main
       )}
     </TouchableOpacity>
   );
@@ -300,43 +378,64 @@ function DigitKey({
 }) {
   return (
     <TouchableOpacity
+<<<<<<< HEAD
       style={[styles.digitKey, disabled && styles.digitKeyDisabled]}
       onPress={disabled ? undefined : onPress}
+=======
+      style={[styles.digitKey, disabled && styles.keyDisabled]}
+      onPress={onPress}
+>>>>>>> origin/main
       disabled={disabled}
       testID={`keypad-digit-${value}`}
       accessibilityState={{ disabled: !!disabled }}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
+<<<<<<< HEAD
       <Text style={[styles.keyLabel, disabled && styles.digitKeyLabelDisabled]}>{value}</Text>
+=======
+      <Text style={[styles.keyLabel, disabled && styles.keyLabelDisabled]}>{value}</Text>
+>>>>>>> origin/main
     </TouchableOpacity>
   );
 }
 
-function OperatorKey({ label, onPress, testID }: KeyProps) {
+function OperatorKey({ label, onPress, testID, disabled }: KeyProps) {
   return (
     <TouchableOpacity
-      style={[styles.key, styles.accentKey]}
+      style={[styles.key, styles.accentKey, disabled && styles.keyDisabled]}
       onPress={onPress}
+      disabled={disabled}
       testID={testID}
+      accessibilityState={{ disabled: !!disabled }}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
-      <Text style={styles.accentKeyLabel}>{label}</Text>
+      <Text style={[styles.accentKeyLabel, disabled && styles.keyLabelDisabled]}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
-function EqualsKey({ onPress, testID }: { onPress: () => void; testID?: string }) {
+function EqualsKey({
+  onPress,
+  testID,
+  disabled,
+}: {
+  onPress: () => void;
+  testID?: string;
+  disabled?: boolean;
+}) {
   return (
     <TouchableOpacity
-      style={[styles.key, styles.equalsKey]}
+      style={[styles.key, styles.equalsKey, disabled && styles.keyDisabled]}
       onPress={onPress}
+      disabled={disabled}
       testID={testID}
+      accessibilityState={{ disabled: !!disabled }}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
-      <Text style={styles.accentKeyLabel}>=</Text>
+      <Text style={[styles.accentKeyLabel, disabled && styles.keyLabelDisabled]}>=</Text>
     </TouchableOpacity>
   );
 }
@@ -448,15 +547,22 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   keyDisabled: {
+<<<<<<< HEAD
     opacity: 0.55,
   },
   keyLabelDisabled: {
     color: '#888888',
+=======
+    opacity: 0.35,
+>>>>>>> origin/main
   },
   keyLabel: {
     color: glyphColor,
     fontSize: 20,
     fontWeight: '400',
+  },
+  keyLabelDisabled: {
+    color: '#B3B3B3',
   },
   neutralKeyLabel: {
     color: '#333333',

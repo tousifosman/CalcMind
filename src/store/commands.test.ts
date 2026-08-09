@@ -11,16 +11,22 @@ import {
   appendEqualsNode,
   appendOperatorAndNumber,
   continueFromResult,
+<<<<<<< HEAD
   continueFromValue,
   setOperatorSymbol,
+=======
+  continuationAnchor,
+>>>>>>> origin/main
   CONTINUATION_OFFSET,
   setNodeRaw,
   deleteNode,
+  deleteGroup,
   clearDocument,
   selectNode,
   editNumberNode,
   deselectNode,
   selectGroup,
+  selectAll,
   prependToChain,
   appendToChain,
   insertIntoChain,
@@ -555,6 +561,23 @@ describe('selectGroup', () => {
     expect(useUiStore.getState().selectedNodeId).toBe(b);
   });
 
+  test('selectGroup prefers a result in the chain as the primary keypad target', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const { operatorId: op, numberId: b } = appendOperatorAndNumber(a, '+');
+    setNodeRaw(b, '2');
+    const eq = appendEqualsNode(b);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+
+    selectGroup(op);
+
+    expect(useUiStore.getState().groupSelectedIds).toEqual(
+      new Set([a, op, b, eq, result.id]),
+    );
+    expect(useUiStore.getState().selectedNodeId).toBe(result.id);
+  });
+
   test('calling selectGroup on a non-existent node is a no-op', () => {
     selectGroup('ghost');
     expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
@@ -593,6 +616,103 @@ describe('selectGroup', () => {
     expect(useUiStore.getState().editingNodeId).toBe(a);
 
     selectGroup(b);
+    deselectNode();
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
+});
+
+describe('deleteGroup', () => {
+  test('deletes every id in one undo entry and dissolves the chain', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addOperatorNode({ x: 50, y: 0 }, '+');
+    const c = addNumberNode({ x: 84, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.ch = { id: 'ch', members: [a, b, c], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'ch';
+      draft.nodes[b].chainId = 'ch';
+      draft.nodes[c].chainId = 'ch';
+    });
+    const before = useDocumentStore.getState().undoStack.length;
+
+    deleteGroup([a, b, c]);
+
+    expect(useDocumentStore.getState().document.nodes[a]).toBeUndefined();
+    expect(useDocumentStore.getState().document.nodes[b]).toBeUndefined();
+    expect(useDocumentStore.getState().document.nodes[c]).toBeUndefined();
+    expect(useDocumentStore.getState().document.chains.ch).toBeUndefined();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before + 1);
+  });
+
+  test('empty input is a no-op', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '7');
+    const before = useDocumentStore.getState().undoStack.length;
+    deleteGroup([]);
+    expect(useDocumentStore.getState().document.nodes[id]).toBeDefined();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+  });
+});
+
+describe('selectAll', () => {
+  test('selects every node on the canvas into the group selection', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addOperatorNode({ x: 50, y: 0 }, '+');
+    const c = addNumberNode({ x: 100, y: 40 }, '9');
+
+    selectAll();
+
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([a, b, c]));
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+  });
+
+  test('keeps the current selection as the primary target when it still exists', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addNumberNode({ x: 40, y: 0 }, '2');
+    selectNode(b);
+
+    selectAll();
+
+    expect(useUiStore.getState().selectedNodeId).toBe(b);
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([a, b]));
+  });
+
+  test('discards an abandoned empty number before selecting', () => {
+    const keeper = addNumberNode({ x: 0, y: 0 }, '3');
+    const empty = addNumberNode({ x: 40, y: 0 }, '');
+    editNumberNode(empty);
+
+    selectAll();
+
+    expect(useDocumentStore.getState().document.nodes[empty]).toBeUndefined();
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([keeper]));
+    expect(useUiStore.getState().selectedNodeId).toBe(keeper);
+  });
+
+  test('empty canvas is a no-op', () => {
+    selectAll();
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
+
+  test('selectAll does not add an undo entry', () => {
+    addNumberNode({ x: 0, y: 0 }, '5');
+    const before = useDocumentStore.getState().undoStack.length;
+    selectAll();
+    // discardIfAbandoned may not delete anything here; only the create was recorded.
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+  });
+
+  test('selectNode / deselectNode clear a prior Select-all highlight', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addNumberNode({ x: 40, y: 0 }, '2');
+    selectAll();
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([a, b]));
+
+    selectNode(a);
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBe(a);
+
+    selectAll();
     deselectNode();
     expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
     expect(useUiStore.getState().selectedNodeId).toBeNull();
@@ -1254,11 +1374,18 @@ describe('P4.7 result node lifecycle', () => {
   });
 });
 
+<<<<<<< HEAD
 describe('continueFromValue (P4.9, §8.7)', () => {
   test('builds [reference→R, ⊕] below-right of a result in one undo entry', () => {
+=======
+describe('continueFromResult (P4.9, §8.7)', () => {
+  test('builds [reference→R, ⊕] under the source group\'s first cell in one undo entry', () => {
+>>>>>>> origin/main
     const a = addNumberNode({ x: 10, y: 20 }, '7');
     appendEqualsNode(a);
-    const result = Object.values(useDocumentStore.getState().document.nodes).find((n) => n.kind === 'result')!;
+    const docBefore = useDocumentStore.getState().document;
+    const result = Object.values(docBefore.nodes).find((n) => n.kind === 'result')!;
+    const sourceChain = docBefore.chains[result.chainId!]!;
     useDocumentStore.setState({ undoStack: [], redoStack: [] });
 
     const { chainId, referenceId, operatorId, numberId } = continueFromValue(
@@ -1276,9 +1403,11 @@ describe('continueFromValue (P4.9, §8.7)', () => {
     expect(doc.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '+', chainId });
     expect(doc.nodes[numberId]).toMatchObject({ kind: 'number', raw: '', chainId });
     expect(doc.chains[chainId]!.anchor).toEqual({
-      x: result.position.x + CONTINUATION_OFFSET.x,
-      y: result.position.y + CONTINUATION_OFFSET.y,
+      x: sourceChain.anchor.x,
+      y: sourceChain.anchor.y + CONTINUATION_OFFSET.y,
     });
+    // First cell of the new chain is the reference, at the source group's first-cell x.
+    expect(doc.nodes[referenceId]!.position).toEqual(doc.chains[chainId]!.anchor);
     expect(useDocumentStore.getState().undoStack).toHaveLength(1);
 
     useDocumentStore.getState().undo();
@@ -1297,6 +1426,7 @@ describe('continueFromValue (P4.9, §8.7)', () => {
     ]);
   });
 
+<<<<<<< HEAD
   test('builds [reference→N, ⊕] from a number value (no equals required)', () => {
     const n = addNumberNode({ x: 40, y: 80 }, '12');
     useDocumentStore.setState({ undoStack: [], redoStack: [] });
@@ -1351,6 +1481,97 @@ describe('continueFromValue (P4.9, §8.7)', () => {
     expect(() => continueFromResult(op, '+')).toThrow(
       /not a number, result, or live reference/,
     );
+=======
+  test('stacks under an existing cell in the first-cell column', () => {
+    const a = addNumberNode({ x: 40, y: 10 }, '3');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+
+    const first = continueFromResult(result.id, '+');
+    const second = continueFromResult(result.id, '×');
+
+    const doc = useDocumentStore.getState().document;
+    const sourceAnchor = doc.chains[result.chainId!]!.anchor;
+    expect(doc.chains[first.chainId]!.anchor).toEqual({
+      x: sourceAnchor.x,
+      y: sourceAnchor.y + CONTINUATION_OFFSET.y,
+    });
+    expect(doc.chains[second.chainId]!.anchor).toEqual({
+      x: sourceAnchor.x,
+      y: sourceAnchor.y + 2 * CONTINUATION_OFFSET.y,
+    });
+  });
+
+  test('keeps x on the source first cell when stacking under a drifted occupant', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '4');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    const { chainId: priorId } = continueFromResult(result.id, '+');
+
+    // Drag the prior continuation sideways but keep it overlapping the first-cell
+    // column — its y still blocks the slot; the new chain must not inherit the
+    // drifted x.
+    const prior = useDocumentStore.getState().document.chains[priorId]!;
+    moveChain(priorId, { x: prior.anchor.x + 8, y: prior.anchor.y });
+
+    const { nodes, chains } = useDocumentStore.getState().document;
+    const sourceAnchor = chains[result.chainId!]!.anchor;
+    const priorY = chains[priorId]!.anchor.y;
+    expect(continuationAnchor(result.id, nodes, chains)).toEqual({
+      x: sourceAnchor.x,
+      y: priorY + CONTINUATION_OFFSET.y,
+    });
+  });
+
+  test('stacks under a free cell that sits in the gap under the first cell', () => {
+    // Repro: a loose number already under the group, not on the exact default
+    // landing row — same-row banding used to miss it and paint the link on top.
+    const a = addNumberNode({ x: 0, y: 0 }, '63');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    const sourceY = useDocumentStore.getState().document.chains[result.chainId!]!
+      .anchor.y;
+    const blockerY = sourceY + 40; // inside the gap; overlaps default landing
+    addNumberNode({ x: 0, y: blockerY }, '9');
+
+    const { chainId } = continueFromResult(result.id, '+');
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.chains[chainId]!.anchor).toEqual({
+      x: 0,
+      y: blockerY + CONTINUATION_OFFSET.y,
+    });
+  });
+
+  test('stacks under a free cell whose left edge is offset but still under the first cell', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '63');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    const source = useDocumentStore.getState().document.chains[result.chainId!]!;
+    // Sit under the right half of "63" — left-edge proximity used to miss this.
+    const blockerY = source.anchor.y + CONTINUATION_OFFSET.y;
+    addNumberNode({ x: 36, y: blockerY }, '2');
+
+    const { chainId } = continueFromResult(result.id, '+');
+
+    expect(useDocumentStore.getState().document.chains[chainId]!.anchor).toEqual({
+      x: source.anchor.x,
+      y: blockerY + CONTINUATION_OFFSET.y,
+    });
+  });
+
+  test('rejects a non-result target', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    expect(() => continueFromResult(a, '+')).toThrow(/not a result/);
+>>>>>>> origin/main
   });
 });
 

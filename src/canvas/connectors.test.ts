@@ -281,6 +281,30 @@ describe('buildConnectorScene', () => {
     // Untouched chain stays put.
     expect(overridden.r1!.position).toEqual({ x: 0, y: 0 });
   });
+
+  test('movingSelection offsets every listed chain and free node by the drag delta', () => {
+    const nodes: Record<string, CalcNode> = {
+      r1: result('r1', 0, 0),
+      a: { ...reference('a', 'r1', 40, 120), chainId: 'c_dep' },
+      free: number('free', 200, 40),
+      other: number('other', 300, 40),
+    };
+
+    const overridden = nodesWithDragOverride(nodes, {
+      nodeId: 'a',
+      position: { x: 70, y: 150 },
+      movingChainId: null,
+      movingSelection: {
+        chainIds: ['c_dep'],
+        freeNodeIds: ['free'],
+      },
+    });
+    expect(overridden.a!.position).toEqual({ x: 70, y: 150 });
+    // free moves by the same (+30, +30) delta; other is outside the selection.
+    expect(overridden.free!.position).toEqual({ x: 230, y: 70 });
+    expect(overridden.other!.position).toEqual({ x: 300, y: 40 });
+    expect(overridden.r1!.position).toEqual({ x: 0, y: 0 });
+  });
 });
 
 describe('connectorMarkerId', () => {

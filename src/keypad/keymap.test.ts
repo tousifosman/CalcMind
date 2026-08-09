@@ -1,14 +1,36 @@
 import { useDocumentStore } from '../store/documentStore';
 import { useUiStore } from '../store/uiStore';
-import { addNumberNode, addOperatorNode, addParenNode, selectNode, editNumberNode, setNodeRaw, deleteNode, appendEqualsNode } from '../store/commands';
+import {
+  addNumberNode,
+  addOperatorNode,
+  addParenNode,
+  selectNode,
+  selectGroup,
+  editNumberNode,
+  setNodeRaw,
+  deleteNode,
+  appendEqualsNode,
+  appendOperatorAndNumber,
+  selectAll,
+} from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
-import { commandFromHardwareKey, dispatchEditorCommand, resolveParenSide } from './keymap';
+import {
+  commandFromHardwareKey,
+  dispatchEditorCommand,
+  resolveParenSide,
+  groupContainsResult,
+} from './keymap';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
 
 function resetStore() {
   useDocumentStore.setState({ document: createEmptyDocument(), undoStack: [], redoStack: [] });
-  useUiStore.setState({ selectedNodeId: null, editingNodeId: null, lastInteractionPoint: { x: 0, y: 0 } });
+  useUiStore.setState({
+    selectedNodeId: null,
+    editingNodeId: null,
+    groupSelectedIds: new Set(),
+    lastInteractionPoint: { x: 0, y: 0 },
+  });
 }
 
 beforeEach(resetStore);
@@ -284,8 +306,13 @@ describe('resolveParenSide (§8.5 smart () key)', () => {
   });
 });
 
+<<<<<<< HEAD
 describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () => {
   test('operator with a result selected creates [reference→R, ⊕, number] and edits the number', () => {
+=======
+describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () => {
+  test('operator with a result selected creates [reference→R, ⊕] under the source first cell and selects the operator', () => {
+>>>>>>> origin/main
     dispatchEditorCommand({ region: 'digit', value: '1' });
     dispatchEditorCommand({ region: 'digit', value: '0' });
     dispatchEditorCommand({ region: 'operator', op: '+' });
@@ -295,6 +322,7 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     const afterEquals = useDocumentStore.getState().document;
     const result = Object.values(afterEquals.nodes).find((n) => n.kind === 'result');
     expect(result).toBeDefined();
+    const sourceChain = afterEquals.chains[result!.chainId!]!;
     // `=` already focused the result — no extra selectNode before continuation.
     expect(useUiStore.getState().selectedNodeId).toBe(result!.id);
 
@@ -314,8 +342,8 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(doc.nodes[contChain.members[2]!]!).toMatchObject({ kind: 'number', raw: '' });
 
     expect(contChain.anchor).toEqual({
-      x: result!.position.x + 32,
-      y: result!.position.y + 96,
+      x: sourceChain.anchor.x,
+      y: sourceChain.anchor.y + 96,
     });
 
     const selectedId = useUiStore.getState().selectedNodeId;
@@ -693,6 +721,84 @@ describe('dispatchEditorCommand: arrows move selection between chains (P7.2)', (
   });
 });
 
+describe('dispatchEditorCommand: Select-group mode (§8.5)', () => {
+  test('groupContainsResult is true only when a result id is in the set', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    expect(groupContainsResult(new Set([a]), nodes())).toBe(false);
+    const resultId = 'n_result_group';
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.nodes[resultId] = {
+        id: resultId,
+        kind: 'result',
+        position: { x: 0, y: 0 },
+        chainId: null,
+        createdAt: Date.now(),
+        sourceChainId: 'c_missing',
+      };
+    });
+    expect(groupContainsResult(new Set([a, resultId]), nodes())).toBe(true);
+  });
+
+  test('backspace deletes the whole group in one undo entry', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const op = addOperatorNode({ x: 50, y: 0 }, '+');
+    const b = addNumberNode({ x: 84, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.ch = { id: 'ch', members: [a, op, b], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'ch';
+      draft.nodes[op].chainId = 'ch';
+      draft.nodes[b].chainId = 'ch';
+    });
+    selectGroup(op);
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'backspace' });
+
+    expect(nodes()[a]).toBeUndefined();
+    expect(nodes()[op]).toBeUndefined();
+    expect(nodes()[b]).toBeUndefined();
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before + 1);
+  });
+
+  test('digits are no-ops while a group is selected', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const op = addOperatorNode({ x: 50, y: 0 }, '+');
+    const b = addNumberNode({ x: 84, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.ch = { id: 'ch', members: [a, op, b], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'ch';
+      draft.nodes[op].chainId = 'ch';
+      draft.nodes[b].chainId = 'ch';
+    });
+    selectGroup(op);
+    const nodeCount = Object.keys(nodes()).length;
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+
+    expect(Object.keys(nodes())).toHaveLength(nodeCount);
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(3);
+  });
+
+  test('operator on a group with a result continues from that result', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '10');
+    const { operatorId: op, numberId: b } = appendOperatorAndNumber(a, '+');
+    setNodeRaw(b, '5');
+    appendEqualsNode(b);
+    const result = Object.values(nodes()).find((n) => n.kind === 'result')!;
+    selectGroup(op);
+
+    dispatchEditorCommand({ region: 'operator', op: '×' });
+
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    const selected = nodes()[useUiStore.getState().selectedNodeId!];
+    expect(selected).toMatchObject({ kind: 'operator', op: '×' });
+    const contChain = useDocumentStore.getState().document.chains[selected!.chainId!];
+    const ref = nodes()[contChain.members[0]!];
+    expect(ref).toMatchObject({ kind: 'reference', targetNodeId: result.id });
+  });
+});
+
 describe('dispatchEditorCommand: undo / redo and Escape dismiss (P7.2)', () => {
   test('undo and redo drive the document stack', () => {
     dispatchEditorCommand({ region: 'digit', value: '7' });
@@ -718,5 +824,40 @@ describe('dispatchEditorCommand: undo / redo and Escape dismiss (P7.2)', () => {
 
     dispatchEditorCommand({ region: 'escape' });
     expect(useUiStore.getState().keypadVisible).toBe(false);
+  });
+});
+
+describe('dispatchEditorCommand: Select all locks data-entry (§8.6)', () => {
+  test('digits and operators are no-ops while the whole canvas is selected', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addNumberNode({ x: 40, y: 0 }, '2');
+    selectAll();
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([a, b]));
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    expect(nodes()[a]).toMatchObject({ raw: '1' });
+    expect(nodes()[b]).toMatchObject({ raw: '2' });
+    expect(Object.keys(nodes())).toHaveLength(2);
+  });
+
+  test('undo / redo / Escape still work under Select all', () => {
+    addNumberNode({ x: 0, y: 0 }, '3');
+    const second = addNumberNode({ x: 40, y: 0 }, '4');
+    selectAll();
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'undo' });
+    expect(nodes()[second]).toBeUndefined();
+    expect(useDocumentStore.getState().undoStack.length).toBeLessThan(before);
+
+    dispatchEditorCommand({ region: 'redo' });
+    expect(nodes()[second]).toMatchObject({ raw: '4' });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+
+    selectAll();
+    dispatchEditorCommand({ region: 'escape' });
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
   });
 });

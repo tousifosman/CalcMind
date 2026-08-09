@@ -18,12 +18,25 @@ import {
   setNodeRaw,
   setOperatorSymbol,
   deleteNode,
+  deleteGroup,
   selectNode,
   editNumberNode,
   deselectNode,
 } from '../store/commands';
 import { isEvaluableRaw } from '../engine/validate';
 import { CalcNode, NodeId, NumberNode, OperatorSymbol, ParenSide } from '../model/types';
+
+/** True when a Select-group set contains a result — the keypad then exposes the
+ *  operator column for §8.7 continuation (§8.5 group mode). */
+export function groupContainsResult(
+  groupIds: ReadonlySet<NodeId>,
+  nodes: Record<NodeId, CalcNode>,
+): boolean {
+  for (const id of groupIds) {
+    if (nodes[id]?.kind === 'result') return true;
+  }
+  return false;
+}
 
 export type Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 
@@ -281,7 +294,11 @@ export function dispatchEditorCommand(command: EditorCommand): void {
 
   if (command.region === 'escape') {
     const ui = useUiStore.getState();
-    const hadFocus = ui.selectedNodeId !== null || ui.editingNodeId !== null || ui.editingLabelNodeId !== null;
+    const hadFocus =
+      ui.selectedNodeId !== null ||
+      ui.editingNodeId !== null ||
+      ui.editingLabelNodeId !== null ||
+      ui.groupSelectedIds.size > 0;
     deselectNode();
     // Second Escape (nothing focused) dismisses the keypad — the mode-strip chevron's
     // keyboard equivalent (P7.2). First Escape stays §8.5's "Escape deselects."
@@ -293,6 +310,34 @@ export function dispatchEditorCommand(command: EditorCommand): void {
 
   if (command.region === 'arrow') {
     moveSelection(ui.selectedNodeId, command.direction);
+    return;
+  }
+
+  // Select all (§8.6): data-entry has no single keypad target. Undo/redo / Escape /
+  // arrows already returned above; mode-strip actions never reach this dispatch.
+  if (ui.allSelected) {
+    return;
+  }
+
+  // §8.5 group mode: with a Select-group highlight, only history (undo/redo already
+  // handled) and backspace apply; operators also apply when the group has a result
+  // (§8.7 continuation). Digits / editing / equals / parens are inert — the on-screen
+  // keys are disabled for the same reason.
+  if (ui.groupSelectedIds.size > 0) {
+    if (command.region === 'backspace') {
+      deleteGroup(ui.groupSelectedIds);
+      deselectNode();
+      return;
+    }
+    if (command.region === 'operator') {
+      const { nodes } = useDocumentStore.getState().document;
+      const resultId =
+        [...ui.groupSelectedIds].find((id) => nodes[id]?.kind === 'result') ?? null;
+      if (resultId) {
+        const { operatorId } = continueFromResult(resultId, command.op);
+        selectNode(operatorId);
+      }
+    }
     return;
   }
 

@@ -18,6 +18,7 @@ import {
   createChainId,
 } from '../model/factories';
 import { CalcDocument, CalcNode, Chain, ChainId, NodeId, OperatorSymbol, ParenSide, Vec2 } from '../model/types';
+import { boundsOf } from '../chains/bounds';
 import { layoutChain } from '../chains/layout';
 import { widthOf } from '../chains/measure';
 import type { SnapOutcome } from '../chains/snapping';
@@ -252,15 +253,21 @@ export function appendOperatorAndNumber(
   return { operatorId: operatorNode.id, numberId: numberNode.id };
 }
 
+<<<<<<< HEAD
 /** World offset of a continuation chain from its source value (§8.7).
  *  Proportions taken from `docs/assets/linking-model.svg`: roughly half a cell right and
  *  one-and-a-half cells down from the source's top-left. */
+=======
+/** Vertical pitch of a continuation chain from the row above it (§8.7).
+ *  One-and-a-half cell heights: a full cell plus a half-cell gap, matching the
+ *  spacing that used to sit below-right of the source result. */
+>>>>>>> origin/main
 export const CONTINUATION_OFFSET = {
-  x: tokens.nodeHeight * 0.5,
   y: tokens.nodeHeight * 1.5,
 } as const;
 
 /**
+<<<<<<< HEAD
  * §8.7 Continuation: with a value `V` (number, result, or live reference) selected,
  * operator `⊕` creates a new chain below-right of `V` containing
  * `[ reference→V , ⊕ , empty number ]`. Returns the fresh number id so the
@@ -270,10 +277,86 @@ export const CONTINUATION_OFFSET = {
  * Numbers and live references are included so a value (or an existing link to one)
  * can seed another link without first pressing `=`. Drag-to-link stays result-only
  * so ordinary number snaps can still move into chains (§8.3).
+=======
+ * §8.7 placement: under the first cell of the source group, x aligned with that
+ * cell. When any other cell already overlaps the landing slot in that first-cell
+ * column, stack under it (and keep stacking while the slot still intersects an
+ * occupant) while still anchoring x to the source group's first cell — not to a
+ * drifted occupant.
+ *
+ * Collision is axis-aligned bounds overlap against the first cell's horizontal
+ * span, not left-edge proximity / same-row banding: a free number sitting in the
+ * gap under the group (or slightly x-offset but still under the first cell) must
+ * still push the new chain below it.
+ *
+ * Pure over plain document data so the stacking rule is unit-testable without
+ * going through the store.
+ */
+export function continuationAnchor(
+  resultNodeId: NodeId,
+  nodes: Record<NodeId, CalcNode>,
+  chains: Record<ChainId, Chain>,
+  locale: string = 'en-US',
+): Vec2 {
+  const result = nodes[resultNodeId];
+  if (!result || result.kind !== 'result') {
+    throw new Error(
+      `continuationAnchor: node ${resultNodeId} is not a result (got ${result?.kind ?? 'missing'})`,
+    );
+  }
+
+  const sourceChain =
+    result.chainId !== null ? chains[result.chainId] : undefined;
+  const originX = sourceChain?.anchor.x ?? result.position.x;
+  const originY = sourceChain?.anchor.y ?? result.position.y;
+  const pitch = CONTINUATION_OFFSET.y;
+  const sourceChainId = sourceChain?.id ?? null;
+
+  const firstMember =
+    sourceChain !== undefined
+      ? nodes[sourceChain.members[0]!]
+      : undefined;
+  const columnLeft = originX;
+  const columnRight =
+    firstMember !== undefined
+      ? originX + widthOf(firstMember, locale, tokens.numeralFontSize, nodes)
+      : originX + tokens.nodeHeight;
+
+  let y = originY + pitch;
+  // Push below any cell whose bounds intersect the candidate slot in this
+  // column. A clear gap below the source keeps the default landing; only real
+  // overlap moves the chain down.
+  for (;;) {
+    let blockerY: number | null = null;
+    const slotTop = y;
+    const slotBottom = y + tokens.nodeHeight;
+    for (const node of Object.values(nodes)) {
+      if (sourceChainId !== null && node.chainId === sourceChainId) continue;
+      const b = boundsOf(node, locale, nodes);
+      if (b.right <= columnLeft || b.left >= columnRight) continue;
+      if (b.bottom <= slotTop || b.top >= slotBottom) continue;
+      if (blockerY === null || node.position.y > blockerY) {
+        blockerY = node.position.y;
+      }
+    }
+    if (blockerY === null) break;
+    y = blockerY + pitch;
+  }
+
+  return { x: originX, y };
+}
+
+/**
+ * §8.7 Continuation: with result `R` selected, operator `⊕` creates a new chain
+ * under the first cell of R's group containing `[ reference→R , ⊕ ]`. Returns
+ * the new operator id so the dispatcher can select it — the next digit then
+ * lands in a fresh number via the normal append path. Never edits `R`.
+>>>>>>> origin/main
  */
 export function continueFromValue(
   valueNodeId: NodeId,
   op: OperatorSymbol,
+<<<<<<< HEAD
 ): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId; numberId: NodeId } {
   const nodes = useDocumentStore.getState().document.nodes;
   const value = nodes[valueNodeId];
@@ -283,6 +366,12 @@ export function continueFromValue(
     !value ||
     (value.kind !== 'result' && value.kind !== 'number' && !isLiveReference)
   ) {
+=======
+): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId } {
+  const { nodes, chains } = useDocumentStore.getState().document;
+  const result = nodes[resultNodeId];
+  if (!result || result.kind !== 'result') {
+>>>>>>> origin/main
     throw new Error(
       `continueFromValue: node ${valueNodeId} is not a number, result, or live reference (got ${value?.kind ?? 'missing'})`,
     );
@@ -292,10 +381,19 @@ export function continueFromValue(
   const operator = createOperatorNode({ x: 0, y: 0 }, op);
   const number = createNumberNode({ x: 0, y: 0 }, '');
   const chainId = createChainId();
+<<<<<<< HEAD
   const anchor = {
     x: value.position.x + CONTINUATION_OFFSET.x,
     y: value.position.y + CONTINUATION_OFFSET.y,
   };
+=======
+  const anchor = continuationAnchor(
+    resultNodeId,
+    nodes,
+    chains,
+    getDeviceLocale(),
+  );
+>>>>>>> origin/main
 
   useDocumentStore.getState().applyCommand((draft) => {
     reference.chainId = chainId;
@@ -591,6 +689,27 @@ export function deleteNode(nodeId: NodeId): void {
         chain.members = chain.members.filter((id) => id !== nodeId);
         finalizeChain(draft, chainId);
       }
+    }
+  });
+}
+
+/** Deletes every id in a Select-group set as one undo entry (§8.6: a group is how a
+ *  chain is deleted as a unit). Empty input is a no-op. */
+export function deleteGroup(ids: Iterable<NodeId>): void {
+  const idList = Array.from(ids);
+  if (idList.length === 0) return;
+  useDocumentStore.getState().applyCommand((draft) => {
+    const chainIds = new Set<ChainId>();
+    for (const id of idList) {
+      const node = draft.nodes[id];
+      if (node?.chainId) chainIds.add(node.chainId);
+    }
+    deleteNodesLeavingDanglingRefs(draft, idList, getDeviceLocale());
+    for (const chainId of chainIds) {
+      const chain = draft.chains[chainId];
+      if (!chain) continue;
+      chain.members = chain.members.filter((id) => draft.nodes[id] !== undefined);
+      finalizeChain(draft, chainId);
     }
   });
 }
@@ -974,6 +1093,29 @@ export function moveChain(chainId: ChainId, anchor: Vec2): void {
   });
 }
 
+/** Translate every unit in a multi-node selection by the same delta (§8.6 Select all).
+ *  Chains move via `anchor` + reflow; free nodes via `position`. One undo entry.
+ *  No-op when `delta` is zero. */
+export function moveSelection(
+  units: { chainIds: readonly ChainId[]; freeNodeIds: readonly NodeId[] },
+  delta: Vec2,
+): void {
+  if (delta.x === 0 && delta.y === 0) return;
+  useDocumentStore.getState().applyCommand((draft) => {
+    for (const chainId of units.chainIds) {
+      const chain = draft.chains[chainId];
+      if (!chain) continue;
+      chain.anchor = { x: chain.anchor.x + delta.x, y: chain.anchor.y + delta.y };
+      reflowChain(draft, chainId);
+    }
+    for (const id of units.freeNodeIds) {
+      const node = draft.nodes[id];
+      if (!node || node.chainId !== null) continue;
+      node.position = { x: node.position.x + delta.x, y: node.position.y + delta.y };
+    }
+  });
+}
+
 /** Selects every node in the same chain as `nodeId` (§8.6, P2.9). Nodes that are
  *  not chain members — i.e. free nodes with `chainId === null` — count as a group
  *  of one. This is purely ephemeral UI state; the document is not changed. */
@@ -991,9 +1133,12 @@ export function selectGroup(nodeId: NodeId): void {
   }
 
   useUiStore.getState().setGroupSelected(new Set(ids));
-  // Select the long-pressed node as the primary selection so the keypad still has
-  // a sensible target while the group highlight is visible.
-  useUiStore.getState().setSelectedNode(nodeId);
+  useUiStore.getState().setAllSelected(false);
+  // Prefer a result in the group as the keypad target so §8.7 continuation works
+  // from the group-mode operator column without an extra tap. Otherwise keep the
+  // tapped / long-pressed node as primary.
+  const resultId = ids.find((id) => document.nodes[id]?.kind === 'result');
+  useUiStore.getState().setSelectedNode(resultId ?? nodeId);
   useUiStore.getState().setEditingNode(null);
 }
 
@@ -1013,6 +1158,27 @@ function discardIfAbandoned(keepId: NodeId | null): void {
   if (node && node.kind === 'number' && node.raw === '') {
     deleteNode(editingId);
   }
+}
+
+/** Selects every node on the canvas (§8.6 `Select all`). Ephemeral — same store
+ *  as `Select group`; the document is not changed and no undo entry is recorded.
+ *  Discards an abandoned empty number first so a leftover blank edit cell is not
+ *  part of the selection. No-op when the canvas is already empty. */
+export function selectAll(): void {
+  discardIfAbandoned(null);
+  const { document } = useDocumentStore.getState();
+  const ids = Object.keys(document.nodes);
+  if (ids.length === 0) return;
+
+  useUiStore.getState().setGroupSelected(new Set(ids));
+  useUiStore.getState().setAllSelected(true);
+  useUiStore.getState().setEditingNode(null);
+  useUiStore.getState().setEditingLabelNode(null);
+  // Keep the current keypad target when it is still present; otherwise pick any
+  // surviving node so the focus ring / keypad still have somewhere to land.
+  const current = useUiStore.getState().selectedNodeId;
+  const primary = current && document.nodes[current] ? current : ids[0];
+  useUiStore.getState().setSelectedNode(primary);
 }
 
 /** Selects any node kind without entering edit mode - the target for keypad/hardware-keyboard
