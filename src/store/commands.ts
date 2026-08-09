@@ -18,6 +18,7 @@ import {
   createChainId,
 } from '../model/factories';
 import { CalcDocument, CalcNode, Chain, ChainId, NodeId, OperatorSymbol, ParenSide, Vec2 } from '../model/types';
+import { boundsOf } from '../chains/bounds';
 import { layoutChain } from '../chains/layout';
 import { widthOf } from '../chains/measure';
 import type { SnapOutcome } from '../chains/snapping';
@@ -229,18 +230,17 @@ export const CONTINUATION_OFFSET = {
   y: tokens.nodeHeight * 1.5,
 } as const;
 
-/** How close a node's `position.x` must be to the source chain's first-cell x
- *  to count as "already in this column" when stacking continuations. Half a
- *  cell — tight enough that a chain starting one cell to the right does not
- *  steal the slot, loose enough for float drift after a drag. */
-const CONTINUATION_COLUMN_TOLERANCE = tokens.nodeHeight * 0.5;
-
 /**
  * §8.7 placement: under the first cell of the source group, x aligned with that
- * cell. When a prior cell already occupies the landing row in that column,
- * stack under it (and keep stacking through a contiguous column of occupants)
- * while still anchoring x to the source group's first cell — not to a drifted
- * occupant.
+ * cell. When any other cell already overlaps the landing slot in that first-cell
+ * column, stack under it (and keep stacking while the slot still intersects an
+ * occupant) while still anchoring x to the source group's first cell — not to a
+ * drifted occupant.
+ *
+ * Collision is axis-aligned bounds overlap against the first cell's horizontal
+ * span, not left-edge proximity / same-row banding: a free number sitting in the
+ * gap under the group (or slightly x-offset but still under the first cell) must
+ * still push the new chain below it.
  *
  * Pure over plain document data so the stacking rule is unit-testable without
  * going through the store.
@@ -249,6 +249,7 @@ export function continuationAnchor(
   resultNodeId: NodeId,
   nodes: Record<NodeId, CalcNode>,
   chains: Record<ChainId, Chain>,
+  locale: string = 'en-US',
 ): Vec2 {
   const result = nodes[resultNodeId];
   if (!result || result.kind !== 'result') {
@@ -264,17 +265,29 @@ export function continuationAnchor(
   const pitch = CONTINUATION_OFFSET.y;
   const sourceChainId = sourceChain?.id ?? null;
 
+  const firstMember =
+    sourceChain !== undefined
+      ? nodes[sourceChain.members[0]!]
+      : undefined;
+  const columnLeft = originX;
+  const columnRight =
+    firstMember !== undefined
+      ? originX + widthOf(firstMember, locale, tokens.numeralFontSize, nodes)
+      : originX + tokens.nodeHeight;
+
   let y = originY + pitch;
-  // Walk down through contiguous occupied rows in this column. A gap leaves the
-  // default (or next free) slot fillable — only "already there" blockers push.
+  // Push below any cell whose bounds intersect the candidate slot in this
+  // column. A clear gap below the source keeps the default landing; only real
+  // overlap moves the chain down.
   for (;;) {
     let blockerY: number | null = null;
+    const slotTop = y;
+    const slotBottom = y + tokens.nodeHeight;
     for (const node of Object.values(nodes)) {
       if (sourceChainId !== null && node.chainId === sourceChainId) continue;
-      if (Math.abs(node.position.x - originX) > CONTINUATION_COLUMN_TOLERANCE) {
-        continue;
-      }
-      if (Math.abs(node.position.y - y) > pitch / 2) continue;
+      const b = boundsOf(node, locale, nodes);
+      if (b.right <= columnLeft || b.left >= columnRight) continue;
+      if (b.bottom <= slotTop || b.top >= slotBottom) continue;
       if (blockerY === null || node.position.y > blockerY) {
         blockerY = node.position.y;
       }
@@ -307,7 +320,12 @@ export function continueFromResult(
   const reference = createReferenceNode({ x: 0, y: 0 }, resultNodeId);
   const operator = createOperatorNode({ x: 0, y: 0 }, op);
   const chainId = createChainId();
-  const anchor = continuationAnchor(resultNodeId, nodes, chains);
+  const anchor = continuationAnchor(
+    resultNodeId,
+    nodes,
+    chains,
+    getDeviceLocale(),
+  );
 
   useDocumentStore.getState().applyCommand((draft) => {
     reference.chainId = chainId;

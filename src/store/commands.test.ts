@@ -1392,8 +1392,9 @@ describe('continueFromResult (P4.9, §8.7)', () => {
     )!;
     const { chainId: priorId } = continueFromResult(result.id, '+');
 
-    // Drag the prior continuation sideways but keep it on the landing row —
-    // its y still blocks the slot; the new chain must not inherit the drifted x.
+    // Drag the prior continuation sideways but keep it overlapping the first-cell
+    // column — its y still blocks the slot; the new chain must not inherit the
+    // drifted x.
     const prior = useDocumentStore.getState().document.chains[priorId]!;
     moveChain(priorId, { x: prior.anchor.x + 8, y: prior.anchor.y });
 
@@ -1403,6 +1404,47 @@ describe('continueFromResult (P4.9, §8.7)', () => {
     expect(continuationAnchor(result.id, nodes, chains)).toEqual({
       x: sourceAnchor.x,
       y: priorY + CONTINUATION_OFFSET.y,
+    });
+  });
+
+  test('stacks under a free cell that sits in the gap under the first cell', () => {
+    // Repro: a loose number already under the group, not on the exact default
+    // landing row — same-row banding used to miss it and paint the link on top.
+    const a = addNumberNode({ x: 0, y: 0 }, '63');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    const sourceY = useDocumentStore.getState().document.chains[result.chainId!]!
+      .anchor.y;
+    const blockerY = sourceY + 40; // inside the gap; overlaps default landing
+    addNumberNode({ x: 0, y: blockerY }, '9');
+
+    const { chainId } = continueFromResult(result.id, '+');
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.chains[chainId]!.anchor).toEqual({
+      x: 0,
+      y: blockerY + CONTINUATION_OFFSET.y,
+    });
+  });
+
+  test('stacks under a free cell whose left edge is offset but still under the first cell', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '63');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    const source = useDocumentStore.getState().document.chains[result.chainId!]!;
+    // Sit under the right half of "63" — left-edge proximity used to miss this.
+    const blockerY = source.anchor.y + CONTINUATION_OFFSET.y;
+    addNumberNode({ x: 36, y: blockerY }, '2');
+
+    const { chainId } = continueFromResult(result.id, '+');
+
+    expect(useDocumentStore.getState().document.chains[chainId]!.anchor).toEqual({
+      x: source.anchor.x,
+      y: blockerY + CONTINUATION_OFFSET.y,
     });
   });
 
