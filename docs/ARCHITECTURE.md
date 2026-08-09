@@ -720,17 +720,18 @@ value can be linked without first pressing `=`:
 given: a value V (number, result, or live reference) is selected, and V is not being edited
 when:  the user presses an operator ⊕
 then:  create chain C' below-right of V, containing
-         [ reference→V , ⊕ ]
-       select C' so the next digits land in a fresh number node
+         [ reference→V , ⊕ , empty number ]
+       select the empty number so the next digits edit it in place
        draw a connector from V to the reference, in V's identity hue
 ```
 
 A number that *is* being edited still appends the operator in-chain — that is how `5 + 3` is
 typed. Tap or arrow selection leaves the number selected-but-not-editing, which is the
-continuation-ready state (mirroring a selected result). A **result** or **linked cell**
-(reference) rejects digits — keypad number keys are disabled while either is selected — and an
-operator starts a further continuation from that value rather than editing it in place. For a
-reference, `=` / paren still append so a just-dropped link can finish its expression.
+continuation-ready state (mirroring a selected result). A **result**, **operator**, or
+**linked cell** (reference) rejects digits — keypad number keys are disabled while any of
+those is selected. Continuation therefore seeds an empty number and focuses it, so the next
+digits edit in place rather than relying on a selected operator. For a reference, `=` / paren
+still append so a just-dropped link can finish its expression.
 
 This is the single most important interaction in the app: it turns "I have a value" into "…and
 now I keep working with it" in one keystroke, and it is what produces the linked trees that make

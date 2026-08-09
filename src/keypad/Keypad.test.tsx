@@ -4,6 +4,7 @@ import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
 import {
   addNumberNode,
+  addOperatorNode,
   appendEqualsNode,
   continueFromValue,
   selectNode,
@@ -89,14 +90,15 @@ describe('Keypad', () => {
     expect(findByTestID(renderer, 'keypad-mode-dismiss').props.disabled).toBeFalsy();
   });
 
-  test('digit keys disable while a linked cell or result is selected', () => {
+  test('digit keys disable while a linked cell, result, or operator is selected', () => {
     const presses: KeypadKey[] = [];
     const n = addNumberNode({ x: 0, y: 0 }, '3');
     appendEqualsNode(n);
     const result = Object.values(useDocumentStore.getState().document.nodes).find(
       (node) => node.kind === 'result',
     )!;
-    const { referenceId } = continueFromValue(result.id, '+');
+    const { referenceId, operatorId } = continueFromValue(result.id, '+');
+    const freeOp = addOperatorNode({ x: 200, y: 0 }, '×');
     let renderer!: ReactTestRenderer;
     act(() => {
       selectNode(referenceId);
@@ -112,6 +114,16 @@ describe('Keypad', () => {
 
     act(() => {
       selectNode(result.id);
+    });
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
+
+    act(() => {
+      selectNode(operatorId);
+    });
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
+
+    act(() => {
+      selectNode(freeOp);
     });
     expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
 

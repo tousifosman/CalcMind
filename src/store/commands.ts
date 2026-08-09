@@ -232,9 +232,10 @@ export const CONTINUATION_OFFSET = {
 
 /**
  * §8.7 Continuation: with a value `V` (number, result, or live reference) selected,
- * operator `⊕` creates a new chain below-right of `V` containing `[ reference→V , ⊕ ]`.
- * Returns the new operator id so the dispatcher can select it — the next digit then
- * lands in a fresh number via the normal append path. Never edits `V`.
+ * operator `⊕` creates a new chain below-right of `V` containing
+ * `[ reference→V , ⊕ , empty number ]`. Returns the fresh number id so the
+ * dispatcher can put it in edit mode — same as {@link appendOperatorAndNumber},
+ * and required now that a selected operator rejects digits. Never edits `V`.
  *
  * Numbers and live references are included so a value (or an existing link to one)
  * can seed another link without first pressing `=`. Drag-to-link stays result-only
@@ -243,7 +244,7 @@ export const CONTINUATION_OFFSET = {
 export function continueFromValue(
   valueNodeId: NodeId,
   op: OperatorSymbol,
-): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId } {
+): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId; numberId: NodeId } {
   const nodes = useDocumentStore.getState().document.nodes;
   const value = nodes[valueNodeId];
   const isLiveReference =
@@ -259,6 +260,7 @@ export function continueFromValue(
 
   const reference = createReferenceNode({ x: 0, y: 0 }, valueNodeId);
   const operator = createOperatorNode({ x: 0, y: 0 }, op);
+  const number = createNumberNode({ x: 0, y: 0 }, '');
   const chainId = createChainId();
   const anchor = {
     x: value.position.x + CONTINUATION_OFFSET.x,
@@ -268,17 +270,24 @@ export function continueFromValue(
   useDocumentStore.getState().applyCommand((draft) => {
     reference.chainId = chainId;
     operator.chainId = chainId;
+    number.chainId = chainId;
     draft.nodes[reference.id] = reference;
     draft.nodes[operator.id] = operator;
+    draft.nodes[number.id] = number;
     draft.chains[chainId] = {
       id: chainId,
       anchor,
-      members: [reference.id, operator.id],
+      members: [reference.id, operator.id, number.id],
     };
     reflowChain(draft, chainId);
   });
 
-  return { chainId, referenceId: reference.id, operatorId: operator.id };
+  return {
+    chainId,
+    referenceId: reference.id,
+    operatorId: operator.id,
+    numberId: number.id,
+  };
 }
 
 /** @deprecated Use {@link continueFromValue} — kept as a thin alias for call sites
@@ -286,7 +295,7 @@ export function continueFromValue(
 export function continueFromResult(
   resultNodeId: NodeId,
   op: OperatorSymbol,
-): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId } {
+): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId; numberId: NodeId } {
   return continueFromValue(resultNodeId, op);
 }
 

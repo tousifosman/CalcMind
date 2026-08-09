@@ -1218,16 +1218,20 @@ describe('continueFromValue (P4.9, §8.7)', () => {
     const result = Object.values(useDocumentStore.getState().document.nodes).find((n) => n.kind === 'result')!;
     useDocumentStore.setState({ undoStack: [], redoStack: [] });
 
-    const { chainId, referenceId, operatorId } = continueFromValue(result.id, '+');
+    const { chainId, referenceId, operatorId, numberId } = continueFromValue(
+      result.id,
+      '+',
+    );
 
     const doc = useDocumentStore.getState().document;
-    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId]);
+    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId, numberId]);
     expect(doc.nodes[referenceId]).toMatchObject({
       kind: 'reference',
       targetNodeId: result.id,
       chainId,
     });
     expect(doc.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '+', chainId });
+    expect(doc.nodes[numberId]).toMatchObject({ kind: 'number', raw: '', chainId });
     expect(doc.chains[chainId]!.anchor).toEqual({
       x: result.position.x + CONTINUATION_OFFSET.x,
       y: result.position.y + CONTINUATION_OFFSET.y,
@@ -1246,6 +1250,7 @@ describe('continueFromValue (P4.9, §8.7)', () => {
     expect(useDocumentStore.getState().document.chains[chainId]!.members).toEqual([
       referenceId,
       operatorId,
+      numberId,
     ]);
   });
 
@@ -1253,7 +1258,7 @@ describe('continueFromValue (P4.9, §8.7)', () => {
     const n = addNumberNode({ x: 40, y: 80 }, '12');
     useDocumentStore.setState({ undoStack: [], redoStack: [] });
 
-    const { chainId, referenceId, operatorId } = continueFromValue(n, '×');
+    const { chainId, referenceId, operatorId, numberId } = continueFromValue(n, '×');
 
     const doc = useDocumentStore.getState().document;
     expect(doc.nodes[referenceId]).toMatchObject({
@@ -1262,7 +1267,8 @@ describe('continueFromValue (P4.9, §8.7)', () => {
       chainId,
     });
     expect(doc.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '×', chainId });
-    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId]);
+    expect(doc.nodes[numberId]).toMatchObject({ kind: 'number', raw: '', chainId });
+    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId, numberId]);
     expect(doc.chains[chainId]!.anchor).toEqual({
       x: 40 + CONTINUATION_OFFSET.x,
       y: 80 + CONTINUATION_OFFSET.y,
@@ -1271,12 +1277,15 @@ describe('continueFromValue (P4.9, §8.7)', () => {
     expect(doc.nodes[n]).toMatchObject({ kind: 'number', raw: '12', chainId: null });
   });
 
-  test('builds [reference→Ref, ⊕] from a live linked cell', () => {
+  test('builds [reference→Ref, ⊕, number] from a live linked cell', () => {
     const n = addNumberNode({ x: 10, y: 20 }, '3');
     const { referenceId: parentRef } = continueFromValue(n, '+');
     useDocumentStore.setState({ undoStack: [], redoStack: [] });
 
-    const { chainId, referenceId, operatorId } = continueFromValue(parentRef, '×');
+    const { chainId, referenceId, operatorId, numberId } = continueFromValue(
+      parentRef,
+      '×',
+    );
 
     const doc = useDocumentStore.getState().document;
     expect(doc.nodes[referenceId]).toMatchObject({
@@ -1285,7 +1294,7 @@ describe('continueFromValue (P4.9, §8.7)', () => {
       chainId,
     });
     expect(doc.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '×', chainId });
-    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId]);
+    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId, numberId]);
     // Parent link stays in its own chain.
     expect(doc.nodes[parentRef]).toMatchObject({ kind: 'reference', targetNodeId: n });
   });
@@ -1787,9 +1796,9 @@ describe('P6.2 incremental cascade', () => {
       )!;
       expect(r1).toMatchObject({ derived: { display: '1,224' } });
 
-      // c2: continuation × 2 =
-      const { chainId: c2, operatorId } = continueFromResult(r1.id, '×');
-      const n3 = appendNumberNode(operatorId, '2');
+      // c2: continuation × 2 = (continuation seeds the empty operand)
+      const { chainId: c2, numberId: n3 } = continueFromResult(r1.id, '×');
+      setNodeRaw(n3, '2');
       appendEqualsNode(n3);
       const r2 = Object.values(useDocumentStore.getState().document.nodes).find(
         (n) => n.kind === 'result' && n.sourceChainId === c2,

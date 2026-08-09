@@ -285,7 +285,7 @@ describe('resolveParenSide (§8.5 smart () key)', () => {
 });
 
 describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () => {
-  test('operator with a result selected creates [reference→R, ⊕] below-right and selects the operator', () => {
+  test('operator with a result selected creates [reference→R, ⊕, number] and edits the number', () => {
     dispatchEditorCommand({ region: 'digit', value: '1' });
     dispatchEditorCommand({ region: 'digit', value: '0' });
     dispatchEditorCommand({ region: 'operator', op: '+' });
@@ -308,9 +308,10 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
 
     const contChain = doc.chains[ref.chainId!]!;
     expect(contChain).toBeDefined();
-    expect(contChain.members).toHaveLength(2);
+    expect(contChain.members).toHaveLength(3);
     expect(doc.nodes[contChain.members[0]!]!.kind).toBe('reference');
     expect(doc.nodes[contChain.members[1]!]!).toMatchObject({ kind: 'operator', op: '×' });
+    expect(doc.nodes[contChain.members[2]!]!).toMatchObject({ kind: 'number', raw: '' });
 
     expect(contChain.anchor).toEqual({
       x: result!.position.x + 32,
@@ -318,7 +319,8 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     });
 
     const selectedId = useUiStore.getState().selectedNodeId;
-    expect(selectedId).toBe(contChain.members[1]);
+    expect(selectedId).toBe(contChain.members[2]);
+    expect(useUiStore.getState().editingNodeId).toBe(contChain.members[2]);
     expect(doc.nodes[result!.id]!.kind).toBe('result');
   });
 
@@ -342,9 +344,10 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(refs).toHaveLength(1);
     expect(refs[0]).toMatchObject({ kind: 'reference', targetNodeId: numberId });
     const contChain = doc.chains[refs[0]!.chainId!]!;
-    expect(contChain.members).toHaveLength(2);
+    expect(contChain.members).toHaveLength(3);
     expect(doc.nodes[contChain.members[1]!]).toMatchObject({ kind: 'operator', op: '+' });
-    expect(useUiStore.getState().selectedNodeId).toBe(contChain.members[1]);
+    expect(useUiStore.getState().selectedNodeId).toBe(contChain.members[2]);
+    expect(useUiStore.getState().editingNodeId).toBe(contChain.members[2]);
     // Source stays put.
     expect(doc.nodes[numberId]).toMatchObject({ kind: 'number', raw: '12' });
   });
@@ -391,8 +394,30 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     // Parent chain must not have grown — that was the "adds a cell at the end" bug.
     expect(doc.chains[firstRef.chainId!]!.members).toHaveLength(chainLenBefore);
     expect(useUiStore.getState().selectedNodeId).toBe(
-      doc.chains[child.chainId!]!.members[1],
+      doc.chains[child.chainId!]!.members[2],
     );
+  });
+
+  test('digit with an operator selected no-ops (does not append at chain end)', () => {
+    dispatchEditorCommand({ region: 'digit', value: '5' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    // Selection is on the empty number after `+`; move focus onto the operator
+    // (selectNode discards that empty placeholder — re-read members after).
+    const op = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'operator',
+    )!;
+    selectNode(op.id);
+    const before = useDocumentStore.getState().undoStack.length;
+    const membersBefore =
+      useDocumentStore.getState().document.chains[op.chainId!]!.members.length;
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(
+      useDocumentStore.getState().document.chains[op.chainId!]!.members,
+    ).toHaveLength(membersBefore);
+    expect(useUiStore.getState().selectedNodeId).toBe(op.id);
   });
 
   test('digit with a linked cell selected no-ops (does not append at chain end)', () => {

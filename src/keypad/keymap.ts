@@ -370,8 +370,8 @@ export function dispatchEditorCommand(command: EditorCommand): void {
   // Numbers being edited still append in-chain so typing `5 + 3` is unchanged.
   if (selectedNode?.kind === 'result') {
     if (command.region === 'operator') {
-      const { operatorId } = continueFromValue(selectedNode.id, command.op);
-      selectNode(operatorId);
+      const { numberId } = continueFromValue(selectedNode.id, command.op);
+      editNumberNode(numberId);
     }
     return;
   }
@@ -381,8 +381,8 @@ export function dispatchEditorCommand(command: EditorCommand): void {
       undefined;
     if (command.region === 'operator') {
       if (targetExists) {
-        const { operatorId } = continueFromValue(selectedNode.id, command.op);
-        selectNode(operatorId);
+        const { numberId } = continueFromValue(selectedNode.id, command.op);
+        editNumberNode(numberId);
       }
       return;
     }
@@ -399,8 +399,8 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     !editingNumber &&
     command.region === 'operator'
   ) {
-    const { operatorId } = continueFromValue(selectedNode.id, command.op);
-    selectNode(operatorId);
+    const { numberId } = continueFromValue(selectedNode.id, command.op);
+    editNumberNode(numberId);
     return;
   }
 
@@ -410,6 +410,10 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     case 'digit':
     case 'decimal':
     case 'sign': {
+      // Operator cells are not number-edit targets (keypad digits are disabled);
+      // do not append a fresh number at the chain end.
+      if (selectedNode?.kind === 'operator') return;
+
       const char = command.region === 'digit' ? command.value : command.region === 'decimal' ? '.' : '-';
 
       if (editingNumber) {
