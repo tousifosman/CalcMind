@@ -736,21 +736,14 @@ value can be linked without first pressing `=`:
 ```
 given: a value V (number, result, or live reference) is selected, and V is not being edited
 when:  the user presses an operator ⊕
-<<<<<<< HEAD
-then:  create chain C' below-right of V, containing
-         [ reference→V , ⊕ , empty number ]
-       select the empty number so the next digits edit it in place
-       draw a connector from V to the reference, in V's identity hue
-=======
-then:  create chain C' underneath the first cell of C, containing
-         [ reference→R , ⊕ ]
-       C'.anchor.x matches C's first cell; if that column's landing row
+then:  create chain C' underneath the first cell of V's group (or under V when free),
+         containing [ reference→V , ⊕ , empty number ]
+       C'.anchor.x matches that first cell; if that column's landing row
          is already occupied, stack C' under the occupant (and keep
          stacking through a contiguous column) while still starting at
-         C's first-cell x
-       select C' so the next digits land in a fresh number node
-       draw a connector from R to the reference, in R's identity hue
->>>>>>> origin/main
+         the first-cell x
+       select the empty number so the next digits edit it in place
+       draw a connector from V to the reference, in V's identity hue
 ```
 
 A number that *is* being edited still appends the operator in-chain — that is how `5 + 3` is

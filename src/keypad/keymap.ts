@@ -334,8 +334,8 @@ export function dispatchEditorCommand(command: EditorCommand): void {
       const resultId =
         [...ui.groupSelectedIds].find((id) => nodes[id]?.kind === 'result') ?? null;
       if (resultId) {
-        const { operatorId } = continueFromResult(resultId, command.op);
-        selectNode(operatorId);
+        const { numberId } = continueFromValue(resultId, command.op);
+        editNumberNode(numberId);
       }
     }
     return;

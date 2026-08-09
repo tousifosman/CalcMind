@@ -11,12 +11,9 @@ import {
   appendEqualsNode,
   appendOperatorAndNumber,
   continueFromResult,
-<<<<<<< HEAD
   continueFromValue,
   setOperatorSymbol,
-=======
   continuationAnchor,
->>>>>>> origin/main
   CONTINUATION_OFFSET,
   setNodeRaw,
   deleteNode,
@@ -1374,13 +1371,8 @@ describe('P4.7 result node lifecycle', () => {
   });
 });
 
-<<<<<<< HEAD
 describe('continueFromValue (P4.9, §8.7)', () => {
-  test('builds [reference→R, ⊕] below-right of a result in one undo entry', () => {
-=======
-describe('continueFromResult (P4.9, §8.7)', () => {
-  test('builds [reference→R, ⊕] under the source group\'s first cell in one undo entry', () => {
->>>>>>> origin/main
+  test("builds [reference→R, ⊕, number] under the source group's first cell in one undo entry", () => {
     const a = addNumberNode({ x: 10, y: 20 }, '7');
     appendEqualsNode(a);
     const docBefore = useDocumentStore.getState().document;
@@ -1426,8 +1418,7 @@ describe('continueFromResult (P4.9, §8.7)', () => {
     ]);
   });
 
-<<<<<<< HEAD
-  test('builds [reference→N, ⊕] from a number value (no equals required)', () => {
+  test('builds [reference→N, ⊕, number] from a number value (no equals required)', () => {
     const n = addNumberNode({ x: 40, y: 80 }, '12');
     useDocumentStore.setState({ undoStack: [], redoStack: [] });
 
@@ -1443,7 +1434,7 @@ describe('continueFromResult (P4.9, §8.7)', () => {
     expect(doc.nodes[numberId]).toMatchObject({ kind: 'number', raw: '', chainId });
     expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId, numberId]);
     expect(doc.chains[chainId]!.anchor).toEqual({
-      x: 40 + CONTINUATION_OFFSET.x,
+      x: 40,
       y: 80 + CONTINUATION_OFFSET.y,
     });
     // Source number is untouched — still free, still '12'.
@@ -1481,7 +1472,8 @@ describe('continueFromResult (P4.9, §8.7)', () => {
     expect(() => continueFromResult(op, '+')).toThrow(
       /not a number, result, or live reference/,
     );
-=======
+  });
+
   test('stacks under an existing cell in the first-cell column', () => {
     const a = addNumberNode({ x: 40, y: 10 }, '3');
     appendEqualsNode(a);
@@ -1566,12 +1558,6 @@ describe('continueFromResult (P4.9, §8.7)', () => {
       x: source.anchor.x,
       y: blockerY + CONTINUATION_OFFSET.y,
     });
-  });
-
-  test('rejects a non-result target', () => {
-    const a = addNumberNode({ x: 0, y: 0 }, '1');
-    expect(() => continueFromResult(a, '+')).toThrow(/not a result/);
->>>>>>> origin/main
   });
 });
 

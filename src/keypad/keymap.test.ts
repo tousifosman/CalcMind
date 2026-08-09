@@ -306,13 +306,8 @@ describe('resolveParenSide (§8.5 smart () key)', () => {
   });
 });
 
-<<<<<<< HEAD
 describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () => {
-  test('operator with a result selected creates [reference→R, ⊕, number] and edits the number', () => {
-=======
-describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () => {
-  test('operator with a result selected creates [reference→R, ⊕] under the source first cell and selects the operator', () => {
->>>>>>> origin/main
+  test('operator with a result selected creates [reference→R, ⊕, number] under the source first cell and edits the number', () => {
     dispatchEditorCommand({ region: 'digit', value: '1' });
     dispatchEditorCommand({ region: 'digit', value: '0' });
     dispatchEditorCommand({ region: 'operator', op: '+' });
@@ -791,11 +786,16 @@ describe('dispatchEditorCommand: Select-group mode (§8.5)', () => {
     dispatchEditorCommand({ region: 'operator', op: '×' });
 
     expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
-    const selected = nodes()[useUiStore.getState().selectedNodeId!];
-    expect(selected).toMatchObject({ kind: 'operator', op: '×' });
+    const selectedId = useUiStore.getState().selectedNodeId!;
+    const selected = nodes()[selectedId];
+    expect(selected).toMatchObject({ kind: 'number', raw: '' });
+    expect(useUiStore.getState().editingNodeId).toBe(selectedId);
     const contChain = useDocumentStore.getState().document.chains[selected!.chainId!];
+    expect(contChain.members).toHaveLength(3);
     const ref = nodes()[contChain.members[0]!];
     expect(ref).toMatchObject({ kind: 'reference', targetNodeId: result.id });
+    expect(nodes()[contChain.members[1]!]).toMatchObject({ kind: 'operator', op: '×' });
+    expect(contChain.members[2]).toBe(selectedId);
   });
 });
 
