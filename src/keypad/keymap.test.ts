@@ -5,14 +5,21 @@ import {
   addOperatorNode,
   addParenNode,
   selectNode,
+  selectGroup,
   editNumberNode,
   setNodeRaw,
   deleteNode,
   appendEqualsNode,
+  appendOperatorAndNumber,
   selectAll,
 } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
-import { commandFromHardwareKey, dispatchEditorCommand, resolveParenSide } from './keymap';
+import {
+  commandFromHardwareKey,
+  dispatchEditorCommand,
+  resolveParenSide,
+  groupContainsResult,
+} from './keymap';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
 
@@ -532,6 +539,84 @@ describe('dispatchEditorCommand: arrows move selection between chains (P7.2)', (
     expect(useUiStore.getState().selectedNodeId).toBe(id);
     dispatchEditorCommand({ region: 'arrow', direction: 'down' });
     expect(useUiStore.getState().selectedNodeId).toBe(id);
+  });
+});
+
+describe('dispatchEditorCommand: Select-group mode (§8.5)', () => {
+  test('groupContainsResult is true only when a result id is in the set', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    expect(groupContainsResult(new Set([a]), nodes())).toBe(false);
+    const resultId = 'n_result_group';
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.nodes[resultId] = {
+        id: resultId,
+        kind: 'result',
+        position: { x: 0, y: 0 },
+        chainId: null,
+        createdAt: Date.now(),
+        sourceChainId: 'c_missing',
+      };
+    });
+    expect(groupContainsResult(new Set([a, resultId]), nodes())).toBe(true);
+  });
+
+  test('backspace deletes the whole group in one undo entry', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const op = addOperatorNode({ x: 50, y: 0 }, '+');
+    const b = addNumberNode({ x: 84, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.ch = { id: 'ch', members: [a, op, b], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'ch';
+      draft.nodes[op].chainId = 'ch';
+      draft.nodes[b].chainId = 'ch';
+    });
+    selectGroup(op);
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'backspace' });
+
+    expect(nodes()[a]).toBeUndefined();
+    expect(nodes()[op]).toBeUndefined();
+    expect(nodes()[b]).toBeUndefined();
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before + 1);
+  });
+
+  test('digits are no-ops while a group is selected', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const op = addOperatorNode({ x: 50, y: 0 }, '+');
+    const b = addNumberNode({ x: 84, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.ch = { id: 'ch', members: [a, op, b], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'ch';
+      draft.nodes[op].chainId = 'ch';
+      draft.nodes[b].chainId = 'ch';
+    });
+    selectGroup(op);
+    const nodeCount = Object.keys(nodes()).length;
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+
+    expect(Object.keys(nodes())).toHaveLength(nodeCount);
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(3);
+  });
+
+  test('operator on a group with a result continues from that result', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '10');
+    const { operatorId: op, numberId: b } = appendOperatorAndNumber(a, '+');
+    setNodeRaw(b, '5');
+    appendEqualsNode(b);
+    const result = Object.values(nodes()).find((n) => n.kind === 'result')!;
+    selectGroup(op);
+
+    dispatchEditorCommand({ region: 'operator', op: '×' });
+
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    const selected = nodes()[useUiStore.getState().selectedNodeId!];
+    expect(selected).toMatchObject({ kind: 'operator', op: '×' });
+    const contChain = useDocumentStore.getState().document.chains[selected!.chainId!];
+    const ref = nodes()[contChain.members[0]!];
+    expect(ref).toMatchObject({ kind: 'reference', targetNodeId: result.id });
   });
 });
 

@@ -5,12 +5,13 @@
 // placeholder - every tap toggled the keypad, because nothing else was on the canvas yet to
 // tap on (see the P2.7 addendum in docs/journal/2026-08-03.md) - now that there is.
 // See docs/ARCHITECTURE.md §5.1. Theme injection lands with light/dark support in P7.
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Canvas } from '../canvas/Canvas';
 import { ConnectorLayer } from '../canvas/ConnectorLayer';
 import { NodeLayer } from '../canvas/NodeLayer';
+import { noteCellTap, type CellTapStride } from '../canvas/doubleTap';
 import { hitTestNode } from '../canvas/hitTest';
 import { Keypad } from '../keypad/Keypad';
 import { ContextMenuOverlay } from '../nodes/NodeContextMenu';
@@ -46,6 +47,9 @@ export function AppShell() {
     loadMostRecentDocument();
   }, []);
 
+  // Stride for §8.6 double-tap → select group. Ref (not state): a tap must not re-render
+  // the shell, and the helper is pure over the previous stride + this tap's node id.
+  const lastCellTapRef = useRef<CellTapStride | null>(null);
   // Hardware/web-keyboard dispatch (§8.5, P2.8 / P7.2), through the same
   // `dispatchEditorCommand` the on-screen keypad uses below. Web only: there is no
   // hardware-keyboard equivalent on a touch-only device. A number node being edited
@@ -110,6 +114,7 @@ export function AppShell() {
     // invalid taps cancel without creating a node.
     const repointId = useUiStore.getState().repointReferenceId;
     if (repointId) {
+      lastCellTapRef.current = null;
       if (hit && isRepointTarget(hit.id, document.nodes, repointId)) {
         repointReference(repointId, hit.id);
       }
@@ -121,16 +126,30 @@ export function AppShell() {
       if (hit.kind === 'reference') {
         const ref = document.nodes[hit.id];
         if (ref && ref.kind === 'reference' && isDanglingReference(ref, document.nodes)) {
+          lastCellTapRef.current = null;
           useUiStore.getState().openDanglingRecovery(hit.id);
           return;
         }
       }
+
+      // Double-tap / double-click any cell → select its whole chain (§8.6). Checked
+      // before the single-tap select/edit so the second tap upgrades rather than
+      // re-entering edit on a number.
+      const stride = noteCellTap(lastCellTapRef.current, hit.id, Date.now());
+      lastCellTapRef.current = stride.next;
+      if (stride.isDoubleTap) {
+        selectGroup(hit.id);
+        useUiStore.getState().showKeypad();
+        return;
+      }
+
       if (hit.kind === 'number') {
         editNumberNode(hit.id);
       } else {
         selectNode(hit.id);
       }
     } else {
+      lastCellTapRef.current = null;
       const id = addNumberNode(worldPoint, '');
       editNumberNode(id);
     }

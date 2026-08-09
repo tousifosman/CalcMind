@@ -169,6 +169,12 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
           // leave `keyboardType` unset so it cannot reintroduce a numeric inputMode.
           showSoftInputOnFocus={false}
           inputMode="none"
+          // Let the canvas GestureDetector see the second click/tap of a double-tap
+          // (§8.6 select group). The field is focused via `autoFocus` for hardware
+          // keys; mouse caret placement is not a designed interaction here — digits
+          // come from the keypad — so swallowing pointer hits would only block the
+          // double-tap upgrade after the first tap mounts this input.
+          pointerEvents="none"
           // Belt and braces alongside the raw-listener workaround in the effect above:
           // react-native-web also defaults a single-line TextInput to blurring on Enter via
           // its own deferred setTimeout, which this app never wants (Enter is fully handled

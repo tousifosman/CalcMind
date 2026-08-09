@@ -103,7 +103,9 @@ export interface UiState {
    *  chain that contains the long-pressed node. Ephemeral: moving and deleting a
    *  group are the operations it enables (P3.7); the set itself is not a document edit. */
   groupSelectedIds: ReadonlySet<NodeId>;
+  allSelected: boolean;
   setGroupSelected: (ids: ReadonlySet<NodeId>) => void;
+  setAllSelected: (active: boolean) => void;
   clearGroupSelected: () => void;
 
   /** In-progress node drag (§8.2, P3.5). Null when idle. Updated every drag frame for
@@ -148,8 +150,10 @@ export const useUiStore = create<UiState>((set) => ({
   clearRepoint: () => set({ repointReferenceId: null }),
 
   groupSelectedIds: new Set(),
+  allSelected: false,
   setGroupSelected: (ids) => set({ groupSelectedIds: ids }),
-  clearGroupSelected: () => set({ groupSelectedIds: new Set() }),
+  setAllSelected: (active) => set({ allSelected: active }),
+  clearGroupSelected: () => set({ groupSelectedIds: new Set(), allSelected: false }),
 
   dragSnap: null,
   setDragSnap: (dragSnap) => set({ dragSnap }),

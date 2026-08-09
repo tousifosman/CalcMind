@@ -18,10 +18,10 @@ import { glyphColor, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
 import { clearDocument } from '../store/commands';
-import { isEntireCanvasSelected } from '../store/selection';
-import { Digit, KeypadKey } from './keymap';
+import { Digit, KeypadKey, groupContainsResult } from './keymap';
 
 export type { Digit, KeypadKey } from './keymap';
+export { groupContainsResult } from './keymap';
 
 interface KeypadProps {
   /** BCP-47 locale, used only to show the decimal key's glyph (§10.3); the key still
@@ -64,21 +64,29 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   const clearConfirmVisible = useUiStore((state) => state.clearConfirmVisible);
   const requestClearConfirm = useUiStore((state) => state.requestClearConfirm);
   const dismissClearConfirm = useUiStore((state) => state.dismissClearConfirm);
+  const groupSelectedIds = useUiStore((state) => state.groupSelectedIds);
+  const allSelected = useUiStore((state) => state.allSelected);
   // Empty-canvas gate for the Clear all mode-strip button — disabled when there
   // is nothing to wipe, so the affordance does not invite a no-op confirm.
   const documentEmpty = useDocumentStore((state) => {
     const { nodes, chains } = state.document;
     return Object.keys(nodes).length === 0 && Object.keys(chains).length === 0;
   });
+  const nodes = useDocumentStore((state) => state.document.nodes);
   // Select all (§8.6): data-entry keys have no single target — gray them out.
   // Mode strip (and hardware undo/redo) stay available.
-  const groupSelectedIds = useUiStore((state) => state.groupSelectedIds);
-  const nodes = useDocumentStore((state) => state.document.nodes);
-  const dataEntryLocked = isEntireCanvasSelected(groupSelectedIds, nodes);
+  const dataEntryLocked = allSelected;
 
   if (!visible) {
     return null;
   }
+
+  // §8.5 group mode: Select group disables everything except history (undo /
+  // redo / backspace). When the group includes a result, operators stay enabled
+  // for §8.7 continuation; equals and every digit/editing key stay disabled.
+  const groupMode = groupSelectedIds.size > 0 && !dataEntryLocked;
+  const operatorsEnabled =
+    !dataEntryLocked && (!groupMode || groupContainsResult(groupSelectedIds, nodes));
 
   function press(key: KeypadKey) {
     if (dataEntryLocked) return;
@@ -164,8 +172,8 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                   <DigitKey
                     key={value}
                     value={value}
-                    disabled={dataEntryLocked}
                     onPress={() => press({ region: 'digit', value })}
+                    disabled={dataEntryLocked || groupMode}
                   />
                 ))}
               </View>
@@ -174,8 +182,8 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               <View style={styles.digitSpacer} />
               <DigitKey
                 value="0"
-                disabled={dataEntryLocked}
                 onPress={() => press({ region: 'digit', value: '0' })}
+                disabled={dataEntryLocked || groupMode}
               />
               <View style={styles.digitSpacer} />
             </View>
@@ -185,14 +193,14 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
             <Key
               label={decimalSeparatorFor(locale)}
               onPress={() => press({ region: 'decimal' })}
-              disabled={dataEntryLocked}
               testID="keypad-decimal"
+              disabled={dataEntryLocked || groupMode}
             />
             <Key
               label="+/-"
               onPress={() => press({ region: 'sign' })}
-              disabled={dataEntryLocked}
               testID="keypad-sign"
+              disabled={dataEntryLocked || groupMode}
             />
             {/* Single `()` key (§8.5): same cell size as the other editing keys.
                 Side is resolved in `dispatchEditorCommand` from chain depth so one
@@ -200,8 +208,8 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
             <Key
               label="()"
               onPress={() => press({ region: 'paren' })}
-              disabled={dataEntryLocked}
               testID="keypad-paren"
+              disabled={dataEntryLocked || groupMode}
             />
           </View>
 
@@ -235,31 +243,31 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           <OperatorKey
             label="÷"
             onPress={() => press({ region: 'operator', op: '÷' })}
-            disabled={dataEntryLocked}
             testID="keypad-op-divide"
+            disabled={!operatorsEnabled}
           />
           <OperatorKey
             label="×"
             onPress={() => press({ region: 'operator', op: '×' })}
-            disabled={dataEntryLocked}
             testID="keypad-op-multiply"
+            disabled={!operatorsEnabled}
           />
           <OperatorKey
             label="−"
             onPress={() => press({ region: 'operator', op: '-' })}
-            disabled={dataEntryLocked}
             testID="keypad-op-subtract"
+            disabled={!operatorsEnabled}
           />
           <OperatorKey
             label="+"
             onPress={() => press({ region: 'operator', op: '+' })}
-            disabled={dataEntryLocked}
             testID="keypad-op-add"
+            disabled={!operatorsEnabled}
           />
           <EqualsKey
             onPress={() => press({ region: 'equals' })}
-            disabled={dataEntryLocked}
             testID="keypad-equals"
+            disabled={dataEntryLocked || groupMode}
           />
         </View>
       </View>
@@ -270,8 +278,8 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
 interface KeyProps {
   label: string;
   onPress: () => void;
-  disabled?: boolean;
   testID?: string;
+  disabled?: boolean;
   /** When set, rendered instead of the label text; `label` stays the a11y name
    *  (same pattern as ModeKey's Heroicons slot). */
   icon?: ReactNode;
@@ -288,19 +296,21 @@ interface KeyProps {
 // focus with.
 const preventFocusSteal = { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() };
 
-function Key({ label, icon, onPress, disabled, testID }: KeyProps) {
+function Key({ label, icon, onPress, testID, disabled }: KeyProps) {
   return (
     <TouchableOpacity
       style={[styles.key, disabled && styles.keyDisabled]}
       onPress={onPress}
       disabled={disabled}
       testID={testID}
-      accessibilityState={{ disabled: !!disabled }}
       accessibilityLabel={icon ? label : undefined}
+      accessibilityState={{ disabled: !!disabled }}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
-      {icon ?? <Text style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled]}>{label}</Text>}
+      {icon ?? (
+        <Text style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled]}>{label}</Text>
+      )}
     </TouchableOpacity>
   );
 }
@@ -329,7 +339,7 @@ function DigitKey({
   );
 }
 
-function OperatorKey({ label, onPress, disabled, testID }: KeyProps) {
+function OperatorKey({ label, onPress, testID, disabled }: KeyProps) {
   return (
     <TouchableOpacity
       style={[styles.key, styles.accentKey, disabled && styles.keyDisabled]}
@@ -347,12 +357,12 @@ function OperatorKey({ label, onPress, disabled, testID }: KeyProps) {
 
 function EqualsKey({
   onPress,
-  disabled,
   testID,
+  disabled,
 }: {
   onPress: () => void;
-  disabled?: boolean;
   testID?: string;
+  disabled?: boolean;
 }) {
   return (
     <TouchableOpacity
@@ -468,16 +478,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  keyDisabled: {
+    opacity: 0.35,
+  },
   keyLabel: {
     color: glyphColor,
     fontSize: 20,
     fontWeight: '400',
   },
-  keyDisabled: {
-    opacity: 0.35,
-  },
   keyLabelDisabled: {
-    color: '#888888',
+    color: '#B3B3B3',
   },
   neutralKeyLabel: {
     color: '#333333',
