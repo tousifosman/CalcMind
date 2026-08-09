@@ -253,36 +253,19 @@ export function appendOperatorAndNumber(
   return { operatorId: operatorNode.id, numberId: numberNode.id };
 }
 
-<<<<<<< HEAD
-/** World offset of a continuation chain from its source value (§8.7).
- *  Proportions taken from `docs/assets/linking-model.svg`: roughly half a cell right and
- *  one-and-a-half cells down from the source's top-left. */
-=======
 /** Vertical pitch of a continuation chain from the row above it (§8.7).
  *  One-and-a-half cell heights: a full cell plus a half-cell gap, matching the
- *  spacing that used to sit below-right of the source result. */
->>>>>>> origin/main
+ *  spacing under the source group's first cell. */
 export const CONTINUATION_OFFSET = {
   y: tokens.nodeHeight * 1.5,
 } as const;
 
 /**
-<<<<<<< HEAD
- * §8.7 Continuation: with a value `V` (number, result, or live reference) selected,
- * operator `⊕` creates a new chain below-right of `V` containing
- * `[ reference→V , ⊕ , empty number ]`. Returns the fresh number id so the
- * dispatcher can put it in edit mode — same as {@link appendOperatorAndNumber},
- * and required now that a selected operator rejects digits. Never edits `V`.
- *
- * Numbers and live references are included so a value (or an existing link to one)
- * can seed another link without first pressing `=`. Drag-to-link stays result-only
- * so ordinary number snaps can still move into chains (§8.3).
-=======
- * §8.7 placement: under the first cell of the source group, x aligned with that
- * cell. When any other cell already overlaps the landing slot in that first-cell
- * column, stack under it (and keep stacking while the slot still intersects an
- * occupant) while still anchoring x to the source group's first cell — not to a
- * drifted occupant.
+ * §8.7 placement: under the first cell of the source group (or under a free
+ * value itself), x aligned with that cell. When any other cell already overlaps
+ * the landing slot in that first-cell column, stack under it (and keep stacking
+ * while the slot still intersects an occupant) while still anchoring x to the
+ * source group's first cell — not to a drifted occupant.
  *
  * Collision is axis-aligned bounds overlap against the first cell's horizontal
  * span, not left-edge proximity / same-row banding: a free number sitting in the
@@ -290,37 +273,41 @@ export const CONTINUATION_OFFSET = {
  * still push the new chain below it.
  *
  * Pure over plain document data so the stacking rule is unit-testable without
- * going through the store.
+ * going through the store. Accepts the same value kinds as
+ * {@link continueFromValue}.
  */
 export function continuationAnchor(
-  resultNodeId: NodeId,
+  valueNodeId: NodeId,
   nodes: Record<NodeId, CalcNode>,
   chains: Record<ChainId, Chain>,
   locale: string = 'en-US',
 ): Vec2 {
-  const result = nodes[resultNodeId];
-  if (!result || result.kind !== 'result') {
+  const value = nodes[valueNodeId];
+  const isLiveReference =
+    value?.kind === 'reference' && nodes[value.targetNodeId] !== undefined;
+  if (
+    !value ||
+    (value.kind !== 'result' && value.kind !== 'number' && !isLiveReference)
+  ) {
     throw new Error(
-      `continuationAnchor: node ${resultNodeId} is not a result (got ${result?.kind ?? 'missing'})`,
+      `continuationAnchor: node ${valueNodeId} is not a number, result, or live reference (got ${value?.kind ?? 'missing'})`,
     );
   }
 
   const sourceChain =
-    result.chainId !== null ? chains[result.chainId] : undefined;
-  const originX = sourceChain?.anchor.x ?? result.position.x;
-  const originY = sourceChain?.anchor.y ?? result.position.y;
+    value.chainId !== null ? chains[value.chainId] : undefined;
+  const originX = sourceChain?.anchor.x ?? value.position.x;
+  const originY = sourceChain?.anchor.y ?? value.position.y;
   const pitch = CONTINUATION_OFFSET.y;
   const sourceChainId = sourceChain?.id ?? null;
 
   const firstMember =
     sourceChain !== undefined
       ? nodes[sourceChain.members[0]!]
-      : undefined;
+      : value;
   const columnLeft = originX;
   const columnRight =
-    firstMember !== undefined
-      ? originX + widthOf(firstMember, locale, tokens.numeralFontSize, nodes)
-      : originX + tokens.nodeHeight;
+    originX + widthOf(firstMember, locale, tokens.numeralFontSize, nodes);
 
   let y = originY + pitch;
   // Push below any cell whose bounds intersect the candidate slot in this
@@ -332,6 +319,9 @@ export function continuationAnchor(
     const slotBottom = y + tokens.nodeHeight;
     for (const node of Object.values(nodes)) {
       if (sourceChainId !== null && node.chainId === sourceChainId) continue;
+      // A free value seeding continuation must not treat itself as occupying
+      // the landing column (its bounds sit at originY, above the default slot).
+      if (sourceChainId === null && node.id === valueNodeId) continue;
       const b = boundsOf(node, locale, nodes);
       if (b.right <= columnLeft || b.left >= columnRight) continue;
       if (b.bottom <= slotTop || b.top >= slotBottom) continue;
@@ -347,18 +337,22 @@ export function continuationAnchor(
 }
 
 /**
- * §8.7 Continuation: with result `R` selected, operator `⊕` creates a new chain
- * under the first cell of R's group containing `[ reference→R , ⊕ ]`. Returns
- * the new operator id so the dispatcher can select it — the next digit then
- * lands in a fresh number via the normal append path. Never edits `R`.
->>>>>>> origin/main
+ * §8.7 Continuation: with a value `V` (number, result, or live reference) selected,
+ * operator `⊕` creates a new chain under the first cell of V's group (or under V
+ * when free) containing `[ reference→V , ⊕ , empty number ]`. Returns the fresh
+ * number id so the dispatcher can put it in edit mode — same as
+ * {@link appendOperatorAndNumber}, and required now that a selected operator
+ * rejects digits. Never edits `V`.
+ *
+ * Numbers and live references are included so a value (or an existing link to one)
+ * can seed another link without first pressing `=`. Drag-to-link stays result-only
+ * so ordinary number snaps can still move into chains (§8.3).
  */
 export function continueFromValue(
   valueNodeId: NodeId,
   op: OperatorSymbol,
-<<<<<<< HEAD
 ): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId; numberId: NodeId } {
-  const nodes = useDocumentStore.getState().document.nodes;
+  const { nodes, chains } = useDocumentStore.getState().document;
   const value = nodes[valueNodeId];
   const isLiveReference =
     value?.kind === 'reference' && nodes[value.targetNodeId] !== undefined;
@@ -366,12 +360,6 @@ export function continueFromValue(
     !value ||
     (value.kind !== 'result' && value.kind !== 'number' && !isLiveReference)
   ) {
-=======
-): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId } {
-  const { nodes, chains } = useDocumentStore.getState().document;
-  const result = nodes[resultNodeId];
-  if (!result || result.kind !== 'result') {
->>>>>>> origin/main
     throw new Error(
       `continueFromValue: node ${valueNodeId} is not a number, result, or live reference (got ${value?.kind ?? 'missing'})`,
     );
@@ -381,19 +369,12 @@ export function continueFromValue(
   const operator = createOperatorNode({ x: 0, y: 0 }, op);
   const number = createNumberNode({ x: 0, y: 0 }, '');
   const chainId = createChainId();
-<<<<<<< HEAD
-  const anchor = {
-    x: value.position.x + CONTINUATION_OFFSET.x,
-    y: value.position.y + CONTINUATION_OFFSET.y,
-  };
-=======
   const anchor = continuationAnchor(
-    resultNodeId,
+    valueNodeId,
     nodes,
     chains,
     getDeviceLocale(),
   );
->>>>>>> origin/main
 
   useDocumentStore.getState().applyCommand((draft) => {
     reference.chainId = chainId;

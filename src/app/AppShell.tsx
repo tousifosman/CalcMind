@@ -132,16 +132,9 @@ export function AppShell() {
           return;
         }
       }
-<<<<<<< HEAD
-      // Numbers are selected without entering edit mode so a following operator can
-      // §8.7-continue from them (same as results). A digit/decimal/sign opens the
-      // in-place editor via `dispatchEditorCommand`.
-      selectNode(hit.id);
-=======
-
       // Double-tap / double-click any cell → select its whole chain (§8.6). Checked
-      // before the single-tap select/edit so the second tap upgrades rather than
-      // re-entering edit on a number.
+      // before the single-tap select so the second tap upgrades rather than
+      // re-selecting.
       const stride = noteCellTap(lastCellTapRef.current, hit.id, Date.now());
       lastCellTapRef.current = stride.next;
       if (stride.isDoubleTap) {
@@ -150,12 +143,10 @@ export function AppShell() {
         return;
       }
 
-      if (hit.kind === 'number') {
-        editNumberNode(hit.id);
-      } else {
-        selectNode(hit.id);
-      }
->>>>>>> origin/main
+      // Numbers are selected without entering edit mode so a following operator can
+      // §8.7-continue from them (same as results). A digit/decimal/sign opens the
+      // in-place editor via `dispatchEditorCommand`.
+      selectNode(hit.id);
     } else {
       lastCellTapRef.current = null;
       const id = addNumberNode(worldPoint, '');
