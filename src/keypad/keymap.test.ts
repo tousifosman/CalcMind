@@ -300,7 +300,7 @@ describe('resolveParenSide (§8.5 smart () key)', () => {
 });
 
 describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () => {
-  test('operator with a result selected creates [reference→R, ⊕] below-right and selects the operator', () => {
+  test('operator with a result selected creates [reference→R, ⊕] under the source first cell and selects the operator', () => {
     dispatchEditorCommand({ region: 'digit', value: '1' });
     dispatchEditorCommand({ region: 'digit', value: '0' });
     dispatchEditorCommand({ region: 'operator', op: '+' });
@@ -310,6 +310,7 @@ describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () =
     const afterEquals = useDocumentStore.getState().document;
     const result = Object.values(afterEquals.nodes).find((n) => n.kind === 'result');
     expect(result).toBeDefined();
+    const sourceChain = afterEquals.chains[result!.chainId!]!;
     // `=` already focused the result — no extra selectNode before continuation.
     expect(useUiStore.getState().selectedNodeId).toBe(result!.id);
 
@@ -328,8 +329,8 @@ describe('dispatchEditorCommand: continuation from a result (P4.9, §8.7)', () =
     expect(doc.nodes[contChain.members[1]!]!).toMatchObject({ kind: 'operator', op: '×' });
 
     expect(contChain.anchor).toEqual({
-      x: result!.position.x + 32,
-      y: result!.position.y + 96,
+      x: sourceChain.anchor.x,
+      y: sourceChain.anchor.y + 96,
     });
 
     const selectedId = useUiStore.getState().selectedNodeId;

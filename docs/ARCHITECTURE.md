@@ -724,8 +724,12 @@ Dragging is not the fast path. Observed in Tydlig and adopted here:
 ```
 given: chain C ending in result R, and R is selected
 when:  the user presses an operator ⊕
-then:  create chain C' below-right of C, containing
+then:  create chain C' underneath the first cell of C, containing
          [ reference→R , ⊕ ]
+       C'.anchor.x matches C's first cell; if that column's landing row
+         is already occupied, stack C' under the occupant (and keep
+         stacking through a contiguous column) while still starting at
+         C's first-cell x
        select C' so the next digits land in a fresh number node
        draw a connector from R to the reference, in R's identity hue
 ```

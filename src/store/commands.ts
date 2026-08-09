@@ -222,25 +222,82 @@ export function appendOperatorAndNumber(
   return { operatorId: operatorNode.id, numberId: numberNode.id };
 }
 
-/** World offset of a continuation chain from its source result (§8.7).
- *  Proportions taken from `docs/assets/linking-model.svg`: roughly half a cell right and
- *  one-and-a-half cells down from the result's top-left. */
+/** Vertical pitch of a continuation chain from the row above it (§8.7).
+ *  One-and-a-half cell heights: a full cell plus a half-cell gap, matching the
+ *  spacing that used to sit below-right of the source result. */
 export const CONTINUATION_OFFSET = {
-  x: tokens.nodeHeight * 0.5,
   y: tokens.nodeHeight * 1.5,
 } as const;
 
+/** How close a node's `position.x` must be to the source chain's first-cell x
+ *  to count as "already in this column" when stacking continuations. Half a
+ *  cell — tight enough that a chain starting one cell to the right does not
+ *  steal the slot, loose enough for float drift after a drag. */
+const CONTINUATION_COLUMN_TOLERANCE = tokens.nodeHeight * 0.5;
+
+/**
+ * §8.7 placement: under the first cell of the source group, x aligned with that
+ * cell. When a prior cell already occupies the landing row in that column,
+ * stack under it (and keep stacking through a contiguous column of occupants)
+ * while still anchoring x to the source group's first cell — not to a drifted
+ * occupant.
+ *
+ * Pure over plain document data so the stacking rule is unit-testable without
+ * going through the store.
+ */
+export function continuationAnchor(
+  resultNodeId: NodeId,
+  nodes: Record<NodeId, CalcNode>,
+  chains: Record<ChainId, Chain>,
+): Vec2 {
+  const result = nodes[resultNodeId];
+  if (!result || result.kind !== 'result') {
+    throw new Error(
+      `continuationAnchor: node ${resultNodeId} is not a result (got ${result?.kind ?? 'missing'})`,
+    );
+  }
+
+  const sourceChain =
+    result.chainId !== null ? chains[result.chainId] : undefined;
+  const originX = sourceChain?.anchor.x ?? result.position.x;
+  const originY = sourceChain?.anchor.y ?? result.position.y;
+  const pitch = CONTINUATION_OFFSET.y;
+  const sourceChainId = sourceChain?.id ?? null;
+
+  let y = originY + pitch;
+  // Walk down through contiguous occupied rows in this column. A gap leaves the
+  // default (or next free) slot fillable — only "already there" blockers push.
+  for (;;) {
+    let blockerY: number | null = null;
+    for (const node of Object.values(nodes)) {
+      if (sourceChainId !== null && node.chainId === sourceChainId) continue;
+      if (Math.abs(node.position.x - originX) > CONTINUATION_COLUMN_TOLERANCE) {
+        continue;
+      }
+      if (Math.abs(node.position.y - y) > pitch / 2) continue;
+      if (blockerY === null || node.position.y > blockerY) {
+        blockerY = node.position.y;
+      }
+    }
+    if (blockerY === null) break;
+    y = blockerY + pitch;
+  }
+
+  return { x: originX, y };
+}
+
 /**
  * §8.7 Continuation: with result `R` selected, operator `⊕` creates a new chain
- * below-right of `R` containing `[ reference→R , ⊕ ]`. Returns the new operator id so
- * the dispatcher can select it — the next digit then lands in a fresh number via the
- * normal append path. Never edits `R`.
+ * under the first cell of R's group containing `[ reference→R , ⊕ ]`. Returns
+ * the new operator id so the dispatcher can select it — the next digit then
+ * lands in a fresh number via the normal append path. Never edits `R`.
  */
 export function continueFromResult(
   resultNodeId: NodeId,
   op: OperatorSymbol,
 ): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId } {
-  const result = useDocumentStore.getState().document.nodes[resultNodeId];
+  const { nodes, chains } = useDocumentStore.getState().document;
+  const result = nodes[resultNodeId];
   if (!result || result.kind !== 'result') {
     throw new Error(
       `continueFromResult: node ${resultNodeId} is not a result (got ${result?.kind ?? 'missing'})`,
@@ -250,10 +307,7 @@ export function continueFromResult(
   const reference = createReferenceNode({ x: 0, y: 0 }, resultNodeId);
   const operator = createOperatorNode({ x: 0, y: 0 }, op);
   const chainId = createChainId();
-  const anchor = {
-    x: result.position.x + CONTINUATION_OFFSET.x,
-    y: result.position.y + CONTINUATION_OFFSET.y,
-  };
+  const anchor = continuationAnchor(resultNodeId, nodes, chains);
 
   useDocumentStore.getState().applyCommand((draft) => {
     reference.chainId = chainId;
