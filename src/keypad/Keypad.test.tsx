@@ -333,7 +333,7 @@ describe('Clear all mode-strip button (P7.8)', () => {
 });
 
 describe('group-mode keypad (§8.5)', () => {
-  test('Select group without a result keeps only undo / redo / backspace', () => {
+  test('Select group without a result disables digits, editing, operators, and equals', () => {
     let op!: string;
     act(() => {
       const a = addNumberNode({ x: 0, y: 0 }, '1');
@@ -353,17 +353,18 @@ describe('group-mode keypad (§8.5)', () => {
       selectGroup(op);
     });
 
-    expect(findByTestID(renderer, 'keypad-history')).toBeTruthy();
-    expect(findByTestID(renderer, 'keypad-undo')).toBeTruthy();
-    expect(findByTestID(renderer, 'keypad-redo')).toBeTruthy();
-    expect(findByTestID(renderer, 'keypad-backspace')).toBeTruthy();
-    expect(renderer.root.findAllByProps({ testID: 'keypad-digits' })).toHaveLength(0);
-    expect(renderer.root.findAllByProps({ testID: 'keypad-number-editing' })).toHaveLength(0);
-    expect(renderer.root.findAllByProps({ testID: 'keypad-operators' })).toHaveLength(0);
-    expect(renderer.root.findAllByProps({ testID: 'keypad-equals' })).toHaveLength(0);
+    expect(findByTestID(renderer, 'keypad-undo').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-redo').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-digit-7').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-op-add').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBe(true);
   });
 
-  test('Select group with a result also shows operators but not equals', () => {
+  test('Select group with a result keeps operators enabled and equals disabled', () => {
     let op!: string;
     act(() => {
       const a = addNumberNode({ x: 0, y: 0 }, '1');
@@ -379,10 +380,10 @@ describe('group-mode keypad (§8.5)', () => {
       selectGroup(op);
     });
 
-    expect(findByTestID(renderer, 'keypad-history')).toBeTruthy();
-    expect(findByTestID(renderer, 'keypad-operators')).toBeTruthy();
-    expect(findByTestID(renderer, 'keypad-op-add')).toBeTruthy();
-    expect(renderer.root.findAllByProps({ testID: 'keypad-equals' })).toHaveLength(0);
-    expect(renderer.root.findAllByProps({ testID: 'keypad-digits' })).toHaveLength(0);
+    expect(findByTestID(renderer, 'keypad-op-add').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-op-multiply').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-digit-1').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBeFalsy();
   });
 });

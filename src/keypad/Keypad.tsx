@@ -77,11 +77,11 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     return null;
   }
 
-  // §8.5 group mode: Select group shrinks the keypad to history (undo / redo /
-  // backspace). When the group includes a result, keep the operator column for
-  // §8.7 continuation; equals and every digit/editing key stay hidden.
+  // §8.5 group mode: Select group disables everything except history (undo /
+  // redo / backspace). When the group includes a result, operators stay enabled
+  // for §8.7 continuation; equals and every digit/editing key stay disabled.
   const groupMode = groupSelectedIds.size > 0;
-  const showGroupOperators = groupMode && groupContainsResult(groupSelectedIds, nodes);
+  const operatorsEnabled = !groupMode || groupContainsResult(groupSelectedIds, nodes);
 
   function press(key: KeypadKey) {
     onKeyPress?.(key);
@@ -157,37 +157,53 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
 
       <View style={styles.body}>
         <View style={styles.mainColumn}>
-          {!groupMode ? (
-            <>
-              <View style={styles.digitGrid} testID="keypad-digits">
-                {DIGIT_ROWS.map((row) => (
-                  <View style={styles.digitRow} key={row.join('')}>
-                    {row.map((value) => (
-                      <DigitKey key={value} value={value} onPress={() => press({ region: 'digit', value })} />
-                    ))}
-                  </View>
+          <View style={styles.digitGrid} testID="keypad-digits">
+            {DIGIT_ROWS.map((row) => (
+              <View style={styles.digitRow} key={row.join('')}>
+                {row.map((value) => (
+                  <DigitKey
+                    key={value}
+                    value={value}
+                    onPress={() => press({ region: 'digit', value })}
+                    disabled={groupMode}
+                  />
                 ))}
-                <View style={styles.digitRow}>
-                  <View style={styles.digitSpacer} />
-                  <DigitKey value="0" onPress={() => press({ region: 'digit', value: '0' })} />
-                  <View style={styles.digitSpacer} />
-                </View>
               </View>
+            ))}
+            <View style={styles.digitRow}>
+              <View style={styles.digitSpacer} />
+              <DigitKey
+                value="0"
+                onPress={() => press({ region: 'digit', value: '0' })}
+                disabled={groupMode}
+              />
+              <View style={styles.digitSpacer} />
+            </View>
+          </View>
 
-              <View style={styles.editingRow} testID="keypad-number-editing">
-                <Key
-                  label={decimalSeparatorFor(locale)}
-                  onPress={() => press({ region: 'decimal' })}
-                  testID="keypad-decimal"
-                />
-                <Key label="+/-" onPress={() => press({ region: 'sign' })} testID="keypad-sign" />
-                {/* Single `()` key (§8.5): same cell size as the other editing keys.
-                    Side is resolved in `dispatchEditorCommand` from chain depth so one
-                    tap opens or closes as appropriate. */}
-                <Key label="()" onPress={() => press({ region: 'paren' })} testID="keypad-paren" />
-              </View>
-            </>
-          ) : null}
+          <View style={styles.editingRow} testID="keypad-number-editing">
+            <Key
+              label={decimalSeparatorFor(locale)}
+              onPress={() => press({ region: 'decimal' })}
+              testID="keypad-decimal"
+              disabled={groupMode}
+            />
+            <Key
+              label="+/-"
+              onPress={() => press({ region: 'sign' })}
+              testID="keypad-sign"
+              disabled={groupMode}
+            />
+            {/* Single `()` key (§8.5): same cell size as the other editing keys.
+                Side is resolved in `dispatchEditorCommand` from chain depth so one
+                tap opens or closes as appropriate. */}
+            <Key
+              label="()"
+              onPress={() => press({ region: 'paren' })}
+              testID="keypad-paren"
+              disabled={groupMode}
+            />
+          </View>
 
           <View style={styles.historyRow} testID="keypad-history">
             <Key
@@ -214,17 +230,37 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           </View>
         </View>
 
-        {!groupMode || showGroupOperators ? (
-          <View style={styles.accentColumn} testID="keypad-operators">
-            <OperatorKey label="÷" onPress={() => press({ region: 'operator', op: '÷' })} testID="keypad-op-divide" />
-            <OperatorKey label="×" onPress={() => press({ region: 'operator', op: '×' })} testID="keypad-op-multiply" />
-            <OperatorKey label="−" onPress={() => press({ region: 'operator', op: '-' })} testID="keypad-op-subtract" />
-            <OperatorKey label="+" onPress={() => press({ region: 'operator', op: '+' })} testID="keypad-op-add" />
-            {!groupMode ? (
-              <EqualsKey onPress={() => press({ region: 'equals' })} testID="keypad-equals" />
-            ) : null}
-          </View>
-        ) : null}
+        <View style={styles.accentColumn} testID="keypad-operators">
+          <OperatorKey
+            label="÷"
+            onPress={() => press({ region: 'operator', op: '÷' })}
+            testID="keypad-op-divide"
+            disabled={!operatorsEnabled}
+          />
+          <OperatorKey
+            label="×"
+            onPress={() => press({ region: 'operator', op: '×' })}
+            testID="keypad-op-multiply"
+            disabled={!operatorsEnabled}
+          />
+          <OperatorKey
+            label="−"
+            onPress={() => press({ region: 'operator', op: '-' })}
+            testID="keypad-op-subtract"
+            disabled={!operatorsEnabled}
+          />
+          <OperatorKey
+            label="+"
+            onPress={() => press({ region: 'operator', op: '+' })}
+            testID="keypad-op-add"
+            disabled={!operatorsEnabled}
+          />
+          <EqualsKey
+            onPress={() => press({ region: 'equals' })}
+            testID="keypad-equals"
+            disabled={groupMode}
+          />
+        </View>
       </View>
     </View>
   );
@@ -234,6 +270,7 @@ interface KeyProps {
   label: string;
   onPress: () => void;
   testID?: string;
+  disabled?: boolean;
   /** When set, rendered instead of the label text; `label` stays the a11y name
    *  (same pattern as ModeKey's Heroicons slot). */
   icon?: ReactNode;
@@ -250,59 +287,85 @@ interface KeyProps {
 // focus with.
 const preventFocusSteal = { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() };
 
-function Key({ label, icon, onPress, testID }: KeyProps) {
+function Key({ label, icon, onPress, testID, disabled }: KeyProps) {
   return (
     <TouchableOpacity
-      style={styles.key}
+      style={[styles.key, disabled && styles.keyDisabled]}
       onPress={onPress}
+      disabled={disabled}
       testID={testID}
       accessibilityLabel={icon ? label : undefined}
+      accessibilityState={{ disabled: !!disabled }}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
-      {icon ?? <Text style={styles.neutralKeyLabel}>{label}</Text>}
+      {icon ?? (
+        <Text style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled]}>{label}</Text>
+      )}
     </TouchableOpacity>
   );
 }
 
-function DigitKey({ value, onPress }: { value: string; onPress: () => void }) {
+function DigitKey({
+  value,
+  onPress,
+  disabled,
+}: {
+  value: string;
+  onPress: () => void;
+  disabled?: boolean;
+}) {
   return (
     <TouchableOpacity
-      style={styles.digitKey}
+      style={[styles.digitKey, disabled && styles.keyDisabled]}
       onPress={onPress}
+      disabled={disabled}
       testID={`keypad-digit-${value}`}
+      accessibilityState={{ disabled: !!disabled }}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
-      <Text style={styles.keyLabel}>{value}</Text>
+      <Text style={[styles.keyLabel, disabled && styles.keyLabelDisabled]}>{value}</Text>
     </TouchableOpacity>
   );
 }
 
-function OperatorKey({ label, onPress, testID }: KeyProps) {
+function OperatorKey({ label, onPress, testID, disabled }: KeyProps) {
   return (
     <TouchableOpacity
-      style={[styles.key, styles.accentKey]}
+      style={[styles.key, styles.accentKey, disabled && styles.keyDisabled]}
       onPress={onPress}
+      disabled={disabled}
       testID={testID}
+      accessibilityState={{ disabled: !!disabled }}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
-      <Text style={styles.accentKeyLabel}>{label}</Text>
+      <Text style={[styles.accentKeyLabel, disabled && styles.keyLabelDisabled]}>{label}</Text>
     </TouchableOpacity>
   );
 }
 
-function EqualsKey({ onPress, testID }: { onPress: () => void; testID?: string }) {
+function EqualsKey({
+  onPress,
+  testID,
+  disabled,
+}: {
+  onPress: () => void;
+  testID?: string;
+  disabled?: boolean;
+}) {
   return (
     <TouchableOpacity
-      style={[styles.key, styles.equalsKey]}
+      style={[styles.key, styles.equalsKey, disabled && styles.keyDisabled]}
       onPress={onPress}
+      disabled={disabled}
       testID={testID}
+      accessibilityState={{ disabled: !!disabled }}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
-      <Text style={styles.accentKeyLabel}>=</Text>
+      <Text style={[styles.accentKeyLabel, disabled && styles.keyLabelDisabled]}>=</Text>
     </TouchableOpacity>
   );
 }
@@ -406,10 +469,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  keyDisabled: {
+    opacity: 0.35,
+  },
   keyLabel: {
     color: glyphColor,
     fontSize: 20,
     fontWeight: '400',
+  },
+  keyLabelDisabled: {
+    color: '#B3B3B3',
   },
   neutralKeyLabel: {
     color: '#333333',

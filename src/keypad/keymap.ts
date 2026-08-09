@@ -309,7 +309,7 @@ export function dispatchEditorCommand(command: EditorCommand): void {
   // §8.5 group mode: with a Select-group highlight, only history (undo/redo already
   // handled) and backspace apply; operators also apply when the group has a result
   // (§8.7 continuation). Digits / editing / equals / parens are inert — the on-screen
-  // keys are hidden for the same reason.
+  // keys are disabled for the same reason.
   if (ui.groupSelectedIds.size > 0) {
     if (command.region === 'backspace') {
       deleteGroup(ui.groupSelectedIds);
