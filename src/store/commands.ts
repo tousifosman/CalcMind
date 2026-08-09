@@ -609,6 +609,27 @@ export function deleteNode(nodeId: NodeId): void {
   });
 }
 
+/** Deletes every id in a Select-group set as one undo entry (§8.6: a group is how a
+ *  chain is deleted as a unit). Empty input is a no-op. */
+export function deleteGroup(ids: Iterable<NodeId>): void {
+  const idList = Array.from(ids);
+  if (idList.length === 0) return;
+  useDocumentStore.getState().applyCommand((draft) => {
+    const chainIds = new Set<ChainId>();
+    for (const id of idList) {
+      const node = draft.nodes[id];
+      if (node?.chainId) chainIds.add(node.chainId);
+    }
+    deleteNodesLeavingDanglingRefs(draft, idList, getDeviceLocale());
+    for (const chainId of chainIds) {
+      const chain = draft.chains[chainId];
+      if (!chain) continue;
+      chain.members = chain.members.filter((id) => draft.nodes[id] !== undefined);
+      finalizeChain(draft, chainId);
+    }
+  });
+}
+
 /**
  * Break a reference into a plain number, freezing the live (or last-known) value
  * (§8.6 `Unlink from parent`, §11.2 convert-to-number). One undo entry.
@@ -1028,9 +1049,12 @@ export function selectGroup(nodeId: NodeId): void {
   }
 
   useUiStore.getState().setGroupSelected(new Set(ids));
-  // Select the long-pressed node as the primary selection so the keypad still has
-  // a sensible target while the group highlight is visible.
-  useUiStore.getState().setSelectedNode(nodeId);
+  useUiStore.getState().setAllSelected(false);
+  // Prefer a result in the group as the keypad target so §8.7 continuation works
+  // from the group-mode operator column without an extra tap. Otherwise keep the
+  // tapped / long-pressed node as primary.
+  const resultId = ids.find((id) => document.nodes[id]?.kind === 'result');
+  useUiStore.getState().setSelectedNode(resultId ?? nodeId);
   useUiStore.getState().setEditingNode(null);
 }
 
@@ -1063,6 +1087,7 @@ export function selectAll(): void {
   if (ids.length === 0) return;
 
   useUiStore.getState().setGroupSelected(new Set(ids));
+  useUiStore.getState().setAllSelected(true);
   useUiStore.getState().setEditingNode(null);
   useUiStore.getState().setEditingLabelNode(null);
   // Keep the current keypad target when it is still present; otherwise pick any

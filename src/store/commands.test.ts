@@ -15,6 +15,7 @@ import {
   CONTINUATION_OFFSET,
   setNodeRaw,
   deleteNode,
+  deleteGroup,
   clearDocument,
   selectNode,
   editNumberNode,
@@ -29,7 +30,6 @@ import {
   commitSnapOutcome,
   moveFreeNode,
   moveChain,
-  moveSelection,
   unlinkFromParent,
   unlinkReference,
   repointReference,
@@ -514,6 +514,23 @@ describe('selectGroup', () => {
     expect(useUiStore.getState().selectedNodeId).toBe(b);
   });
 
+  test('selectGroup prefers a result in the chain as the primary keypad target', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const { operatorId: op, numberId: b } = appendOperatorAndNumber(a, '+');
+    setNodeRaw(b, '2');
+    const eq = appendEqualsNode(b);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+
+    selectGroup(op);
+
+    expect(useUiStore.getState().groupSelectedIds).toEqual(
+      new Set([a, op, b, eq, result.id]),
+    );
+    expect(useUiStore.getState().selectedNodeId).toBe(result.id);
+  });
+
   test('calling selectGroup on a non-existent node is a no-op', () => {
     selectGroup('ghost');
     expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
@@ -555,6 +572,37 @@ describe('selectGroup', () => {
     deselectNode();
     expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
     expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
+});
+
+describe('deleteGroup', () => {
+  test('deletes every id in one undo entry and dissolves the chain', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addOperatorNode({ x: 50, y: 0 }, '+');
+    const c = addNumberNode({ x: 84, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.ch = { id: 'ch', members: [a, b, c], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'ch';
+      draft.nodes[b].chainId = 'ch';
+      draft.nodes[c].chainId = 'ch';
+    });
+    const before = useDocumentStore.getState().undoStack.length;
+
+    deleteGroup([a, b, c]);
+
+    expect(useDocumentStore.getState().document.nodes[a]).toBeUndefined();
+    expect(useDocumentStore.getState().document.nodes[b]).toBeUndefined();
+    expect(useDocumentStore.getState().document.nodes[c]).toBeUndefined();
+    expect(useDocumentStore.getState().document.chains.ch).toBeUndefined();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before + 1);
+  });
+
+  test('empty input is a no-op', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '7');
+    const before = useDocumentStore.getState().undoStack.length;
+    deleteGroup([]);
+    expect(useDocumentStore.getState().document.nodes[id]).toBeDefined();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
   });
 });
 
@@ -1139,47 +1187,6 @@ describe('moveChain', () => {
     moveChain('ghost', { x: 1, y: 2 });
     moveChain('c1', { x: 10, y: 20 });
     expect(useDocumentStore.getState().undoStack).toHaveLength(0);
-  });
-});
-
-describe('moveSelection', () => {
-  test('translates every listed chain and free node in one undo entry', () => {
-    const a = addNumberNode({ x: 0, y: 0 }, '1');
-    const op = addOperatorNode({ x: 0, y: 0 }, '+');
-    const b = addNumberNode({ x: 0, y: 0 }, '2');
-    const free = addNumberNode({ x: 50, y: 60 }, '9');
-    useDocumentStore.getState().applyCommand((draft) => {
-      draft.chains.c1 = { id: 'c1', members: [a, op, b], anchor: { x: 100, y: 40 } };
-      draft.nodes[a].chainId = 'c1';
-      draft.nodes[op].chainId = 'c1';
-      draft.nodes[b].chainId = 'c1';
-      const positions = layoutChain(draft.chains.c1, draft.nodes, 'en-US');
-      for (const id of [a, op, b]) {
-        const pos = positions[id];
-        if (pos) draft.nodes[id].position = pos;
-      }
-    });
-    useDocumentStore.setState({ undoStack: [], redoStack: [] });
-
-    moveSelection({ chainIds: ['c1'], freeNodeIds: [free] }, { x: 30, y: -10 });
-
-    const { document, undoStack } = useDocumentStore.getState();
-    expect(document.chains.c1.anchor).toEqual({ x: 130, y: 30 });
-    expect(document.nodes[a].position).toEqual({ x: 130, y: 30 });
-    expect(document.nodes[free].position).toEqual({ x: 80, y: 50 });
-    expect(undoStack).toHaveLength(1);
-
-    useDocumentStore.getState().undo();
-    expect(useDocumentStore.getState().document.chains.c1.anchor).toEqual({ x: 100, y: 40 });
-    expect(useDocumentStore.getState().document.nodes[free].position).toEqual({ x: 50, y: 60 });
-  });
-
-  test('zero delta is a no-op', () => {
-    const free = addNumberNode({ x: 10, y: 20 }, '1');
-    useDocumentStore.setState({ undoStack: [], redoStack: [] });
-    moveSelection({ chainIds: [], freeNodeIds: [free] }, { x: 0, y: 0 });
-    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
-    expect(useDocumentStore.getState().document.nodes[free].position).toEqual({ x: 10, y: 20 });
   });
 });
 

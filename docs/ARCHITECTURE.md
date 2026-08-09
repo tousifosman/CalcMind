@@ -685,6 +685,11 @@ operators are visually separated from digits.
   #15) — the gesture stays for parity with the reference app; the button is the discoverable path.
   While that confirm is visible the keypad chrome (mode strip and keys) is hidden so Cancel/Clear
   are the only bottom UI; dismissing or confirming restores the keypad.
+- **Group mode.** While a Select-group highlight is active (§8.6), the keypad disables digits,
+  number-editing keys, and `=` — they stay visible but inert. Undo / redo / backspace remain
+  enabled. If the group includes a result, the operator column (`÷ × − +`) stays enabled for
+  §8.7 continuation; otherwise those operators are disabled too. Backspace deletes the whole
+  group in one undo entry.
 
 ### 8.6 Selection and context menus
 
@@ -702,8 +707,11 @@ operators are visually separated from digits.
   (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`, `Select all`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
-  The group highlight is cleared by the next single-node selection, edit, or deselect (tap
-  another cell, Escape, keypad navigation) — it must not stick after the user has moved on.
+  Double-tap / double-click any cell is the fast path to the same command (dwell-free, no
+  context menu); long-press → `Select group` remains. When the group includes a result, that
+  result becomes the primary keypad target so an operator press continues from it (§8.7). The
+  group highlight is cleared by the next single-node selection, edit, or deselect (tap another
+  cell, Escape, keypad navigation) — it must not stick after the user has moved on.
 - `Select all` selects every node on the canvas (same ephemeral group-selection set as
   `Select group`). Disabled when the canvas is empty. Dragging any selected node then
   translates the whole selection — every selected chain (via its anchor) and every
@@ -1265,9 +1273,9 @@ detaches a member; long-press (≥200 ms) then drag moves the whole chain (ancho
 opposite mapping was tried interactively (Playwright/CDP against the web build) and both
 gestures work mechanically; the shipped mapping won because detach/rearrange is the frequent
 edit and should not require a dwell, while lifting a whole expression is a deliberate act that
-fits long-press. `Select group` remains the dwell-free alternative (§8.6). Context menu at
-500 ms still wins over move-chain (P2.9). Flip point is `LONG_PRESS_MOVES_CHAIN` in
-`src/nodes/dragLifecycle.ts`.
+fits long-press. `Select group` — via double-tap/double-click on any cell, or the context-menu
+item — remains the dwell-free alternative (§8.6). Context menu at 500 ms still wins over
+move-chain (P2.9). Flip point is `LONG_PRESS_MOVES_CHAIN` in `src/nodes/dragLifecycle.ts`.
 
 ### 17.2 Everything else
 2. ~~**Keypad model**~~ — **resolved** (§8.5). Tydlig's dismissible, non-fullscreen keypad with a
