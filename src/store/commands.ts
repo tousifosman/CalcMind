@@ -56,6 +56,36 @@ export function addOperatorNode(position: Vec2, op: OperatorSymbol): NodeId {
   return node.id;
 }
 
+/**
+ * Replace the symbol on an existing operator (§8.5). Selecting an operator and
+ * pressing another operator key changes it in place rather than appending a
+ * second operator at the chain end. Recomputes the chain when the op changes.
+ */
+export function setOperatorSymbol(nodeId: NodeId, op: OperatorSymbol): void {
+  const store = useDocumentStore.getState();
+  const target = store.document.nodes[nodeId];
+  if (!target || target.kind !== 'operator') {
+    throw new Error(
+      `setOperatorSymbol: node ${nodeId} is not an operator (got ${target?.kind ?? 'missing'})`,
+    );
+  }
+  if (target.op === op) return;
+
+  const locale = getDeviceLocale();
+  store.applyCommand((draft) => {
+    const node = draft.nodes[nodeId];
+    if (!node || node.kind !== 'operator') return;
+    node.op = op;
+    if (node.chainId !== null) {
+      const seed = [node.chainId] as const;
+      recomputeFromSeeds(draft, seed, locale);
+      for (const id of dirtyClosure(draft, seed)) {
+        if (draft.chains[id]) reflowChain(draft, id);
+      }
+    }
+  });
+}
+
 export function addParenNode(position: Vec2, side: ParenSide): NodeId {
   const node = createParenNode(position, side);
   useDocumentStore.getState().applyCommand((draft) => {
@@ -223,14 +253,31 @@ export function appendOperatorAndNumber(
   return { operatorId: operatorNode.id, numberId: numberNode.id };
 }
 
+<<<<<<< HEAD
+/** World offset of a continuation chain from its source value (§8.7).
+ *  Proportions taken from `docs/assets/linking-model.svg`: roughly half a cell right and
+ *  one-and-a-half cells down from the source's top-left. */
+=======
 /** Vertical pitch of a continuation chain from the row above it (§8.7).
  *  One-and-a-half cell heights: a full cell plus a half-cell gap, matching the
  *  spacing that used to sit below-right of the source result. */
+>>>>>>> origin/main
 export const CONTINUATION_OFFSET = {
   y: tokens.nodeHeight * 1.5,
 } as const;
 
 /**
+<<<<<<< HEAD
+ * §8.7 Continuation: with a value `V` (number, result, or live reference) selected,
+ * operator `⊕` creates a new chain below-right of `V` containing
+ * `[ reference→V , ⊕ , empty number ]`. Returns the fresh number id so the
+ * dispatcher can put it in edit mode — same as {@link appendOperatorAndNumber},
+ * and required now that a selected operator rejects digits. Never edits `V`.
+ *
+ * Numbers and live references are included so a value (or an existing link to one)
+ * can seed another link without first pressing `=`. Drag-to-link stays result-only
+ * so ordinary number snaps can still move into chains (§8.3).
+=======
  * §8.7 placement: under the first cell of the source group, x aligned with that
  * cell. When any other cell already overlaps the landing slot in that first-cell
  * column, stack under it (and keep stacking while the slot still intersects an
@@ -304,43 +351,80 @@ export function continuationAnchor(
  * under the first cell of R's group containing `[ reference→R , ⊕ ]`. Returns
  * the new operator id so the dispatcher can select it — the next digit then
  * lands in a fresh number via the normal append path. Never edits `R`.
+>>>>>>> origin/main
  */
-export function continueFromResult(
-  resultNodeId: NodeId,
+export function continueFromValue(
+  valueNodeId: NodeId,
   op: OperatorSymbol,
+<<<<<<< HEAD
+): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId; numberId: NodeId } {
+  const nodes = useDocumentStore.getState().document.nodes;
+  const value = nodes[valueNodeId];
+  const isLiveReference =
+    value?.kind === 'reference' && nodes[value.targetNodeId] !== undefined;
+  if (
+    !value ||
+    (value.kind !== 'result' && value.kind !== 'number' && !isLiveReference)
+  ) {
+=======
 ): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId } {
   const { nodes, chains } = useDocumentStore.getState().document;
   const result = nodes[resultNodeId];
   if (!result || result.kind !== 'result') {
+>>>>>>> origin/main
     throw new Error(
-      `continueFromResult: node ${resultNodeId} is not a result (got ${result?.kind ?? 'missing'})`,
+      `continueFromValue: node ${valueNodeId} is not a number, result, or live reference (got ${value?.kind ?? 'missing'})`,
     );
   }
 
-  const reference = createReferenceNode({ x: 0, y: 0 }, resultNodeId);
+  const reference = createReferenceNode({ x: 0, y: 0 }, valueNodeId);
   const operator = createOperatorNode({ x: 0, y: 0 }, op);
+  const number = createNumberNode({ x: 0, y: 0 }, '');
   const chainId = createChainId();
+<<<<<<< HEAD
+  const anchor = {
+    x: value.position.x + CONTINUATION_OFFSET.x,
+    y: value.position.y + CONTINUATION_OFFSET.y,
+  };
+=======
   const anchor = continuationAnchor(
     resultNodeId,
     nodes,
     chains,
     getDeviceLocale(),
   );
+>>>>>>> origin/main
 
   useDocumentStore.getState().applyCommand((draft) => {
     reference.chainId = chainId;
     operator.chainId = chainId;
+    number.chainId = chainId;
     draft.nodes[reference.id] = reference;
     draft.nodes[operator.id] = operator;
+    draft.nodes[number.id] = number;
     draft.chains[chainId] = {
       id: chainId,
       anchor,
-      members: [reference.id, operator.id],
+      members: [reference.id, operator.id, number.id],
     };
     reflowChain(draft, chainId);
   });
 
-  return { chainId, referenceId: reference.id, operatorId: operator.id };
+  return {
+    chainId,
+    referenceId: reference.id,
+    operatorId: operator.id,
+    numberId: number.id,
+  };
+}
+
+/** @deprecated Use {@link continueFromValue} — kept as a thin alias for call sites
+ *  that still say "result" while the behaviour accepts any value. */
+export function continueFromResult(
+  resultNodeId: NodeId,
+  op: OperatorSymbol,
+): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId; numberId: NodeId } {
+  return continueFromValue(resultNodeId, op);
 }
 
 /** setNodeRaw coalescing window (§13): keystrokes to the same node within this

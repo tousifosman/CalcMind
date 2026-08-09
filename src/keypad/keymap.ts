@@ -14,8 +14,9 @@ import {
   appendParenNode,
   appendEqualsNode,
   appendOperatorAndNumber,
-  continueFromResult,
+  continueFromValue,
   setNodeRaw,
+  setOperatorSymbol,
   deleteNode,
   deleteGroup,
   selectNode,
@@ -189,9 +190,11 @@ export function resolveParenSide(
   return 'open';
 }
 
+/** Move keypad focus onto `node`. Numbers are selected without entering edit mode
+ *  so a following operator can §8.7-continue from them; a digit/decimal/sign then
+ *  opens the in-place editor (see digit branch in {@link dispatchEditorCommand}). */
 function focusNode(node: CalcNode): void {
-  if (node.kind === 'number') editNumberNode(node.id);
-  else selectNode(node.id);
+  selectNode(node.id);
 }
 
 function moveSelectionAlongChain(selectedId: NodeId | null, direction: 'left' | 'right'): void {
@@ -405,14 +408,45 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     return;
   }
 
-  // §8.7 Continuation (P4.9): an operator with a result selected starts a new chain
-  // referencing it. Other keys still no-op — the result is read-only and must not be
-  // edited in place.
+  // §8.7 Continuation: operator on a selected result or live reference, or on a
+  // selected number that is *not* being edited, starts a new chain referencing
+  // that value. Results stay read-only for every other key. Linked cells
+  // (references) reject digits (keypad disables them) but still accept `=` /
+  // paren so drag-to-link can finish the chain the reference was dropped into.
+  // Numbers being edited still append in-chain so typing `5 + 3` is unchanged.
   if (selectedNode?.kind === 'result') {
     if (command.region === 'operator') {
-      const { operatorId } = continueFromResult(selectedNode.id, command.op);
-      selectNode(operatorId);
+      const { numberId } = continueFromValue(selectedNode.id, command.op);
+      editNumberNode(numberId);
     }
+    return;
+  }
+  if (selectedNode?.kind === 'reference') {
+    const targetExists =
+      useDocumentStore.getState().document.nodes[selectedNode.targetNodeId] !==
+      undefined;
+    if (command.region === 'operator') {
+      if (targetExists) {
+        const { numberId } = continueFromValue(selectedNode.id, command.op);
+        editNumberNode(numberId);
+      }
+      return;
+    }
+    if (
+      command.region === 'digit' ||
+      command.region === 'decimal' ||
+      command.region === 'sign'
+    ) {
+      return;
+    }
+    // equals / paren fall through to the append path below.
+  } else if (
+    selectedNode?.kind === 'number' &&
+    !editingNumber &&
+    command.region === 'operator'
+  ) {
+    const { numberId } = continueFromValue(selectedNode.id, command.op);
+    editNumberNode(numberId);
     return;
   }
 
@@ -422,6 +456,10 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     case 'digit':
     case 'decimal':
     case 'sign': {
+      // Operator cells are not number-edit targets (keypad digits are disabled);
+      // do not append a fresh number at the chain end.
+      if (selectedNode?.kind === 'operator') return;
+
       const char = command.region === 'digit' ? command.value : command.region === 'decimal' ? '.' : '-';
 
       if (editingNumber) {
@@ -436,6 +474,19 @@ export function dispatchEditorCommand(command: EditorCommand): void {
         }
         return;
       }
+      // Selected number, not editing: open the editor and apply the key (tap/arrow
+      // selects without editing so continuation stays one operator away).
+      if (selectedNode?.kind === 'number') {
+        editNumberNode(selectedNode.id);
+        const raw = selectedNode.raw;
+        if (command.region === 'decimal' && raw.includes('.')) return;
+        if (command.region === 'sign') {
+          setNodeRaw(selectedNode.id, raw.startsWith('-') ? raw.slice(1) : `-${raw}`);
+        } else {
+          setNodeRaw(selectedNode.id, raw + char);
+        }
+        return;
+      }
       if (selectedNode) {
         editNumberNode(appendNumberNode(selectedNode.id, char));
         return;
@@ -445,6 +496,8 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     }
 
     case 'paren': {
+      // Operator cells reject `()` the same way they reject digits (keypad hides it).
+      if (selectedNode?.kind === 'operator') return;
       const doc = useDocumentStore.getState().document;
       const side =
         command.side ?? resolveParenSide(selectedNode, doc.nodes, doc.chains);
@@ -457,6 +510,11 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     }
 
     case 'operator': {
+      // Selected operator: replace its symbol in place (do not append another ⊕).
+      if (selectedNode?.kind === 'operator') {
+        setOperatorSymbol(selectedNode.id, command.op);
+        return;
+      }
       if (selectedNode) {
         editNumberNode(appendOperatorAndNumber(selectedNode.id, command.op).numberId);
         return;

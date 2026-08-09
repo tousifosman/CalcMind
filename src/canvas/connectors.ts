@@ -11,6 +11,7 @@
 // at distinct angles rather than stacking on one exit.
 import { boundsOf, type Bounds } from '../chains/bounds';
 import { dependencyEdgeKey } from '../engine/graph';
+import { identitySourceId } from '../engine/identity';
 import type { CalcNode, ChainId, NodeId, Vec2 } from '../model/types';
 
 /**
@@ -322,7 +323,10 @@ export function buildConnectorScene(
     const source = liveNodes[sourceId];
     if (!source) continue;
     const sourceBounds = boundsOf(source, locale, liveNodes);
-    const hue = hues.get(sourceId) ?? CONNECTOR_NEUTRAL_HUE;
+    // Nested continuation (ref→ref) starts the curve at the selected link cell;
+    // hue still comes from the ultimate number/result identity.
+    const hueSourceId = identitySourceId(liveNodes, sourceId) ?? sourceId;
+    const hue = hues.get(hueSourceId) ?? CONNECTOR_NEUTRAL_HUE;
 
     if (!groupExpanded(group, selectedNodeId)) {
       const anchor = centerBottom(sourceBounds);

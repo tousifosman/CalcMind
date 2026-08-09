@@ -11,7 +11,12 @@ import {
   appendEqualsNode,
   appendOperatorAndNumber,
   continueFromResult,
+<<<<<<< HEAD
+  continueFromValue,
+  setOperatorSymbol,
+=======
   continuationAnchor,
+>>>>>>> origin/main
   CONTINUATION_OFFSET,
   setNodeRaw,
   deleteNode,
@@ -69,6 +74,48 @@ function resetStore() {
 
 beforeEach(resetStore);
 afterEach(() => jest.useRealTimers());
+
+describe('setOperatorSymbol', () => {
+  test('replaces the op in place and recomputes the chain', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '6');
+    const { operatorId, numberId } = appendOperatorAndNumber(a, '+');
+    setNodeRaw(numberId, '2');
+    appendEqualsNode(numberId);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    expect(result).toMatchObject({ derived: { display: '8' } });
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    setOperatorSymbol(operatorId, '×');
+
+    expect(useDocumentStore.getState().document.nodes[operatorId]).toMatchObject({
+      kind: 'operator',
+      op: '×',
+    });
+    expect(useDocumentStore.getState().document.nodes[result.id]).toMatchObject({
+      derived: { display: '12' },
+    });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[operatorId]).toMatchObject({
+      op: '+',
+    });
+    expect(useDocumentStore.getState().document.nodes[result.id]).toMatchObject({
+      derived: { display: '8' },
+    });
+  });
+
+  test('same symbol is a no-op; non-operator throws', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const { operatorId } = appendOperatorAndNumber(a, '+');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    setOperatorSymbol(operatorId, '+');
+    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+    expect(() => setOperatorSymbol(a, '×')).toThrow(/not an operator/);
+  });
+});
 
 describe('addNumberNode', () => {
   test('adds a free number node with an authoritative position', () => {
@@ -1327,8 +1374,13 @@ describe('P4.7 result node lifecycle', () => {
   });
 });
 
+<<<<<<< HEAD
+describe('continueFromValue (P4.9, §8.7)', () => {
+  test('builds [reference→R, ⊕] below-right of a result in one undo entry', () => {
+=======
 describe('continueFromResult (P4.9, §8.7)', () => {
   test('builds [reference→R, ⊕] under the source group\'s first cell in one undo entry', () => {
+>>>>>>> origin/main
     const a = addNumberNode({ x: 10, y: 20 }, '7');
     appendEqualsNode(a);
     const docBefore = useDocumentStore.getState().document;
@@ -1336,16 +1388,20 @@ describe('continueFromResult (P4.9, §8.7)', () => {
     const sourceChain = docBefore.chains[result.chainId!]!;
     useDocumentStore.setState({ undoStack: [], redoStack: [] });
 
-    const { chainId, referenceId, operatorId } = continueFromResult(result.id, '+');
+    const { chainId, referenceId, operatorId, numberId } = continueFromValue(
+      result.id,
+      '+',
+    );
 
     const doc = useDocumentStore.getState().document;
-    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId]);
+    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId, numberId]);
     expect(doc.nodes[referenceId]).toMatchObject({
       kind: 'reference',
       targetNodeId: result.id,
       chainId,
     });
     expect(doc.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '+', chainId });
+    expect(doc.nodes[numberId]).toMatchObject({ kind: 'number', raw: '', chainId });
     expect(doc.chains[chainId]!.anchor).toEqual({
       x: sourceChain.anchor.x,
       y: sourceChain.anchor.y + CONTINUATION_OFFSET.y,
@@ -1366,9 +1422,66 @@ describe('continueFromResult (P4.9, §8.7)', () => {
     expect(useDocumentStore.getState().document.chains[chainId]!.members).toEqual([
       referenceId,
       operatorId,
+      numberId,
     ]);
   });
 
+<<<<<<< HEAD
+  test('builds [reference→N, ⊕] from a number value (no equals required)', () => {
+    const n = addNumberNode({ x: 40, y: 80 }, '12');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    const { chainId, referenceId, operatorId, numberId } = continueFromValue(n, '×');
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: n,
+      chainId,
+    });
+    expect(doc.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '×', chainId });
+    expect(doc.nodes[numberId]).toMatchObject({ kind: 'number', raw: '', chainId });
+    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId, numberId]);
+    expect(doc.chains[chainId]!.anchor).toEqual({
+      x: 40 + CONTINUATION_OFFSET.x,
+      y: 80 + CONTINUATION_OFFSET.y,
+    });
+    // Source number is untouched — still free, still '12'.
+    expect(doc.nodes[n]).toMatchObject({ kind: 'number', raw: '12', chainId: null });
+  });
+
+  test('builds [reference→Ref, ⊕, number] from a live linked cell', () => {
+    const n = addNumberNode({ x: 10, y: 20 }, '3');
+    const { referenceId: parentRef } = continueFromValue(n, '+');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    const { chainId, referenceId, operatorId, numberId } = continueFromValue(
+      parentRef,
+      '×',
+    );
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: parentRef,
+      chainId,
+    });
+    expect(doc.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '×', chainId });
+    expect(doc.chains[chainId]!.members).toEqual([referenceId, operatorId, numberId]);
+    // Parent link stays in its own chain.
+    expect(doc.nodes[parentRef]).toMatchObject({ kind: 'reference', targetNodeId: n });
+  });
+
+  test('rejects a non-value target', () => {
+    const op = addOperatorNode({ x: 0, y: 0 }, '+');
+    expect(() => continueFromValue(op, '+')).toThrow(
+      /not a number, result, or live reference/,
+    );
+    // Alias still routes through the same check.
+    expect(() => continueFromResult(op, '+')).toThrow(
+      /not a number, result, or live reference/,
+    );
+=======
   test('stacks under an existing cell in the first-cell column', () => {
     const a = addNumberNode({ x: 40, y: 10 }, '3');
     appendEqualsNode(a);
@@ -1458,6 +1571,7 @@ describe('continueFromResult (P4.9, §8.7)', () => {
   test('rejects a non-result target', () => {
     const a = addNumberNode({ x: 0, y: 0 }, '1');
     expect(() => continueFromResult(a, '+')).toThrow(/not a result/);
+>>>>>>> origin/main
   });
 });
 
@@ -1946,9 +2060,9 @@ describe('P6.2 incremental cascade', () => {
       )!;
       expect(r1).toMatchObject({ derived: { display: '1,224' } });
 
-      // c2: continuation × 2 =
-      const { chainId: c2, operatorId } = continueFromResult(r1.id, '×');
-      const n3 = appendNumberNode(operatorId, '2');
+      // c2: continuation × 2 = (continuation seeds the empty operand)
+      const { chainId: c2, numberId: n3 } = continueFromResult(r1.id, '×');
+      setNodeRaw(n3, '2');
       appendEqualsNode(n3);
       const r2 = Object.values(useDocumentStore.getState().document.nodes).find(
         (n) => n.kind === 'result' && n.sourceChainId === c2,

@@ -100,10 +100,10 @@ export function createResultNode(position: Vec2, sourceChainId: ChainId): Result
   };
 }
 
-/** Reference to another node's live value (§6, §8.7). Created by continuation (P4.9)
- *  or by dragging a result into a chain (P6.7); identity hue from `engine/identity.ts`
- *  (P6.5). `lastKnownDisplay` is stamped only when a target is deleted (P6.4) — live
- *  references leave it absent. */
+/** Reference to another node's live value (§6, §8.7). Created by continuation from a
+ *  number or result (P4.9) or by dragging a result into a chain (P6.7); identity hue
+ *  from `engine/identity.ts` (P6.5). `lastKnownDisplay` is stamped only when a target
+ *  is deleted (P6.4) — live references leave it absent. */
 export function createReferenceNode(position: Vec2, targetNodeId: NodeId): ReferenceNode {
   return {
     id: createNodeId(),

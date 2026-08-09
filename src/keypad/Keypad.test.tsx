@@ -6,10 +6,15 @@ import {
   addNumberNode,
   addOperatorNode,
   appendEqualsNode,
+<<<<<<< HEAD
+  continueFromValue,
+  selectNode,
+=======
   appendOperatorAndNumber,
   selectAll,
   selectGroup,
   setNodeRaw,
+>>>>>>> origin/main
 } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
 
@@ -96,6 +101,56 @@ describe('Keypad', () => {
     expect(findByTestID(renderer, 'keypad-mode-graph').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-mode-documents').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-mode-dismiss').props.disabled).toBeFalsy();
+  });
+
+  test('digit keys disable while a linked cell, result, or operator is selected', () => {
+    const presses: KeypadKey[] = [];
+    const n = addNumberNode({ x: 0, y: 0 }, '3');
+    appendEqualsNode(n);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (node) => node.kind === 'result',
+    )!;
+    const { referenceId, operatorId } = continueFromValue(result.id, '+');
+    const freeOp = addOperatorNode({ x: 200, y: 0 }, '×');
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      selectNode(referenceId);
+      renderer = create(<Keypad onKeyPress={(key) => presses.push(key)} />);
+    });
+
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-digit-0').props.disabled).toBe(true);
+    act(() => {
+      findByTestID(renderer, 'keypad-digit-5').props.onPress?.();
+    });
+    expect(presses).toEqual([]);
+
+    act(() => {
+      selectNode(result.id);
+    });
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
+
+    act(() => {
+      selectNode(operatorId);
+    });
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBe(true);
+
+    act(() => {
+      selectNode(freeOp);
+    });
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
+
+    act(() => {
+      selectNode(n);
+    });
+    // Re-render picks up the selection change.
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBeFalsy();
   });
 
   test('dismissing via the mode strip hides the keypad, outside undo history', () => {

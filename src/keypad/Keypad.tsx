@@ -72,10 +72,27 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     const { nodes, chains } = state.document;
     return Object.keys(nodes).length === 0 && Object.keys(chains).length === 0;
   });
+<<<<<<< HEAD
+  // Results, operators, and linked cells are not number-edit targets — digit keys
+  // would otherwise no-op silently (results) or append at chain end (operators /
+  // references). Operators on a result/reference/number still continue (§8.7).
+  const selectedNodeId = useUiStore((state) => state.selectedNodeId);
+  const selectedKind = useDocumentStore((state) =>
+    selectedNodeId ? state.document.nodes[selectedNodeId]?.kind : undefined,
+  );
+  const numberKeysDisabled =
+    selectedKind === 'reference' ||
+    selectedKind === 'result' ||
+    selectedKind === 'operator';
+  // Number-editing row (., +/-, ()) is for operands; hide it while an operator
+  // is selected (operator keys still replace the symbol).
+  const numberEditingKeysDisabled = selectedKind === 'operator';
+=======
   const nodes = useDocumentStore((state) => state.document.nodes);
   // Select all (§8.6): data-entry keys have no single target — gray them out.
   // Mode strip (and hardware undo/redo) stay available.
   const dataEntryLocked = allSelected;
+>>>>>>> origin/main
 
   if (!visible) {
     return null;
@@ -172,8 +189,13 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                   <DigitKey
                     key={value}
                     value={value}
+<<<<<<< HEAD
+                    disabled={numberKeysDisabled}
+                    onPress={() => press({ region: 'digit', value })}
+=======
                     onPress={() => press({ region: 'digit', value })}
                     disabled={dataEntryLocked || groupMode}
+>>>>>>> origin/main
                   />
                 ))}
               </View>
@@ -182,8 +204,13 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               <View style={styles.digitSpacer} />
               <DigitKey
                 value="0"
+<<<<<<< HEAD
+                disabled={numberKeysDisabled}
+                onPress={() => press({ region: 'digit', value: '0' })}
+=======
                 onPress={() => press({ region: 'digit', value: '0' })}
                 disabled={dataEntryLocked || groupMode}
+>>>>>>> origin/main
               />
               <View style={styles.digitSpacer} />
             </View>
@@ -193,6 +220,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
             <Key
               label={decimalSeparatorFor(locale)}
               onPress={() => press({ region: 'decimal' })}
+              disabled={numberEditingKeysDisabled}
               testID="keypad-decimal"
               disabled={dataEntryLocked || groupMode}
             />
@@ -202,14 +230,28 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               testID="keypad-sign"
               disabled={dataEntryLocked || groupMode}
             />
+<<<<<<< HEAD
+            <Key
+              label="+/-"
+              onPress={() => press({ region: 'sign' })}
+              disabled={numberEditingKeysDisabled}
+              testID="keypad-sign"
+            />
+=======
+>>>>>>> origin/main
             {/* Single `()` key (§8.5): same cell size as the other editing keys.
                 Side is resolved in `dispatchEditorCommand` from chain depth so one
                 tap opens or closes as appropriate. */}
             <Key
               label="()"
               onPress={() => press({ region: 'paren' })}
+<<<<<<< HEAD
+              disabled={numberEditingKeysDisabled}
+              testID="keypad-paren"
+=======
               testID="keypad-paren"
               disabled={dataEntryLocked || groupMode}
+>>>>>>> origin/main
             />
           </View>
 
@@ -300,7 +342,11 @@ function Key({ label, icon, onPress, testID, disabled }: KeyProps) {
   return (
     <TouchableOpacity
       style={[styles.key, disabled && styles.keyDisabled]}
+<<<<<<< HEAD
+      onPress={disabled ? undefined : onPress}
+=======
       onPress={onPress}
+>>>>>>> origin/main
       disabled={disabled}
       testID={testID}
       accessibilityLabel={icon ? label : undefined}
@@ -309,7 +355,13 @@ function Key({ label, icon, onPress, testID, disabled }: KeyProps) {
       {...skipTabOrder}
     >
       {icon ?? (
+<<<<<<< HEAD
+        <Text style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled]}>
+          {label}
+        </Text>
+=======
         <Text style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled]}>{label}</Text>
+>>>>>>> origin/main
       )}
     </TouchableOpacity>
   );
@@ -326,15 +378,24 @@ function DigitKey({
 }) {
   return (
     <TouchableOpacity
+<<<<<<< HEAD
+      style={[styles.digitKey, disabled && styles.digitKeyDisabled]}
+      onPress={disabled ? undefined : onPress}
+=======
       style={[styles.digitKey, disabled && styles.keyDisabled]}
       onPress={onPress}
+>>>>>>> origin/main
       disabled={disabled}
       testID={`keypad-digit-${value}`}
       accessibilityState={{ disabled: !!disabled }}
       {...preventFocusSteal}
       {...skipTabOrder}
     >
+<<<<<<< HEAD
+      <Text style={[styles.keyLabel, disabled && styles.digitKeyLabelDisabled]}>{value}</Text>
+=======
       <Text style={[styles.keyLabel, disabled && styles.keyLabelDisabled]}>{value}</Text>
+>>>>>>> origin/main
     </TouchableOpacity>
   );
 }
@@ -462,6 +523,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  digitKeyDisabled: {
+    backgroundColor: '#DADADA',
+    opacity: 0.55,
+  },
+  digitKeyLabelDisabled: {
+    color: '#888888',
+  },
   editingRow: {
     flexDirection: 'row',
     marginBottom: KEY_GAP,
@@ -479,7 +547,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   keyDisabled: {
+<<<<<<< HEAD
+    opacity: 0.55,
+  },
+  keyLabelDisabled: {
+    color: '#888888',
+=======
     opacity: 0.35,
+>>>>>>> origin/main
   },
   keyLabel: {
     color: glyphColor,

@@ -7,7 +7,7 @@
 // the whole document on every store update — a full sweep, which the budget
 // forbids. Re-render scope is still per-node: only the returned string is compared.
 import { useDocumentStore } from '../store/documentStore';
-import { assignIdentityHues } from '../engine/identity';
+import { assignIdentityHues, identitySourceId } from '../engine/identity';
 import { identityHues } from '../ui/tokens';
 import type { CalcNode, NodeId } from '../model/types';
 
@@ -39,11 +39,11 @@ export function useSourceIdentityHue(nodeId: NodeId): string | undefined {
   );
 }
 
-/** Hue a reference cell should fill with — the target's identity hue, if any. */
+/** Hue a reference cell should fill with — the ultimate source's identity hue. */
 export function useReferenceIdentityHue(referenceId: NodeId): string | undefined {
   return useDocumentStore((state) => {
-    const node = state.document.nodes[referenceId];
-    if (!node || node.kind !== 'reference') return undefined;
-    return identityHueMapFor(state.document.nodes).get(node.targetNodeId);
+    const sourceId = identitySourceId(state.document.nodes, referenceId);
+    if (!sourceId) return undefined;
+    return identityHueMapFor(state.document.nodes).get(sourceId);
   });
 }
