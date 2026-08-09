@@ -729,7 +729,8 @@ A number that *is* being edited still appends the operator in-chain — that is 
 typed. Tap or arrow selection leaves the number selected-but-not-editing, which is the
 continuation-ready state (mirroring a selected result). A **result**, **operator**, or
 **linked cell** (reference) rejects digits — keypad number keys are disabled while any of
-those is selected. Continuation therefore seeds an empty number and focuses it, so the next
+those is selected. Pressing an operator key while an operator is selected **replaces** that
+operator's symbol in place. Continuation seeds an empty number and focuses it, so the next
 digits edit in place rather than relying on a selected operator. For a reference, `=` / paren
 still append so a just-dropped link can finish its expression.
 

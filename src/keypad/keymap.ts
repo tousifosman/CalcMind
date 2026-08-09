@@ -16,6 +16,7 @@ import {
   appendOperatorAndNumber,
   continueFromValue,
   setNodeRaw,
+  setOperatorSymbol,
   deleteNode,
   selectNode,
   editNumberNode,
@@ -462,6 +463,11 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     }
 
     case 'operator': {
+      // Selected operator: replace its symbol in place (do not append another ⊕).
+      if (selectedNode?.kind === 'operator') {
+        setOperatorSymbol(selectedNode.id, command.op);
+        return;
+      }
       if (selectedNode) {
         editNumberNode(appendOperatorAndNumber(selectedNode.id, command.op).numberId);
         return;

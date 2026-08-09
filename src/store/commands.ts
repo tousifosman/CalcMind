@@ -55,6 +55,36 @@ export function addOperatorNode(position: Vec2, op: OperatorSymbol): NodeId {
   return node.id;
 }
 
+/**
+ * Replace the symbol on an existing operator (§8.5). Selecting an operator and
+ * pressing another operator key changes it in place rather than appending a
+ * second operator at the chain end. Recomputes the chain when the op changes.
+ */
+export function setOperatorSymbol(nodeId: NodeId, op: OperatorSymbol): void {
+  const store = useDocumentStore.getState();
+  const target = store.document.nodes[nodeId];
+  if (!target || target.kind !== 'operator') {
+    throw new Error(
+      `setOperatorSymbol: node ${nodeId} is not an operator (got ${target?.kind ?? 'missing'})`,
+    );
+  }
+  if (target.op === op) return;
+
+  const locale = getDeviceLocale();
+  store.applyCommand((draft) => {
+    const node = draft.nodes[nodeId];
+    if (!node || node.kind !== 'operator') return;
+    node.op = op;
+    if (node.chainId !== null) {
+      const seed = [node.chainId] as const;
+      recomputeFromSeeds(draft, seed, locale);
+      for (const id of dirtyClosure(draft, seed)) {
+        if (draft.chains[id]) reflowChain(draft, id);
+      }
+    }
+  });
+}
+
 export function addParenNode(position: Vec2, side: ParenSide): NodeId {
   const node = createParenNode(position, side);
   useDocumentStore.getState().applyCommand((draft) => {

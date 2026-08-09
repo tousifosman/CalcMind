@@ -12,6 +12,7 @@ import {
   appendOperatorAndNumber,
   continueFromResult,
   continueFromValue,
+  setOperatorSymbol,
   CONTINUATION_OFFSET,
   setNodeRaw,
   deleteNode,
@@ -67,6 +68,48 @@ function resetStore() {
 
 beforeEach(resetStore);
 afterEach(() => jest.useRealTimers());
+
+describe('setOperatorSymbol', () => {
+  test('replaces the op in place and recomputes the chain', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '6');
+    const { operatorId, numberId } = appendOperatorAndNumber(a, '+');
+    setNodeRaw(numberId, '2');
+    appendEqualsNode(numberId);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    )!;
+    expect(result).toMatchObject({ derived: { display: '8' } });
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    setOperatorSymbol(operatorId, '×');
+
+    expect(useDocumentStore.getState().document.nodes[operatorId]).toMatchObject({
+      kind: 'operator',
+      op: '×',
+    });
+    expect(useDocumentStore.getState().document.nodes[result.id]).toMatchObject({
+      derived: { display: '12' },
+    });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[operatorId]).toMatchObject({
+      op: '+',
+    });
+    expect(useDocumentStore.getState().document.nodes[result.id]).toMatchObject({
+      derived: { display: '8' },
+    });
+  });
+
+  test('same symbol is a no-op; non-operator throws', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const { operatorId } = appendOperatorAndNumber(a, '+');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    setOperatorSymbol(operatorId, '+');
+    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+    expect(() => setOperatorSymbol(a, '×')).toThrow(/not an operator/);
+  });
+});
 
 describe('addNumberNode', () => {
   test('adds a free number node with an authoritative position', () => {

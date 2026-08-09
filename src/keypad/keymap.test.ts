@@ -398,6 +398,25 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     );
   });
 
+  test('operator with an operator selected replaces its symbol in place', () => {
+    dispatchEditorCommand({ region: 'digit', value: '5' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '3' });
+    const op = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'operator',
+    )!;
+    selectNode(op.id);
+    const membersBefore =
+      useDocumentStore.getState().document.chains[op.chainId!]!.members.length;
+
+    dispatchEditorCommand({ region: 'operator', op: '×' });
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.nodes[op.id]).toMatchObject({ kind: 'operator', op: '×' });
+    expect(doc.chains[op.chainId!]!.members).toHaveLength(membersBefore);
+    expect(useUiStore.getState().selectedNodeId).toBe(op.id);
+  });
+
   test('digit with an operator selected no-ops (does not append at chain end)', () => {
     dispatchEditorCommand({ region: 'digit', value: '5' });
     dispatchEditorCommand({ region: 'operator', op: '+' });
