@@ -25,6 +25,7 @@ import {
   editNumberNode,
   deleteNode,
   selectGroup,
+  selectAll,
   unlinkFromParent,
   repointReference,
   editNodeLabel,
@@ -160,6 +161,7 @@ export function AppShell() {
         <ContextMenuOverlay
           onDeleteNode={deleteNode}
           onSelectGroup={selectGroup}
+          onSelectAll={selectAll}
           onUnlinkFromParent={unlinkFromParent}
           onLabelNode={editNodeLabel}
         />

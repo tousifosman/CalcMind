@@ -144,6 +144,7 @@ describe('ConnectorLayer', () => {
         position: { x: 200, y: 300 },
         candidate: null,
         movingChainId: null,
+        movingSelection: null,
       });
     });
 

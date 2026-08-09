@@ -19,6 +19,7 @@ import {
   editNumberNode,
   deselectNode,
   selectGroup,
+  selectAll,
   prependToChain,
   appendToChain,
   insertIntoChain,
@@ -27,6 +28,7 @@ import {
   commitSnapOutcome,
   moveFreeNode,
   moveChain,
+  moveSelection,
   unlinkFromParent,
   unlinkReference,
   repointReference,
@@ -555,6 +557,72 @@ describe('selectGroup', () => {
   });
 });
 
+describe('selectAll', () => {
+  test('selects every node on the canvas into the group selection', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addOperatorNode({ x: 50, y: 0 }, '+');
+    const c = addNumberNode({ x: 100, y: 40 }, '9');
+
+    selectAll();
+
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([a, b, c]));
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+  });
+
+  test('keeps the current selection as the primary target when it still exists', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addNumberNode({ x: 40, y: 0 }, '2');
+    selectNode(b);
+
+    selectAll();
+
+    expect(useUiStore.getState().selectedNodeId).toBe(b);
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([a, b]));
+  });
+
+  test('discards an abandoned empty number before selecting', () => {
+    const keeper = addNumberNode({ x: 0, y: 0 }, '3');
+    const empty = addNumberNode({ x: 40, y: 0 }, '');
+    editNumberNode(empty);
+
+    selectAll();
+
+    expect(useDocumentStore.getState().document.nodes[empty]).toBeUndefined();
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([keeper]));
+    expect(useUiStore.getState().selectedNodeId).toBe(keeper);
+  });
+
+  test('empty canvas is a no-op', () => {
+    selectAll();
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
+
+  test('selectAll does not add an undo entry', () => {
+    addNumberNode({ x: 0, y: 0 }, '5');
+    const before = useDocumentStore.getState().undoStack.length;
+    selectAll();
+    // discardIfAbandoned may not delete anything here; only the create was recorded.
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+  });
+
+  test('selectNode / deselectNode clear a prior Select-all highlight', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addNumberNode({ x: 40, y: 0 }, '2');
+    selectAll();
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([a, b]));
+
+    selectNode(a);
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBe(a);
+
+    selectAll();
+    deselectNode();
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
+});
+
 describe('P3.4 chain mutations: prepend / append / insert / newChain / detach', () => {
   function seedChain(
     members: Array<{ raw?: string; kind?: 'number' | 'operator' | 'equals' }>,
@@ -1070,6 +1138,47 @@ describe('moveChain', () => {
     moveChain('ghost', { x: 1, y: 2 });
     moveChain('c1', { x: 10, y: 20 });
     expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+  });
+});
+
+describe('moveSelection', () => {
+  test('translates every listed chain and free node in one undo entry', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const op = addOperatorNode({ x: 0, y: 0 }, '+');
+    const b = addNumberNode({ x: 0, y: 0 }, '2');
+    const free = addNumberNode({ x: 50, y: 60 }, '9');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.c1 = { id: 'c1', members: [a, op, b], anchor: { x: 100, y: 40 } };
+      draft.nodes[a].chainId = 'c1';
+      draft.nodes[op].chainId = 'c1';
+      draft.nodes[b].chainId = 'c1';
+      const positions = layoutChain(draft.chains.c1, draft.nodes, 'en-US');
+      for (const id of [a, op, b]) {
+        const pos = positions[id];
+        if (pos) draft.nodes[id].position = pos;
+      }
+    });
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    moveSelection({ chainIds: ['c1'], freeNodeIds: [free] }, { x: 30, y: -10 });
+
+    const { document, undoStack } = useDocumentStore.getState();
+    expect(document.chains.c1.anchor).toEqual({ x: 130, y: 30 });
+    expect(document.nodes[a].position).toEqual({ x: 130, y: 30 });
+    expect(document.nodes[free].position).toEqual({ x: 80, y: 50 });
+    expect(undoStack).toHaveLength(1);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.chains.c1.anchor).toEqual({ x: 100, y: 40 });
+    expect(useDocumentStore.getState().document.nodes[free].position).toEqual({ x: 50, y: 60 });
+  });
+
+  test('zero delta is a no-op', () => {
+    const free = addNumberNode({ x: 10, y: 20 }, '1');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+    moveSelection({ chainIds: [], freeNodeIds: [free] }, { x: 0, y: 0 });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+    expect(useDocumentStore.getState().document.nodes[free].position).toEqual({ x: 10, y: 20 });
   });
 });
 

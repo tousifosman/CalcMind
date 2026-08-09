@@ -26,6 +26,15 @@ export interface DragSnapState {
    * detach/free drags where only `nodeId` moves.
    */
   movingChainId: ChainId | null;
+  /**
+   * §8.6 Select all: when set, every listed chain and free node is offset by the
+   * same delta as `nodeId` (connectors + commit). Mutually exclusive with
+   * `movingChainId` in practice — single-chain group moves use that field alone.
+   */
+  movingSelection: {
+    chainIds: readonly ChainId[];
+    freeNodeIds: readonly NodeId[];
+  } | null;
 }
 
 export interface UiState {

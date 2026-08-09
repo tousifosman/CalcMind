@@ -916,6 +916,29 @@ export function moveChain(chainId: ChainId, anchor: Vec2): void {
   });
 }
 
+/** Translate every unit in a multi-node selection by the same delta (§8.6 Select all).
+ *  Chains move via `anchor` + reflow; free nodes via `position`. One undo entry.
+ *  No-op when `delta` is zero. */
+export function moveSelection(
+  units: { chainIds: readonly ChainId[]; freeNodeIds: readonly NodeId[] },
+  delta: Vec2,
+): void {
+  if (delta.x === 0 && delta.y === 0) return;
+  useDocumentStore.getState().applyCommand((draft) => {
+    for (const chainId of units.chainIds) {
+      const chain = draft.chains[chainId];
+      if (!chain) continue;
+      chain.anchor = { x: chain.anchor.x + delta.x, y: chain.anchor.y + delta.y };
+      reflowChain(draft, chainId);
+    }
+    for (const id of units.freeNodeIds) {
+      const node = draft.nodes[id];
+      if (!node || node.chainId !== null) continue;
+      node.position = { x: node.position.x + delta.x, y: node.position.y + delta.y };
+    }
+  });
+}
+
 /** Selects every node in the same chain as `nodeId` (§8.6, P2.9). Nodes that are
  *  not chain members — i.e. free nodes with `chainId === null` — count as a group
  *  of one. This is purely ephemeral UI state; the document is not changed. */
@@ -955,6 +978,26 @@ function discardIfAbandoned(keepId: NodeId | null): void {
   if (node && node.kind === 'number' && node.raw === '') {
     deleteNode(editingId);
   }
+}
+
+/** Selects every node on the canvas (§8.6 `Select all`). Ephemeral — same store
+ *  as `Select group`; the document is not changed and no undo entry is recorded.
+ *  Discards an abandoned empty number first so a leftover blank edit cell is not
+ *  part of the selection. No-op when the canvas is already empty. */
+export function selectAll(): void {
+  discardIfAbandoned(null);
+  const { document } = useDocumentStore.getState();
+  const ids = Object.keys(document.nodes);
+  if (ids.length === 0) return;
+
+  useUiStore.getState().setGroupSelected(new Set(ids));
+  useUiStore.getState().setEditingNode(null);
+  useUiStore.getState().setEditingLabelNode(null);
+  // Keep the current keypad target when it is still present; otherwise pick any
+  // surviving node so the focus ring / keypad still have somewhere to land.
+  const current = useUiStore.getState().selectedNodeId;
+  const primary = current && document.nodes[current] ? current : ids[0];
+  useUiStore.getState().setSelectedNode(primary);
 }
 
 /** Selects any node kind without entering edit mode - the target for keypad/hardware-keyboard

@@ -37,4 +37,4 @@ overturned it.
 | [2026-08-04](2026-08-04.md) | P2–P4 exit; P5.1–P5.8 persistence; P6.1–P6.3/P6.5/P6.7–P6.8 linking |
 | [2026-08-05](2026-08-05.md) | P6.6–P6b exit; linking polish through labels + slider |
 | [2026-08-06](2026-08-06.md) | P7.2 keyboard; P7.3 result texture; P7.6 spatial hash; P7.8 Clear all; manual PR preview deploys |
-| [2026-08-08](2026-08-08.md) | Soft-keyboard suppress; Clear-confirm hides keypad; `()` merge; Heroicons; keypad undo/redo row; focus chrome: stacking, group clear, `=`→result, no identity ring while selected |
+| [2026-08-08](2026-08-08.md) | Soft-keyboard suppress; Clear-confirm hides keypad; `()` merge; Heroicons; keypad undo/redo row; focus chrome: stacking, group clear, `=`→result, no identity ring while selected; Select all (+ drag, clear, keypad lock) |

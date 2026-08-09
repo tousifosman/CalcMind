@@ -293,18 +293,47 @@ describe('NodeContextMenu', () => {
 });
 
 describe('CanvasContextMenu', () => {
-  test('all three items are disabled', () => {
+  test('placeholder items stay disabled and Select all is disabled on an empty canvas', () => {
     const renderer = renderNode(
-      <CanvasContextMenu anchor={ANCHOR} onDismiss={jest.fn()} />,
+      <CanvasContextMenu
+        anchor={ANCHOR}
+        onSelectAll={jest.fn()}
+        onDismiss={jest.fn()}
+      />,
     );
 
-    for (const label of ['Add number', 'Paste', 'Add graph']) {
+    for (const label of ['Add number', 'Paste', 'Add graph', 'Select all']) {
       const btn = renderer.root
         .findAll((node) => node.props.testID === `context-menu-item-${label}`)
         .find((node) => node.props.disabled !== undefined);
       expect(btn).toBeDefined();
       expect(btn!.props.disabled).toBe(true);
     }
+  });
+
+  test('Select all is enabled when the canvas has nodes and invokes onSelectAll then onDismiss', () => {
+    addNumberNode({ x: 0, y: 0 }, '1');
+    const onSelectAll = jest.fn();
+    const onDismiss = jest.fn();
+    const renderer = renderNode(
+      <CanvasContextMenu
+        anchor={ANCHOR}
+        onSelectAll={onSelectAll}
+        onDismiss={onDismiss}
+      />,
+    );
+
+    const selectAllBtn = renderer.root
+      .findAll((node) => node.props.testID === 'context-menu-item-Select all')
+      .find((node) => typeof node.props.onPress === 'function');
+    expect(selectAllBtn).toBeDefined();
+    expect(selectAllBtn!.props.disabled).toBe(false);
+
+    act(() => {
+      selectAllBtn!.props.onPress();
+    });
+    expect(onSelectAll).toHaveBeenCalledTimes(1);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -314,6 +343,7 @@ describe('ContextMenuOverlay', () => {
       <ContextMenuOverlay
         onDeleteNode={jest.fn()}
         onSelectGroup={jest.fn()}
+        onSelectAll={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabelNode={jest.fn()}
       />,
@@ -331,6 +361,7 @@ describe('ContextMenuOverlay', () => {
       <ContextMenuOverlay
         onDeleteNode={jest.fn()}
         onSelectGroup={jest.fn()}
+        onSelectAll={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabelNode={jest.fn()}
       />,
@@ -351,6 +382,7 @@ describe('ContextMenuOverlay', () => {
       <ContextMenuOverlay
         onDeleteNode={jest.fn()}
         onSelectGroup={jest.fn()}
+        onSelectAll={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabelNode={jest.fn()}
       />,
@@ -360,6 +392,10 @@ describe('ContextMenuOverlay', () => {
       (node) => node.props.testID === `context-menu-item-Add number`,
     );
     expect(addNumberBtns.length).toBeGreaterThanOrEqual(1);
+    const selectAllBtns = renderer.root.findAll(
+      (node) => node.props.testID === 'context-menu-item-Select all',
+    );
+    expect(selectAllBtns.length).toBeGreaterThanOrEqual(1);
   });
 
   test('closeContextMenu sets contextMenu to null', () => {
