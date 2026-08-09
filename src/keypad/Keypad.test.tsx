@@ -6,15 +6,12 @@ import {
   addNumberNode,
   addOperatorNode,
   appendEqualsNode,
-<<<<<<< HEAD
-  continueFromValue,
-  selectNode,
-=======
   appendOperatorAndNumber,
+  continueFromValue,
   selectAll,
   selectGroup,
+  selectNode,
   setNodeRaw,
->>>>>>> origin/main
 } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
 
