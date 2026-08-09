@@ -705,13 +705,22 @@ operators are visually separated from digits.
   nothing typed) discards it rather than leaving a blank cell on the canvas.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` on values
   (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
-- Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`.
+- Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`, `Select all`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
   Double-tap / double-click any cell is the fast path to the same command (dwell-free, no
   context menu); long-press → `Select group` remains. When the group includes a result, that
   result becomes the primary keypad target so an operator press continues from it (§8.7). The
   group highlight is cleared by the next single-node selection, edit, or deselect (tap another
   cell, Escape, keypad navigation) — it must not stick after the user has moved on.
+- `Select all` selects every node on the canvas (same ephemeral group-selection set as
+  `Select group`). Disabled when the canvas is empty. Dragging any selected node then
+  translates the whole selection — every selected chain (via its anchor) and every
+  selected free node — by the same delta, in one undo entry. A single-chain
+  `Select group` still uses the ordinary MovingChain path. The same clear-on-single-select
+  rule applies. While the whole canvas is selected, keypad **data-entry** keys (digits,
+  operators, `=`, decimal, sign, backspace, `()`) are grayed out — there is no single
+  edit target. The mode strip (dismiss / Documents / functions / graph / Clear all) stays
+  live, and hardware undo/redo / Escape still work.
 - **`Label` opens an in-place caption editor on the identity source** (§11.1). The write always
   lands on the declaring number or result, so every reference that shares the identity updates
   together; successive keystrokes coalesce into one undo entry (§13).

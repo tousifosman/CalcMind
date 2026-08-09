@@ -11,6 +11,7 @@ import {
   deleteNode,
   appendEqualsNode,
   appendOperatorAndNumber,
+  selectAll,
 } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
 import {
@@ -644,5 +645,40 @@ describe('dispatchEditorCommand: undo / redo and Escape dismiss (P7.2)', () => {
 
     dispatchEditorCommand({ region: 'escape' });
     expect(useUiStore.getState().keypadVisible).toBe(false);
+  });
+});
+
+describe('dispatchEditorCommand: Select all locks data-entry (§8.6)', () => {
+  test('digits and operators are no-ops while the whole canvas is selected', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addNumberNode({ x: 40, y: 0 }, '2');
+    selectAll();
+    expect(useUiStore.getState().groupSelectedIds).toEqual(new Set([a, b]));
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    expect(nodes()[a]).toMatchObject({ raw: '1' });
+    expect(nodes()[b]).toMatchObject({ raw: '2' });
+    expect(Object.keys(nodes())).toHaveLength(2);
+  });
+
+  test('undo / redo / Escape still work under Select all', () => {
+    addNumberNode({ x: 0, y: 0 }, '3');
+    const second = addNumberNode({ x: 40, y: 0 }, '4');
+    selectAll();
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'undo' });
+    expect(nodes()[second]).toBeUndefined();
+    expect(useDocumentStore.getState().undoStack.length).toBeLessThan(before);
+
+    dispatchEditorCommand({ region: 'redo' });
+    expect(nodes()[second]).toMatchObject({ raw: '4' });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+
+    selectAll();
+    dispatchEditorCommand({ region: 'escape' });
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
   });
 });

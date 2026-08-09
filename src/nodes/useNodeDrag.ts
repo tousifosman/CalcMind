@@ -7,8 +7,10 @@
 //
 // MovingChain (P3.7): hold then drag (heldMs from onBegin→onStart ≥ CHAIN_MOVE_HOLD_MS)
 // lifts the whole chain (anchor update); a plain drag detaches the member.
-// `Select group` is the other move-chain route (§8.6). Context menu at 500 ms wins —
-// never enter moveChain while `contextMenu !== null`.
+// `Select group` is the other move-chain route (§8.6). `Select all` (multi-unit
+// group selection) uses `moveSelection` so every selected chain and free node
+// translate together. Context menu at 500 ms wins — never enter moveChain while
+// `contextMenu !== null`.
 import { useCallback, useEffect, useRef } from 'react';
 import { Gesture } from 'react-native-gesture-handler';
 import {
@@ -25,6 +27,7 @@ import {
   detachNode,
   moveChain,
   moveFreeNode,
+  moveSelection,
 } from '../store/commands';
 import { useDocumentStore } from '../store/documentStore';
 import { useNode } from '../store/selectors';
@@ -36,13 +39,21 @@ import {
   chainDragDx,
   chainDragDy,
   resetChainDragShared,
+  resetSelectionDragShared,
+  selectionDragActive,
+  selectionDragDx,
+  selectionDragDy,
+  selectionDragFollowers,
 } from './chainDragShared';
 import {
   crossedDetachDistance,
   decideDragRelease,
+  isMultiUnitSelection,
   resolveNodeDragMode,
+  resolveSelectionUnits,
   snapProbeChainId,
   type NodeDragMode,
+  type SelectionUnits,
 } from './dragLifecycle';
 import { useNodeSelected } from './useNodeSelected';
 
@@ -68,12 +79,14 @@ function publishDragSnap(
   position: Vec2,
   candidate: SnapOutcome | null,
   movingChainId: ChainId | null = null,
+  movingSelection: SelectionUnits | null = null,
 ): void {
   useUiStore.getState().setDragSnap({
     nodeId,
     position,
     candidate,
     movingChainId,
+    movingSelection,
   });
 }
 
@@ -122,6 +135,7 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
     mode: NodeDragMode;
     chainId: ChainId | null;
     homeAnchor: Vec2 | null;
+    selectionUnits: SelectionUnits | null;
     /** Built once at drag start — document is immutable mid-drag (§11.4 commit
      *  on release), so rebuilding the §8.4 spatial hash every frame would pay
      *  O(n) bounds work for nothing. Query still runs per frame with the live
@@ -132,22 +146,30 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
 
   const beginDrag = useCallback(
     (heldMs: number) => {
-      const current = useDocumentStore.getState().document.nodes[nodeId];
+      const { document } = useDocumentStore.getState();
+      const current = document.nodes[nodeId];
       if (!current) return;
 
       const ui = useUiStore.getState();
-      const groupSelected =
-        current.chainId !== null && ui.groupSelectedIds.has(nodeId);
-      const mode = resolveNodeDragMode({
-        wasChained: current.chainId !== null,
-        heldMs,
-        groupSelected,
-        contextMenuOpen: ui.contextMenu !== null,
-      });
+      const inGroup = ui.groupSelectedIds.has(nodeId);
+      const selectionUnits = inGroup
+        ? resolveSelectionUnits(ui.groupSelectedIds, document.nodes)
+        : null;
+      // Select all (and any multi-chain / free+chain group) must translate every
+      // unit together. A single-chain Select group stays on moveChain.
+      const mode: NodeDragMode =
+        selectionUnits && isMultiUnitSelection(selectionUnits)
+          ? 'moveSelection'
+          : resolveNodeDragMode({
+              wasChained: current.chainId !== null,
+              heldMs,
+              groupSelected: inGroup && current.chainId !== null,
+              contextMenuOpen: ui.contextMenu !== null,
+            });
 
       let homeAnchor: Vec2 | null = null;
       if (mode === 'moveChain' && current.chainId) {
-        const chain = useDocumentStore.getState().document.chains[current.chainId];
+        const chain = document.chains[current.chainId];
         if (!chain) return;
         homeAnchor = { x: chain.anchor.x, y: chain.anchor.y };
         chainDragChainId.value = current.chainId;
@@ -155,11 +177,30 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
         chainDragDy.value = 0;
       }
 
-      const { document } = useDocumentStore.getState();
+      if (mode === 'moveSelection' && selectionUnits) {
+        const followers: Record<string, number> = {};
+        for (const id of ui.groupSelectedIds) {
+          if (id !== nodeId && document.nodes[id]) followers[id] = 1;
+        }
+        // Ensure every member of a selected chain follows, even if the group set
+        // somehow omitted a sibling (Select all already includes them).
+        for (const chainId of selectionUnits.chainIds) {
+          const chain = document.chains[chainId];
+          if (!chain) continue;
+          for (const memberId of chain.members) {
+            if (memberId !== nodeId) followers[memberId] = 1;
+          }
+        }
+        selectionDragFollowers.value = followers;
+        selectionDragDx.value = 0;
+        selectionDragDy.value = 0;
+        selectionDragActive.value = 1;
+      }
+
       const locale = getDeviceLocale();
-      // Index once; moveChain never queries it.
+      // Index once; whole-selection / chain moves never query it.
       const neighbours =
-        mode === 'moveChain'
+        mode === 'moveChain' || mode === 'moveSelection'
           ? null
           : makeSnappingNeighbours(document.chains, document.nodes, locale);
 
@@ -170,6 +211,7 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
         mode,
         chainId: current.chainId,
         homeAnchor,
+        selectionUnits: mode === 'moveSelection' ? selectionUnits : null,
         neighbours,
         locale,
       };
@@ -180,12 +222,13 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       dragY.value = current.position.y;
       dragging.value = 1;
       // Always publish so ConnectorLayer can track the live endpoint (P6.6). Snap
-      // candidates stay null in moveChain — insertionFeedback no-ops on null.
+      // candidates stay null in moveChain / moveSelection — insertionFeedback no-ops.
       publishDragSnap(
         nodeId,
         current.position,
         null,
         mode === 'moveChain' ? current.chainId : null,
+        mode === 'moveSelection' ? selectionUnits : null,
       );
     },
     [nodeId, dragging, startX, startY, dragX, dragY],
@@ -197,11 +240,15 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       if (!sess) return;
       const position = { x: worldX, y: worldY };
 
-      // MovingChain: no snap search — just keep the ephemeral position feed current
-      // so connector curves follow the chain (siblings still move on the UI thread
-      // via chainDragDx/Dy; this runOnJS path is for React consumers only).
+      // MovingChain / moveSelection: no snap search — keep the ephemeral position
+      // feed current so connector curves follow (siblings still move on the UI
+      // thread via shared dx/dy; this runOnJS path is for React consumers only).
       if (sess.mode === 'moveChain') {
-        publishDragSnap(nodeId, position, null, sess.chainId);
+        publishDragSnap(nodeId, position, null, sess.chainId, null);
+        return;
+      }
+      if (sess.mode === 'moveSelection') {
+        publishDragSnap(nodeId, position, null, null, sess.selectionUnits);
         return;
       }
 
@@ -230,7 +277,7 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
         document.nodes,
         sess.locale,
       );
-      publishDragSnap(nodeId, position, candidate, null);
+      publishDragSnap(nodeId, position, candidate, null, null);
     },
     [nodeId],
   );
@@ -242,14 +289,24 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       dragging.value = 0;
 
       const position = { x: worldX, y: worldY };
+      const delta = { x: worldX - (sess?.home.x ?? worldX), y: worldY - (sess?.home.y ?? worldY) };
 
       if (sess?.mode === 'moveChain' && sess.chainId && sess.homeAnchor) {
         resetChainDragShared();
+        resetSelectionDragShared();
         clearDragSnap();
         moveChain(sess.chainId, {
-          x: sess.homeAnchor.x + (worldX - sess.home.x),
-          y: sess.homeAnchor.y + (worldY - sess.home.y),
+          x: sess.homeAnchor.x + delta.x,
+          y: sess.homeAnchor.y + delta.y,
         });
+        return;
+      }
+
+      if (sess?.mode === 'moveSelection' && sess.selectionUnits) {
+        resetChainDragShared();
+        resetSelectionDragShared();
+        clearDragSnap();
+        moveSelection(sess.selectionUnits, delta);
         return;
       }
 
@@ -292,6 +349,7 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
   const cancelDrag = useCallback(() => {
     session.current = null;
     resetChainDragShared();
+    resetSelectionDragShared();
     clearDragSnap();
   }, []);
 
@@ -318,11 +376,18 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       const nextY = startY.value + e.translationY / z;
       dragX.value = nextX;
       dragY.value = nextY;
-      // Sibling follow must stay on the UI thread with the primary's translate. Writing
-      // chainDragDx/Dy via runOnJS(updateDrag) lagged followers by ≥1 frame (PR #61 review).
+      // Sibling / selection follow must stay on the UI thread with the primary's
+      // translate. Writing dx/dy via runOnJS(updateDrag) lagged followers by ≥1
+      // frame (PR #61 review).
+      const dx = nextX - startX.value;
+      const dy = nextY - startY.value;
       if (chainDragChainId.value !== null) {
-        chainDragDx.value = nextX - startX.value;
-        chainDragDy.value = nextY - startY.value;
+        chainDragDx.value = dx;
+        chainDragDy.value = dy;
+      }
+      if (selectionDragActive.value === 1) {
+        selectionDragDx.value = dx;
+        selectionDragDy.value = dy;
       }
       // Always publish the live world point for ConnectorLayer / insertion caret.
       // Sibling follow stays on the UI thread above; this is the React-side feed.
@@ -362,6 +427,16 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       return {
         zIndex: 999,
         transform: [{ translateX: chainDragDx.value }, { translateY: chainDragDy.value }],
+      };
+    }
+    // Other units in a Select-all selection: same delta, keyed by node id (§8.6).
+    if (selectionDragFollowers.value[nodeId] === 1) {
+      return {
+        zIndex: 999,
+        transform: [
+          { translateX: selectionDragDx.value },
+          { translateY: selectionDragDy.value },
+        ],
       };
     }
     return {

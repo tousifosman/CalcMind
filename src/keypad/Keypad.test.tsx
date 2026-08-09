@@ -7,6 +7,7 @@ import {
   addOperatorNode,
   appendEqualsNode,
   appendOperatorAndNumber,
+  selectAll,
   selectGroup,
   setNodeRaw,
 } from '../store/commands';
@@ -18,6 +19,8 @@ beforeEach(() => {
       keypadVisible: true,
       clearConfirmVisible: false,
       groupSelectedIds: new Set(),
+      selectedNodeId: null,
+      editingNodeId: null,
     });
     useDocumentStore.setState({ document: createEmptyDocument(), undoStack: [], redoStack: [] });
   });
@@ -385,5 +388,45 @@ describe('group-mode keypad (§8.5)', () => {
     expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-digit-1').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBeFalsy();
+  });
+});
+
+describe('Select all locks data-entry keys (§8.6)', () => {
+  test('digits, operators, editing and grouping keys disable; mode strip stays live', () => {
+    const presses: KeypadKey[] = [];
+    act(() => {
+      addNumberNode({ x: 0, y: 0 }, '1');
+      addNumberNode({ x: 40, y: 0 }, '2');
+      selectAll();
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad onKeyPress={(key) => presses.push(key)} />);
+    });
+
+    for (const digit of ['0', '1', '7']) {
+      expect(findByTestID(renderer, `keypad-digit-${digit}`).props.disabled).toBe(true);
+    }
+    for (const id of [
+      'keypad-decimal',
+      'keypad-sign',
+      'keypad-backspace',
+      'keypad-paren',
+      'keypad-op-add',
+      'keypad-op-multiply',
+      'keypad-equals',
+    ]) {
+      expect(findByTestID(renderer, id).props.disabled).toBe(true);
+    }
+
+    // Mode strip remains interactive (top-row action items).
+    expect(findByTestID(renderer, 'keypad-mode-dismiss').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-mode-clear-all').props.disabled).toBe(false);
+
+    act(() => {
+      findByTestID(renderer, 'keypad-digit-7').props.onPress?.();
+      findByTestID(renderer, 'keypad-op-add').props.onPress?.();
+    });
+    expect(presses).toEqual([]);
   });
 });

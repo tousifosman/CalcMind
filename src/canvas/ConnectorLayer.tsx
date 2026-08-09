@@ -40,6 +40,7 @@ export function ConnectorLayer() {
           nodeId: dragSnap.nodeId,
           position: dragSnap.position,
           movingChainId: dragSnap.movingChainId,
+          movingSelection: dragSnap.movingSelection,
         }
       : null;
     return buildConnectorScene(nodes, hues, locale, selectedNodeId, drag);

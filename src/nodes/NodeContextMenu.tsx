@@ -5,8 +5,9 @@
 //
 //   • Node menu — `Copy`, `Delete`, `Select group`, `Label` on values (P6b.1),
 //     and for a reference `Unlink from parent` (P6.4 / §8.6).
-//   • Canvas menu — `Add number`, `Paste`, `Add graph`, all **disabled** (§17.2 defers
-//     graphing; copy/paste is future work).
+//   • Canvas menu — `Add number`, `Paste`, `Add graph` (disabled: §17.2 defers
+//     graphing; copy/paste is future work; Add number is a normal tap), plus
+//     `Select all` when the canvas has nodes (§8.6).
 //
 // Dismissal: tapping the scrim (the transparent full-screen backdrop) closes the menu without
 // taking any action. Selecting a menu item also closes it after running its handler.
@@ -161,18 +162,33 @@ export function NodeContextMenu({
 
 interface CanvasContextMenuProps {
   anchor: Vec2;
+  onSelectAll: () => void;
   onDismiss: () => void;
 }
 
-export function CanvasContextMenu({ anchor, onDismiss }: CanvasContextMenuProps) {
-  // All items are disabled in P2.9: §17.2 defers graphing; copy/paste is future work;
+export function CanvasContextMenu({
+  anchor,
+  onSelectAll,
+  onDismiss,
+}: CanvasContextMenuProps) {
+  // The first three stay disabled: §17.2 defers graphing; copy/paste is future work;
   // `Add number` is handled by a normal tap — a long-press on empty canvas reaching
   // this menu is the explicit §8.6 affordance so it's declared here disabled rather than
   // wired to addNumberNode (which would bypass the intent signal of a deliberate long-press).
+  // `Select all` is the one live action: it needs the canvas to have something to select.
+  const nodeCount = useDocumentStore((s) => Object.keys(s.document.nodes).length);
   const items: MenuItem[] = [
     { label: 'Add number', disabled: true },
     { label: 'Paste', disabled: true },
     { label: 'Add graph', disabled: true },
+    {
+      label: 'Select all',
+      disabled: nodeCount === 0,
+      onPress: () => {
+        onSelectAll();
+        onDismiss();
+      },
+    },
   ];
 
   return <MenuSheet anchor={anchor} items={items} onDismiss={onDismiss} />;
@@ -186,6 +202,7 @@ export function CanvasContextMenu({ anchor, onDismiss }: CanvasContextMenuProps)
 interface ContextMenuOverlayProps {
   onDeleteNode: (nodeId: NodeId) => void;
   onSelectGroup: (nodeId: NodeId) => void;
+  onSelectAll: () => void;
   onUnlinkFromParent: (nodeId: NodeId) => void;
   onLabelNode: (nodeId: NodeId) => void;
 }
@@ -193,6 +210,7 @@ interface ContextMenuOverlayProps {
 export function ContextMenuOverlay({
   onDeleteNode,
   onSelectGroup,
+  onSelectAll,
   onUnlinkFromParent,
   onLabelNode,
 }: ContextMenuOverlayProps) {
@@ -215,7 +233,13 @@ export function ContextMenuOverlay({
     );
   }
 
-  return <CanvasContextMenu anchor={contextMenu.anchor} onDismiss={closeContextMenu} />;
+  return (
+    <CanvasContextMenu
+      anchor={contextMenu.anchor}
+      onSelectAll={onSelectAll}
+      onDismiss={closeContextMenu}
+    />
+  );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────

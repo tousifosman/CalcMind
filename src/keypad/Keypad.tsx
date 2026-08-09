@@ -65,6 +65,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   const requestClearConfirm = useUiStore((state) => state.requestClearConfirm);
   const dismissClearConfirm = useUiStore((state) => state.dismissClearConfirm);
   const groupSelectedIds = useUiStore((state) => state.groupSelectedIds);
+  const allSelected = useUiStore((state) => state.allSelected);
   // Empty-canvas gate for the Clear all mode-strip button — disabled when there
   // is nothing to wipe, so the affordance does not invite a no-op confirm.
   const documentEmpty = useDocumentStore((state) => {
@@ -72,6 +73,9 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     return Object.keys(nodes).length === 0 && Object.keys(chains).length === 0;
   });
   const nodes = useDocumentStore((state) => state.document.nodes);
+  // Select all (§8.6): data-entry keys have no single target — gray them out.
+  // Mode strip (and hardware undo/redo) stay available.
+  const dataEntryLocked = allSelected;
 
   if (!visible) {
     return null;
@@ -80,10 +84,12 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   // §8.5 group mode: Select group disables everything except history (undo /
   // redo / backspace). When the group includes a result, operators stay enabled
   // for §8.7 continuation; equals and every digit/editing key stay disabled.
-  const groupMode = groupSelectedIds.size > 0;
-  const operatorsEnabled = !groupMode || groupContainsResult(groupSelectedIds, nodes);
+  const groupMode = groupSelectedIds.size > 0 && !dataEntryLocked;
+  const operatorsEnabled =
+    !dataEntryLocked && (!groupMode || groupContainsResult(groupSelectedIds, nodes));
 
   function press(key: KeypadKey) {
+    if (dataEntryLocked) return;
     onKeyPress?.(key);
   }
 
@@ -95,12 +101,14 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     dismissClearConfirm();
   }
 
-  const backspaceSwipe = Gesture.Pan().onEnd((e) => {
-    'worklet';
-    if (isClearSwipe(e.translationX, e.translationY)) {
-      runOnJS(requestClearConfirm)();
-    }
-  });
+  const backspaceSwipe = Gesture.Pan()
+    .enabled(!dataEntryLocked)
+    .onEnd((e) => {
+      'worklet';
+      if (isClearSwipe(e.translationX, e.translationY)) {
+        runOnJS(requestClearConfirm)();
+      }
+    });
 
   // While the wipe confirm is up, hide the keypad chrome (mode strip + keys) so
   // the dialog is the only bottom UI — keys would only distract from Cancel/Clear.
@@ -165,7 +173,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                     key={value}
                     value={value}
                     onPress={() => press({ region: 'digit', value })}
-                    disabled={groupMode}
+                    disabled={dataEntryLocked || groupMode}
                   />
                 ))}
               </View>
@@ -175,7 +183,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               <DigitKey
                 value="0"
                 onPress={() => press({ region: 'digit', value: '0' })}
-                disabled={groupMode}
+                disabled={dataEntryLocked || groupMode}
               />
               <View style={styles.digitSpacer} />
             </View>
@@ -186,13 +194,13 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               label={decimalSeparatorFor(locale)}
               onPress={() => press({ region: 'decimal' })}
               testID="keypad-decimal"
-              disabled={groupMode}
+              disabled={dataEntryLocked || groupMode}
             />
             <Key
               label="+/-"
               onPress={() => press({ region: 'sign' })}
               testID="keypad-sign"
-              disabled={groupMode}
+              disabled={dataEntryLocked || groupMode}
             />
             {/* Single `()` key (§8.5): same cell size as the other editing keys.
                 Side is resolved in `dispatchEditorCommand` from chain depth so one
@@ -201,7 +209,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               label="()"
               onPress={() => press({ region: 'paren' })}
               testID="keypad-paren"
-              disabled={groupMode}
+              disabled={dataEntryLocked || groupMode}
             />
           </View>
 
@@ -224,6 +232,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                 label="Backspace"
                 icon={<BackspaceIcon size={22} color="#333333" />}
                 onPress={() => press({ region: 'backspace' })}
+                disabled={dataEntryLocked}
                 testID="keypad-backspace"
               />
             </GestureDetector>
@@ -258,7 +267,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           <EqualsKey
             onPress={() => press({ region: 'equals' })}
             testID="keypad-equals"
-            disabled={groupMode}
+            disabled={dataEntryLocked || groupMode}
           />
         </View>
       </View>

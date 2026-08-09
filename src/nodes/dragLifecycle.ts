@@ -2,7 +2,7 @@
 // can be table-tested without a gesture runtime (jest mocks RNGH — see journal 2026-08-03).
 import { DETACH_DISTANCE } from '../chains/bounds';
 import type { SnapOutcome } from '../chains/snapping';
-import type { ChainId, NodeKind, Vec2 } from '../model/types';
+import type { ChainId, NodeId, NodeKind, Vec2 } from '../model/types';
 
 /** §8.2 MovingChain threshold (ms). Compared against time from touch-down (`onBegin`)
  *  to pan activation (`onStart`, after `minDistance` is crossed) — so it mixes still
@@ -18,7 +18,36 @@ export const CHAIN_MOVE_HOLD_MS = 200;
  */
 export const LONG_PRESS_MOVES_CHAIN = true;
 
-export type NodeDragMode = 'free' | 'detachMember' | 'moveChain';
+export type NodeDragMode = 'free' | 'detachMember' | 'moveChain' | 'moveSelection';
+
+/** Chains + free nodes implied by a group / select-all set (§8.6). */
+export type SelectionUnits = {
+  chainIds: ChainId[];
+  freeNodeIds: NodeId[];
+};
+
+/** Collapse a set of selected node ids into moveable units: each distinct chain
+ *  (moved via its anchor) and each free node (moved via its position). */
+export function resolveSelectionUnits(
+  selected: ReadonlySet<NodeId>,
+  nodes: Record<NodeId, { chainId: ChainId | null }>,
+): SelectionUnits {
+  const chainIds = new Set<ChainId>();
+  const freeNodeIds: NodeId[] = [];
+  for (const id of selected) {
+    const node = nodes[id];
+    if (!node) continue;
+    if (node.chainId !== null) chainIds.add(node.chainId);
+    else freeNodeIds.push(id);
+  }
+  return { chainIds: [...chainIds], freeNodeIds };
+}
+
+/** True when a drag must translate more than one chain/free node — the Select all
+ *  case. A single-chain `Select group` stays on the existing `moveChain` path. */
+export function isMultiUnitSelection(units: SelectionUnits): boolean {
+  return units.chainIds.length + units.freeNodeIds.length > 1;
+}
 
 export type DragReleaseDecision =
   | { kind: 'snap'; outcome: SnapOutcome }
@@ -89,8 +118,8 @@ export function snapProbeChainId(args: {
 }
 
 /** Map end-of-drag geometry onto a single commit action for free / detachMember modes.
- *  `moveChain` commits are handled by the gesture (anchor = homeAnchor + delta) and
- *  never go through snap/detach.
+ *  `moveChain` / `moveSelection` commits are handled by the gesture (anchor/positions
+ *  += delta) and never go through snap/detach.
  *
  *  - A snap candidate always wins (P3.3 already applied hysteresis / nearest).
  *  - A chained member that crossed detach with no candidate becomes free at `position`,

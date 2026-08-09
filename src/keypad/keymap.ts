@@ -291,7 +291,11 @@ export function dispatchEditorCommand(command: EditorCommand): void {
 
   if (command.region === 'escape') {
     const ui = useUiStore.getState();
-    const hadFocus = ui.selectedNodeId !== null || ui.editingNodeId !== null || ui.editingLabelNodeId !== null;
+    const hadFocus =
+      ui.selectedNodeId !== null ||
+      ui.editingNodeId !== null ||
+      ui.editingLabelNodeId !== null ||
+      ui.groupSelectedIds.size > 0;
     deselectNode();
     // Second Escape (nothing focused) dismisses the keypad — the mode-strip chevron's
     // keyboard equivalent (P7.2). First Escape stays §8.5's "Escape deselects."
@@ -303,6 +307,12 @@ export function dispatchEditorCommand(command: EditorCommand): void {
 
   if (command.region === 'arrow') {
     moveSelection(ui.selectedNodeId, command.direction);
+    return;
+  }
+
+  // Select all (§8.6): data-entry has no single keypad target. Undo/redo / Escape /
+  // arrows already returned above; mode-strip actions never reach this dispatch.
+  if (ui.allSelected) {
     return;
   }
 
@@ -324,7 +334,6 @@ export function dispatchEditorCommand(command: EditorCommand): void {
         const { operatorId } = continueFromResult(resultId, command.op);
         selectNode(operatorId);
       }
-      return;
     }
     return;
   }
