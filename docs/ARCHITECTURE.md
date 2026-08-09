@@ -727,10 +727,10 @@ then:  create chain C' below-right of V, containing
 
 A number that *is* being edited still appends the operator in-chain — that is how `5 + 3` is
 typed. Tap or arrow selection leaves the number selected-but-not-editing, which is the
-continuation-ready state (mirroring a selected result). A **linked cell** (reference) rejects
-digits (keypad number keys are disabled while it is selected) and an operator starts a further
-continuation from that link rather than appending to the end of its chain; `=` / paren still
-append so a just-dropped reference can finish its expression.
+continuation-ready state (mirroring a selected result). A **result** or **linked cell**
+(reference) rejects digits — keypad number keys are disabled while either is selected — and an
+operator starts a further continuation from that value rather than editing it in place. For a
+reference, `=` / paren still append so a just-dropped link can finish its expression.
 
 This is the single most important interaction in the app: it turns "I have a value" into "…and
 now I keep working with it" in one keystroke, and it is what produces the linked trees that make

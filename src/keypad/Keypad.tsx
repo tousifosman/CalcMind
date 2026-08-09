@@ -69,12 +69,14 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     const { nodes, chains } = state.document;
     return Object.keys(nodes).length === 0 && Object.keys(chains).length === 0;
   });
-  // Linked cells (references) are read-only values — digit keys would otherwise
-  // append a number at the end of their chain. Operators still continue (§8.7).
+  // Results and linked cells (references) are read-only values — digit keys would
+  // otherwise no-op silently (results) or append at chain end (references).
+  // Operators still continue (§8.7).
   const selectedNodeId = useUiStore((state) => state.selectedNodeId);
   const numberKeysDisabled = useDocumentStore((state) => {
     if (!selectedNodeId) return false;
-    return state.document.nodes[selectedNodeId]?.kind === 'reference';
+    const kind = state.document.nodes[selectedNodeId]?.kind;
+    return kind === 'reference' || kind === 'result';
   });
 
   if (!visible) {
