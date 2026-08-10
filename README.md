@@ -57,6 +57,17 @@ npm run build:web
 
 This outputs a static site to `dist/` with relative asset paths (`publicPath: './'` in production), so it works correctly when served from a GitHub Pages project subpath (`https://<user>.github.io/<repo>/`). In development the config switches to an absolute `'/'`, which webpack-dev-server needs to route requests to its in-memory bundle.
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs the same checks as the Verification section of `AGENTS.md`
+(typecheck, lint, test, web build) on every push to `main` and every pull request targeting it.
+
+**One-time setup:** in **Settings → Branches**, add a branch protection rule for `main` with
+"Require status checks to pass before merging" enabled, and select the `verify` check. This can't
+be configured from a workflow file — it's a per-repository setting an admin has to make once.
+Without it the workflow still runs and reports red/green on PRs, but GitHub won't block merging a
+red one.
+
 ## Deployment
 
 `.github/workflows/deploy-web.yml` builds the web export and publishes it to the `gh-pages` branch on every push to `main`, at the site root.

@@ -1,0 +1,45 @@
+name: CI
+
+# Runs the same checks AGENTS.md asks a human/agent to run before calling
+# work done (typecheck, lint, test, web build). Fires on every PR so a
+# broken PR shows a red check before it can be merged — pair this with a
+# branch protection rule on `main` that requires the `verify` job (see
+# README.md's Continuous integration section for the one-time setup, which
+# can't be done from a workflow file).
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test -- --ci
+
+      - name: Build web export
+        run: npm run build:web
