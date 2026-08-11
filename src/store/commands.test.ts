@@ -293,6 +293,39 @@ describe('appendOperatorAndNumber', () => {
     expect(useDocumentStore.getState().document.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '+' });
     expect(useDocumentStore.getState().document.nodes[numberId]).toMatchObject({ kind: 'number', raw: '' });
   });
+
+  test('inserts right after a non-last anchor, not at the chain end (§8.5 regression)', () => {
+    // 1 + 2 =
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const { numberId: b } = appendOperatorAndNumber(a, '+');
+    setNodeRaw(b, '2');
+    appendEqualsNode(b);
+
+    const doc = useDocumentStore.getState().document;
+    const chainId = doc.nodes[a]!.chainId!;
+    const before = doc.chains[chainId]!.members;
+    expect(before.map((id) => doc.nodes[id]!.kind)).toEqual([
+      'number',
+      'operator',
+      'number',
+      'equals',
+      'result',
+    ]);
+
+    // Append after `b` (`2`), which is no longer the chain's last member — `=` and its
+    // result sit after it. The new operator+number must land right after `b`, pushing
+    // `=` rightward, not past it at the literal array end. The expression is now
+    // Incomplete (trailing operator, empty operand), so the stale result is dropped
+    // rather than left showing a value the expression no longer implies.
+    const { operatorId, numberId } = appendOperatorAndNumber(b, '+');
+
+    const after = useDocumentStore.getState().document;
+    const members = after.chains[chainId]!.members;
+    expect(members).toEqual([a, before[1], b, operatorId, numberId, before[3]]);
+    // Trailing `=` is unchanged, just relocated — same node id.
+    expect(members[5]).toBe(before[3]);
+    expect(Object.values(after.nodes).filter((n) => n.kind === 'result')).toHaveLength(0);
+  });
 });
 
 describe('setNodeRaw', () => {

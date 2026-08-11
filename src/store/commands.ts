@@ -190,10 +190,20 @@ function removeFromCurrentChain(draft: CalcDocument, nodeId: NodeId): void {
 }
 
 /** Appends already-constructed nodes to the chain the node at `anchorNodeId` belongs to,
- *  creating a new one-member chain first if it doesn't have one yet, then re-flows the
- *  whole chain with `layoutChain` (P3.1) so every member reads correctly immediately.
- *  One call is one undo entry, however many nodes it appends - which is what lets
- *  `appendOperatorAndNumber` below insert its operator and its fresh operand atomically. */
+ *  immediately after the anchor's own position in `members` — not necessarily the
+ *  chain's end, creating a new one-member chain first if it doesn't have one yet — then
+ *  re-flows the whole chain with `layoutChain` (P3.1) so every member reads correctly
+ *  immediately. One call is one undo entry, however many nodes it appends - which is
+ *  what lets `appendOperatorAndNumber` below insert its operator and its fresh operand
+ *  atomically.
+ *
+ *  Inserting at the anchor's index (rather than always pushing to the array's end)
+ *  matters whenever the anchor isn't already the chain's last member — e.g. selecting
+ *  `2` in the already-`=`'d chain `1 + 2 = 3` and pressing `+` must build `1 + 2 + _ = 3`
+ *  in place, not push past the trailing `=`/result. `finalizeChain`'s recompute finds
+ *  `=` wherever it now sits (`writeChainDerived` looks it up fresh) and the sequence
+ *  validator reads `members` in stored order, so no other bookkeeping needs to know the
+ *  anchor moved out of last place. */
 function appendMembersToChain(anchorNodeId: NodeId, newNodes: CalcNode[]): void {
   useDocumentStore.getState().applyCommand((draft) => {
     const anchorNode = draft.nodes[anchorNodeId];
@@ -207,11 +217,14 @@ function appendMembersToChain(anchorNodeId: NodeId, newNodes: CalcNode[]): void 
       anchorNode.chainId = chain.id;
     }
 
+    const anchorIndex = chain.members.indexOf(anchorNodeId);
+    const insertAt = anchorIndex === -1 ? chain.members.length : anchorIndex + 1;
+
     for (const node of newNodes) {
       node.chainId = chain.id;
       draft.nodes[node.id] = node;
-      chain.members.push(node.id);
     }
+    chain.members.splice(insertAt, 0, ...newNodes.map((node) => node.id));
 
     // Length is always ≥ 2 here (anchor + at least one append), so finalize reflows;
     // using it rather than reflowChain alone keeps equals/result bookkeeping in one place.
@@ -347,6 +360,14 @@ export function continuationAnchor(
  * Numbers and live references are included so a value (or an existing link to one)
  * can seed another link without first pressing `=`. Drag-to-link stays result-only
  * so ordinary number snaps can still move into chains (§8.3).
+ *
+ * This function itself doesn't care whether `V` already belongs to a chain — that
+ * restriction lives in the caller. `dispatchEditorCommand`'s operator-key gesture only
+ * reaches here for a *free* number (`chainId === null`); a number already mid-formula
+ * gets `appendOperatorAndNumber` instead, extending that formula in place rather than
+ * linking it (§8.7). The explicit `Create link` context-menu action
+ * ({@link createLinkToValue}) still accepts a chain-member number, same as `Label` —
+ * an explicit "link this" request isn't the implicit operator-key shorthand.
  */
 export function continueFromValue(
   valueNodeId: NodeId,

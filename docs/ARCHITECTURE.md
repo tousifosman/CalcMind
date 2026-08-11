@@ -737,7 +737,8 @@ Dragging is not the fast path. Observed in Tydlig for results and extended here 
 value can be linked without first pressing `=`:
 
 ```
-given: a value V (number, result, or live reference) is selected, and V is not being edited
+given: a value V (a free number with no chain, a result, or a live reference) is
+         selected, and V is not being edited
 when:  the user presses an operator ⊕
 then:  create chain C' underneath the first cell of V's group (or under V when free),
          containing [ reference→V , ⊕ , empty number ]
@@ -751,11 +752,17 @@ then:  create chain C' underneath the first cell of V's group (or under V when f
 
 A number that *is* being edited still appends the operator in-chain — that is how `5 + 3` is
 typed. Tap or arrow selection leaves the number selected-but-not-editing, which is the
-continuation-ready state (mirroring a selected result). A **result**, **operator**, or
-**linked cell** (reference) rejects digits — keypad number keys are disabled while any of
-those is selected. While an **operator** is selected, the number-editing row (`.`, `+/-`,
-`()`) is disabled too; pressing an operator key **replaces** that operator's symbol in place.
-Continuation seeds an empty number and focuses it, so the next digits edit in place rather
+continuation-ready state (mirroring a selected result) **only while that number has no chain of
+its own.** A selected number that already belongs to a chain — mid-formula, or already `=`'d —
+is still an operand of that formula rather than a free-standing value: an operator there extends
+*that* chain in place, immediately after the selected member (§8.5's append-after-anchor
+targeting), the same as typing does. `1 + 2 = 3`, select `2`, press `+` builds `1 + 2 + _` (the
+stale `=`/result get pushed past the new operand and the chain reads Incomplete until it's
+filled in, then recomputes) — it must not spin off a reference to `2` elsewhere. A **result**,
+**operator**, or **linked cell** (reference) rejects digits — keypad number keys are disabled
+while any of those is selected. While an **operator** is selected, the number-editing row (`.`,
+`+/-`, `()`) is disabled too; pressing an operator key **replaces** that operator's symbol in
+place. Continuation seeds an empty number and focuses it, so the next digits edit in place rather
 than relying on a selected operator. For a reference, `=` / paren still append so a
 just-dropped link can finish its expression.
 

@@ -607,6 +607,103 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(refreshed?.kind).toBe('result');
     expect(refreshed && refreshed.kind === 'result' ? refreshed.derived?.display : undefined).toBe('50');
   });
+
+  test('operator on a selected chain-member number extends that chain in place, not a link', () => {
+    // 1 + 2 =
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const before = useDocumentStore.getState().document;
+    const two = Object.values(before.nodes).find(
+      (n) => n.kind === 'number' && n.raw === '2',
+    )!;
+    const chainId = two.chainId!;
+    const membersBefore = before.chains[chainId]!.members;
+    expect(membersBefore.map((id) => before.nodes[id]!.kind)).toEqual([
+      'number',
+      'operator',
+      'number',
+      'equals',
+      'result',
+    ]);
+
+    // Select `2` (tap-selected, not editing) and press `+`.
+    selectNode(two.id);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+
+    const doc = useDocumentStore.getState().document;
+    // No reference/link was created — this must not be §8.7 continuation.
+    expect(Object.values(doc.nodes).filter((n) => n.kind === 'reference')).toHaveLength(0);
+    // Same chain, now [1, +, 2, +, <empty>, =] — the new operand lands right after `2`,
+    // pushing the stale `=` rightward rather than past it. The formula is Incomplete
+    // (trailing operator, empty operand) until filled in, so the stale result is
+    // dropped rather than kept showing a value the expression no longer implies.
+    const afterMembers = doc.chains[chainId]!.members;
+    expect(afterMembers).toHaveLength(6);
+    expect(afterMembers.map((id) => doc.nodes[id]!.kind)).toEqual([
+      'number',
+      'operator',
+      'number',
+      'operator',
+      'number',
+      'equals',
+    ]);
+    expect(afterMembers[0]).toBe(membersBefore[0]);
+    expect(afterMembers[2]).toBe(two.id);
+    expect(doc.nodes[afterMembers[3]!]).toMatchObject({ kind: 'operator', op: '+' });
+    expect(doc.nodes[afterMembers[4]!]).toMatchObject({ kind: 'number', raw: '' });
+    // Trailing `=` is the same node, just shifted right.
+    expect(afterMembers[5]).toBe(membersBefore[3]);
+    expect(Object.values(doc.nodes).filter((n) => n.kind === 'result')).toHaveLength(0);
+
+    expect(useUiStore.getState().selectedNodeId).toBe(afterMembers[4]);
+    expect(useUiStore.getState().editingNodeId).toBe(afterMembers[4]);
+
+    // Filling in the new operand recomputes: 1 + 2 + 6 = 9.
+    dispatchEditorCommand({ region: 'digit', value: '6' });
+    const recomputed = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    );
+    expect(recomputed).toMatchObject({ kind: 'result', derived: { display: '9' } });
+  });
+
+  test('operator on a selected mid-chain number (no `=` yet) still extends in place', () => {
+    // 1 + 2 + 3, no equals — select the middle `2` and insert `×` right after it.
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '3' });
+
+    const before = useDocumentStore.getState().document;
+    const two = Object.values(before.nodes).find(
+      (n) => n.kind === 'number' && n.raw === '2',
+    )!;
+    const chainId = two.chainId!;
+
+    selectNode(two.id);
+    dispatchEditorCommand({ region: 'operator', op: '×' });
+
+    const doc = useDocumentStore.getState().document;
+    expect(Object.values(doc.nodes).filter((n) => n.kind === 'reference')).toHaveLength(0);
+    const members = doc.chains[chainId]!.members;
+    expect(members.map((id) => doc.nodes[id]!.kind)).toEqual([
+      'number',
+      'operator',
+      'number',
+      'operator',
+      'number',
+      'operator',
+      'number',
+    ]);
+    expect(doc.nodes[members[3]!]).toMatchObject({ kind: 'operator', op: '×' });
+    expect(doc.nodes[members[4]!]).toMatchObject({ kind: 'number', raw: '' });
+    // The original trailing `3` is still last, just pushed one slot further right.
+    expect(doc.nodes[members[6]!]).toMatchObject({ kind: 'number', raw: '3' });
+  });
 });
 
 describe('dispatchEditorCommand: arrows move selection along a chain (§8.5)', () => {

@@ -409,11 +409,19 @@ export function dispatchEditorCommand(command: EditorCommand): void {
   }
 
   // §8.7 Continuation: operator on a selected result or live reference, or on a
-  // selected number that is *not* being edited, starts a new chain referencing
+  // selected *free* number that is not being edited, starts a new chain referencing
   // that value. Results stay read-only for every other key. Linked cells
   // (references) reject digits (keypad disables them) but still accept `=` /
   // paren so drag-to-link can finish the chain the reference was dropped into.
   // Numbers being edited still append in-chain so typing `5 + 3` is unchanged.
+  //
+  // A selected number that already belongs to a chain (typed but not yet edited
+  // again, or already `=`'d) is not "a value" the way a result or a free number is —
+  // it's still an operand of that formula, so an operator here must extend the
+  // formula in place (`appendOperatorAndNumber`, which inserts right after this
+  // member — §8.5) rather than spin off a link. E.g. `1 + 2 =`, select `2`, press
+  // `+` must build `1 + 2 + _` (Incomplete until the new operand lands, then
+  // recomputes), not create a reference to `2` elsewhere. See the branch below.
   if (selectedNode?.kind === 'result') {
     if (command.region === 'operator') {
       const { numberId } = continueFromValue(selectedNode.id, command.op);
@@ -445,8 +453,14 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     !editingNumber &&
     command.region === 'operator'
   ) {
-    const { numberId } = continueFromValue(selectedNode.id, command.op);
-    editNumberNode(numberId);
+    if (selectedNode.chainId !== null) {
+      // Already a member of a chain (mid-formula or already `=`'d): extend that
+      // chain in place instead of continuation-linking it.
+      editNumberNode(appendOperatorAndNumber(selectedNode.id, command.op).numberId);
+    } else {
+      const { numberId } = continueFromValue(selectedNode.id, command.op);
+      editNumberNode(numberId);
+    }
     return;
   }
 
