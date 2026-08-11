@@ -538,6 +538,7 @@ const styles = StyleSheet.create({
   },
   equalsKey: {
     backgroundColor: rolePalette.equals.fill,
+    marginHorizontal: 0,
     marginBottom: 0,
   },
   confirmOverlay: {
