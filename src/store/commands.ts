@@ -408,6 +408,44 @@ export function continueFromResult(
   return continueFromValue(resultNodeId, op);
 }
 
+/**
+ * §8.6 "Create link" context-menu action: drops a free-floating reference to
+ * `valueNodeId` near its source — no operator, no bundled empty number, and not
+ * attached to any chain. The explicit counterpart to §8.7 continuation for a link the
+ * user wants to place and drag elsewhere rather than keep computing from immediately;
+ * dragging the fresh reference onto a chain afterward is the ordinary snap path, same
+ * as any other free node (only a *dragged result* gets the special drag-to-link
+ * commit — §11). Shares {@link continuationAnchor}'s placement and stacking rule so
+ * the new cell doesn't land on an existing occupant, and the same value eligibility
+ * (number, result, or live reference) as continuation and `Label`. Selects the new
+ * reference so it's ready to drag or, for a live reference, continue from.
+ */
+export function createLinkToValue(valueNodeId: NodeId): NodeId {
+  const { nodes, chains } = useDocumentStore.getState().document;
+  const value = nodes[valueNodeId];
+  const isLiveReference =
+    value?.kind === 'reference' && nodes[value.targetNodeId] !== undefined;
+  if (
+    !value ||
+    (value.kind !== 'result' && value.kind !== 'number' && !isLiveReference)
+  ) {
+    throw new Error(
+      `createLinkToValue: node ${valueNodeId} is not a number, result, or live reference (got ${value?.kind ?? 'missing'})`,
+    );
+  }
+
+  const reference = createReferenceNode(
+    continuationAnchor(valueNodeId, nodes, chains, getDeviceLocale()),
+    valueNodeId,
+  );
+
+  useDocumentStore.getState().applyCommand((draft) => {
+    draft.nodes[reference.id] = reference;
+  });
+  selectNode(reference.id);
+  return reference.id;
+}
+
 /** setNodeRaw coalescing window (§13): keystrokes to the same node within this
  *  many ms merge into the undo entry already on top of the stack, rather than
  *  each landing as its own entry. */

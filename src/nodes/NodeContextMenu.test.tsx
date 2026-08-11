@@ -39,6 +39,7 @@ describe('NodeContextMenu', () => {
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -70,6 +71,7 @@ describe('NodeContextMenu', () => {
         onSelectGroup={onSelectGroup}
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -98,6 +100,7 @@ describe('NodeContextMenu', () => {
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -120,6 +123,7 @@ describe('NodeContextMenu', () => {
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -155,6 +159,7 @@ describe('NodeContextMenu', () => {
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={onUnlink}
         onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -181,6 +186,7 @@ describe('NodeContextMenu', () => {
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabel={onLabel}
+        onCreateLink={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -218,6 +224,7 @@ describe('NodeContextMenu', () => {
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -248,6 +255,7 @@ describe('NodeContextMenu', () => {
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -283,11 +291,134 @@ describe('NodeContextMenu', () => {
         onSelectGroup={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
     expect(
       renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Label').length,
+    ).toBeGreaterThanOrEqual(1);
+  });
+
+  test('Create link is present for numbers and invokes the handler (§8.6)', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '10');
+    const onCreateLink = jest.fn();
+    const onDismiss = jest.fn();
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId={id}
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
+        onCreateLink={onCreateLink}
+        onDismiss={onDismiss}
+      />,
+    );
+    const createLinkBtn = renderer.root
+      .findAll((node) => node.props.testID === 'context-menu-item-Create link')
+      .find((node) => node.props.onPress !== undefined);
+    expect(createLinkBtn).toBeDefined();
+    act(() => {
+      createLinkBtn!.props.onPress();
+    });
+    expect(onCreateLink).toHaveBeenCalledWith(id);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  test('Create link is absent for operators', () => {
+    let opId = '';
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.nodes.op2 = {
+          id: 'op2',
+          kind: 'operator',
+          op: '+',
+          position: { x: 0, y: 0 },
+          chainId: null,
+          createdAt: 0,
+        };
+        opId = 'op2';
+      });
+    });
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId={opId}
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
+        onDismiss={jest.fn()}
+      />,
+    );
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Create link'),
+    ).toHaveLength(0);
+  });
+
+  test('Create link is absent for a dangling reference (no live value to link)', () => {
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.nodes.dangling2 = {
+          id: 'dangling2',
+          kind: 'reference',
+          position: { x: 0, y: 0 },
+          chainId: null,
+          createdAt: 0,
+          targetNodeId: 'gone',
+          lastKnownDisplay: '42',
+        };
+      });
+    });
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId="dangling2"
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
+        onDismiss={jest.fn()}
+      />,
+    );
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Create link'),
+    ).toHaveLength(0);
+  });
+
+  test('Create link is present for a live reference', () => {
+    const target = addNumberNode({ x: 0, y: 0 }, '7');
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.nodes.ref_live2 = {
+          id: 'ref_live2',
+          kind: 'reference',
+          position: { x: 40, y: 0 },
+          chainId: null,
+          createdAt: 0,
+          targetNodeId: target,
+        };
+      });
+    });
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId="ref_live2"
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
+        onDismiss={jest.fn()}
+      />,
+    );
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Create link')
+        .length,
     ).toBeGreaterThanOrEqual(1);
   });
 });
@@ -346,6 +477,7 @@ describe('ContextMenuOverlay', () => {
         onSelectAll={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabelNode={jest.fn()}
+        onCreateLink={jest.fn()}
       />,
     );
     expect(renderer.toJSON()).toBeNull();
@@ -364,6 +496,7 @@ describe('ContextMenuOverlay', () => {
         onSelectAll={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabelNode={jest.fn()}
+        onCreateLink={jest.fn()}
       />,
     );
 
@@ -385,6 +518,7 @@ describe('ContextMenuOverlay', () => {
         onSelectAll={jest.fn()}
         onUnlinkFromParent={jest.fn()}
         onLabelNode={jest.fn()}
+        onCreateLink={jest.fn()}
       />,
     );
 

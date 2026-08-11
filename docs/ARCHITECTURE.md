@@ -706,8 +706,11 @@ operators are visually separated from digits.
   focus is a single chrome layer; hue still reads from the caption and connectors.
 - `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
   nothing typed) discards it rather than leaving a blank cell on the canvas.
-- Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` on values
+- Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` and `Create link` on values
   (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
+  `Create link` drops a free reference to the value near it — no operator, not attached to a
+  chain — for a link the user wants to place and drag elsewhere rather than keep computing from
+  immediately (§8.7's third path, alongside continuation and drag-to-link).
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`, `Select all`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
   Double-tap / double-click any cell is the fast path to the same command (dwell-free, no
@@ -760,12 +763,21 @@ This is the single most important interaction in the app: it turns "I have a val
 now I keep working with it" in one keystroke, and it is what produces the linked trees that make
 the canvas worth having.
 
-**The other path is drag-to-link (§11).** Dragging result `R` onto another chain (or onto a free
+**The second path is drag-to-link (§11).** Dragging result `R` onto another chain (or onto a free
 node to form a new chain) uses the same §8.3 snap outcomes — no special case in `snapping.ts` —
 but the commit inserts a fresh **reference** to `R` rather than moving `R`. The source chain keeps
 its result; a miss (no candidate) cancels so `R` never becomes a free node. Number drags stay on
 the ordinary snap/move path so chaining by drag is unchanged — only continuation (and
 result-drag) create links.
+
+**The third path is the `Create link` context-menu item (§8.6).** Same value eligibility as
+continuation (number, result, or live reference), but skips the bundled operator and empty
+number: it drops a lone, unattached reference at the same anchor continuation would use (reusing
+its stacking rule) and selects it. Useful when the user wants a linked cell sitting somewhere
+else on the canvas — read by a later formula, or just placed as a labelled copy — without
+committing to an operation on it yet. From there it is an ordinary free node: drag it onto a
+chain via the normal snap path, or select it and press an operator to continue from it like any
+other live reference.
 
 ### 8.8 Value slider
 
