@@ -127,6 +127,10 @@ describe('Keypad', () => {
 
     expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-digit-0').props.disabled).toBe(true);
+    // Decimal / +/- are number keys now (not a separate number-editing carve-out): a
+    // selected linked cell disables them right alongside the digits.
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
     act(() => {
       findByTestID(renderer, 'keypad-digit-5').props.onPress?.();
     });
@@ -136,6 +140,10 @@ describe('Keypad', () => {
       selectNode(result.id);
     });
     expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
+    // Same for a selected result — this was the reported gap: decimal / +/- used to stay
+    // enabled here even though every digit disabled.
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
 
     act(() => {
       selectNode(operatorId);

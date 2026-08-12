@@ -91,8 +91,10 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     selectedKind === 'reference' ||
     selectedKind === 'result' ||
     selectedKind === 'operator';
-  // Number-editing row (., +/-, ()) is for operands; hide it while an operator
-  // is selected (operator keys still replace the symbol).
+  // `()` is for operands; disable it while an operator is selected (operator keys still
+  // replace the symbol). Decimal and `+/-` used to share this rule too, but they're number
+  // buttons now (`numberKeysDisabled`, below) — a selected result/reference disables them
+  // right alongside the digits, not just a selected operator.
   const selectionBlocksNumberEditing = selectedKind === 'operator';
 
   if (!visible) {
@@ -208,17 +210,20 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               </View>
             ))}
             {/* `0`'s row: decimal on its left, `+/-` on its right — under `1` and `3`
-                respectively, the reference app's bottom-row layout. Both are number-editing
-                keys (`numberEditingKeysDisabled`, same rule `()` uses in the accent column);
-                they just live in the digit grid now so they land in this row instead of a
-                dedicated one. Same fill and label style as `0` (`rolePalette.number.fill` /
-                `keyLabel`, via `gridEditingKey` + `labelStyle`) so the whole row reads as one
-                colour rather than `0` standing out from its neighbours. */}
+                respectively, the reference app's bottom-row layout. Both now use
+                `numberKeysDisabled` — the same rule the digits use — rather than the looser
+                `numberEditingKeysDisabled` (which only blocks while an operator is selected):
+                a selected result or linked cell isn't a number-edit target any more than a
+                digit is, so decimal / `+/-` disable right alongside `0`. They just live in
+                the digit grid now so they land in this row instead of a dedicated one. Same
+                fill and label style as `0` (`rolePalette.number.fill` / `keyLabel`, via
+                `gridEditingKey` + `labelStyle`) so the whole row reads as one colour rather
+                than `0` standing out from its neighbours. */}
             <View style={styles.digitRow}>
               <Key
                 label={decimalSeparatorFor(locale)}
                 onPress={() => press({ region: 'decimal' })}
-                disabled={numberEditingKeysDisabled}
+                disabled={numberKeysDisabled}
                 testID="keypad-decimal"
                 style={styles.gridEditingKey}
                 labelStyle={styles.keyLabel}
@@ -231,7 +236,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               <Key
                 label="+/-"
                 onPress={() => press({ region: 'sign' })}
-                disabled={numberEditingKeysDisabled}
+                disabled={numberKeysDisabled}
                 testID="keypad-sign"
                 style={styles.gridEditingKey}
                 labelStyle={styles.keyLabel}

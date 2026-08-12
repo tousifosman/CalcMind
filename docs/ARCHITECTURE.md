@@ -664,7 +664,9 @@ operators are visually separated from digits.
   caret/last-tap point.
 - Decimal and `+/-` share `0`'s fill (`rolePalette.number.fill`, the same teal as every digit)
   and label style, so the bottom digit row reads as one colour rather than `0` standing out
-  from its neighbours.
+  from its neighbours — and share its `disabled` rule too: they are number keys, not a
+  separate "number-editing" carve-out, so a selected result/reference/operator disables them
+  right alongside the digits (§8.7).
 - The grouping key is a single **`()`**, in the accent column underneath `+` (own row between
   `+` and `=`, not a wide bottom-row key, and not separate `(` / `)`). Each press inserts
   whichever side fits the chain through the selection: `)` when there is an unmatched open and a
@@ -777,12 +779,13 @@ is still an operand of that formula rather than a free-standing value: an operat
 targeting), the same as typing does. `1 + 2 = 3`, select `2`, press `+` builds `1 + 2 + _` (the
 stale `=`/result get pushed past the new operand and the chain reads Incomplete until it's
 filled in, then recomputes) — it must not spin off a reference to `2` elsewhere. A **result**,
-**operator**, or **linked cell** (reference) rejects digits — keypad number keys are disabled
-while any of those is selected. While an **operator** is selected, the number-editing row (`.`,
-`+/-`, `()`) is disabled too; pressing an operator key **replaces** that operator's symbol in
-place. Continuation seeds an empty number and focuses it, so the next digits edit in place rather
-than relying on a selected operator. For a reference, `=` / paren still append so a
-just-dropped link can finish its expression.
+**operator**, or **linked cell** (reference) rejects digits — keypad number keys, decimal, and
+`+/-` are all disabled while any of those is selected (decimal / `+/-` are number keys now,
+not a separate "number-editing" carve-out — §8.5). `()` is looser: it only disables while an
+**operator** is selected, since pressing an operator key there instead **replaces** that
+operator's symbol in place. Continuation seeds an empty number and focuses it, so the next
+digits edit in place rather than relying on a selected operator. For a reference, `=` / paren
+still append so a just-dropped link can finish its expression.
 
 This is the single most important interaction in the app: it turns "I have a value" into "…and
 now I keep working with it" in one keystroke, and it is what produces the linked trees that make
