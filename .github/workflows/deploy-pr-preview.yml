@@ -1,10 +1,11 @@
 name: Deploy PR preview
 
-# Manual by design: a maintainer runs this from the Actions tab (or `gh
-# workflow run`) against a PR that isn't merged yet, to get it reviewable at
-# a temp URL. It never fires on its own on every push — that's what
-# deploy-web.yml does for main. The `pull_request: closed` trigger below is
-# the one exception: it cleans up the preview automatically so gh-pages
+# Not fully manual anymore: a maintainer can still run this from the Actions
+# tab (or `gh workflow run`), but the common path now is a `/prpreview` (or
+# `/prpreview remove`) comment on the PR itself — see the `determine` job's
+# `if` for how that's gated. It never fires on its own on every push — that's
+# what deploy-web.yml does for main. The `pull_request: closed` trigger below
+# is the one fully-automatic case: it cleans up the preview so gh-pages
 # doesn't accumulate a directory per PR forever.
 on:
   workflow_dispatch:
@@ -26,35 +27,90 @@ on:
         default: deploy
   pull_request:
     types: [closed]
+  # issue_comment fires for comments on both issues and PRs (GitHub models a
+  # PR's conversation tab as an "issue" under the hood). The `determine` job
+  # below filters this down to PR comments containing /prpreview.
+  issue_comment:
+    types: [created]
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
-  group: pr-preview-${{ github.event.pull_request.number || inputs.pr_number }}
+  group: pr-preview-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
   cancel-in-progress: true
 
 jobs:
-  # workflow_dispatch carries pr_number/action as inputs; pull_request:closed
-  # carries the PR number in the event payload instead and always means
-  # "remove". This job normalizes both into one set of outputs so the deploy
+  # Three trigger shapes land here: workflow_dispatch inputs, the
+  # pull_request:closed event payload (always "remove"), and an issue_comment
+  # event carrying a /prpreview or /prpreview remove command. This job
+  # normalizes all three into one pr_number/action output pair so the deploy
   # and remove jobs below don't need to know which trigger fired.
   determine:
     runs-on: ubuntu-latest
+    # issue_comment fires for every comment on every issue and PR in the
+    # repo, so this must actively opt in rather than just ignore the noise:
+    # only a comment on a PR (not a plain issue), from someone with write
+    # access to the repo (checkout below runs the PR head's code — including
+    # forked contributions — with a GITHUB_TOKEN that can push to gh-pages,
+    # so this can't be left open to arbitrary commenters), whose body starts
+    # with /prpreview. Any other issue_comment is a silent no-op: the job
+    # still "runs" but this `if` is false, so nothing downstream fires.
+    if: |
+      github.event_name != 'issue_comment' ||
+      (
+        github.event.issue.pull_request != null &&
+        contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association) &&
+        startsWith(github.event.comment.body, '/prpreview')
+      )
     outputs:
       pr_number: ${{ steps.set.outputs.pr_number }}
       action: ${{ steps.set.outputs.action }}
     steps:
       - id: set
+        # COMMENT_BODY goes through env rather than being interpolated
+        # straight into the script below — the comment body is
+        # attacker-influenceable text, and inlining it as `${{ ... }}`
+        # inside a `run:` block is a known script-injection vector (a body
+        # containing backticks or `$(...)` would execute inside the shell).
+        # Routing it through env keeps it as inert data.
+        env:
+          COMMENT_BODY: ${{ github.event.comment.body }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "pr_number=${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
             echo "action=remove" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "issue_comment" ]; then
+            echo "pr_number=${{ github.event.issue.number }}" >> "$GITHUB_OUTPUT"
+            # Strip the /prpreview prefix and whitespace; anything other than
+            # a bare "remove" left over defaults to "deploy" (covers plain
+            # "/prpreview" and the explicit "/prpreview deploy").
+            arg=$(printf '%s' "$COMMENT_BODY" | sed -E 's#^/prpreview[[:space:]]*##i' | tr -d '[:space:]')
+            if [ "$arg" = "remove" ]; then
+              echo "action=remove" >> "$GITHUB_OUTPUT"
+            else
+              echo "action=deploy" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "pr_number=${{ inputs.pr_number }}" >> "$GITHUB_OUTPUT"
             echo "action=${{ inputs.action }}" >> "$GITHUB_OUTPUT"
           fi
+
+      # Only reached when the `if` above accepted the command — gives the
+      # commenter visible confirmation that it was picked up, distinct from
+      # the silent ignore a stray or unauthorized comment gets.
+      - name: React to the triggering comment
+        if: github.event_name == 'issue_comment'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: 'eyes',
+            });
 
   deploy:
     needs: determine
@@ -105,7 +161,7 @@ jobs:
               owner,
               repo,
               issue_number: prNumber,
-              body: `Preview deployed: ${url}\n\nIt's rebuilt by re-running this workflow, and removed automatically once this PR closes (or manually via the \`remove\` action).`,
+              body: `Preview deployed: ${url}\n\nComment \`/prpreview\` again to rebuild it, or \`/prpreview remove\` to take it down early — it's also removed automatically once this PR closes.`,
             });
 
   remove:
