@@ -318,3 +318,6 @@ Tracked here so they are not later rediscovered as gaps. See §17.2.
   supports either, so this is a UI question rather than a model one.
 - **Chain move vs member detach** is *not* deferred — it is P3.7, and §17.1 wants it decided with a
   real device rather than on paper.
+- **`Add components` and `Notes` keypad buttons.** Rendered in `Keypad.tsx`'s number-editing row
+  (§8.5), disabled, no `onPress` — same placeholder pattern as `Copy` / `Add graph`. Behaviour
+  not yet specified; do not wire either up without new product direction.

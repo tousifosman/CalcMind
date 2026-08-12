@@ -15,6 +15,8 @@ import ArrowUturnRightIcon from 'react-native-heroicons/outline/ArrowUturnRightI
 import BackspaceIcon from 'react-native-heroicons/outline/BackspaceIcon';
 import ChevronDownIcon from 'react-native-heroicons/outline/ChevronDownIcon';
 import LinkIcon from 'react-native-heroicons/outline/LinkIcon';
+import SquaresPlusIcon from 'react-native-heroicons/outline/SquaresPlusIcon';
+import PencilSquareIcon from 'react-native-heroicons/outline/PencilSquareIcon';
 import { decimalSeparatorFor } from '../engine/format';
 import { glyphColor, identityHues, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
@@ -245,14 +247,22 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               testID="keypad-link"
               style={styles.linkKey}
             />
-            {/* Single `()` key (§8.5): same cell size as `Create link` above.
-                Side is resolved in `dispatchEditorCommand` from chain depth so one
-                tap opens or closes as appropriate. */}
+            {/* Declared, not yet functional — same "affordance before behaviour" pattern as
+                the context menu's `Copy` / canvas menu's `Add number` / `Add graph`. Shares
+                `Create link`'s blue fill; behaviour to follow. */}
             <Key
-              label="()"
-              onPress={() => press({ region: 'paren' })}
-              disabled={numberEditingKeysDisabled}
-              testID="keypad-paren"
+              label="Add components"
+              icon={<SquaresPlusIcon size={20} color={glyphColor} />}
+              disabled
+              testID="keypad-add-components"
+              style={styles.linkKey}
+            />
+            <Key
+              label="Notes"
+              icon={<PencilSquareIcon size={20} color={glyphColor} />}
+              disabled
+              testID="keypad-notes"
+              style={styles.linkKey}
             />
           </View>
 
@@ -307,6 +317,17 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
             testID="keypad-op-add"
             disabled={!operatorsEnabled}
           />
+          {/* `()` (§8.5): moved underneath `+` into the accent column. Side is resolved in
+              `dispatchEditorCommand` from chain depth so one tap opens or closes as
+              appropriate — unchanged, only its position moved. Neutral fill (not accent
+              amber) since it's structural, not an operator. */}
+          <Key
+            label="()"
+            onPress={() => press({ region: 'paren' })}
+            disabled={numberEditingKeysDisabled}
+            testID="keypad-paren"
+            style={styles.parenAccentKey}
+          />
           <EqualsKey
             onPress={() => press({ region: 'equals' })}
             testID="keypad-equals"
@@ -320,7 +341,9 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
 
 interface KeyProps {
   label: string;
-  onPress: () => void;
+  /** Omit for a declared-but-not-yet-functional key (always pair with `disabled`, same
+   *  as `ModeKey`'s optional `onPress`). */
+  onPress?: () => void;
   testID?: string;
   disabled?: boolean;
   /** When set, rendered instead of the label text; `label` stays the a11y name
@@ -553,6 +576,16 @@ const styles = StyleSheet.create({
    *  deuteranopia/protanopia (`paletteAccessibility.ts`) rather than inventing a new one. */
   linkKey: {
     backgroundColor: identityHues[0],
+  },
+  /** `()` in the accent column, underneath `+` (§8.5): same fixed height and edge-to-edge
+   *  width as `accentKey` / `equalsKey` so it stacks flush with its column neighbours —
+   *  `styles.key`'s own `marginHorizontal` would leave it narrower than them. Keeps
+   *  `key`'s neutral grey fill rather than picking up `accentKey`'s amber: it's structural
+   *  (opens/closes a group), not an operator. */
+  parenAccentKey: {
+    height: 44,
+    marginHorizontal: 0,
+    marginBottom: KEY_GAP,
   },
   neutralKeyLabel: {
     color: '#333333',
