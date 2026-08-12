@@ -7,7 +7,7 @@
 // `AppShell.tsx` calls, so on-screen and hardware input can't diverge.
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
-import type { StyleProp, ViewStyle } from 'react-native';
+import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import ArrowUturnLeftIcon from 'react-native-heroicons/outline/ArrowUturnLeftIcon';
@@ -209,8 +209,11 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
             ))}
             {/* `0`'s row: decimal on its left, `+/-` on its right — under `1` and `3`
                 respectively, the reference app's bottom-row layout. Both are number-editing
-                keys (same `disabled` rule as `()`, which stays below); they just live in
-                the digit grid now so they land in this row instead of a dedicated one. */}
+                keys (`numberEditingKeysDisabled`, same rule `()` uses in the accent column);
+                they just live in the digit grid now so they land in this row instead of a
+                dedicated one. Same fill and label style as `0` (`rolePalette.number.fill` /
+                `keyLabel`, via `gridEditingKey` + `labelStyle`) so the whole row reads as one
+                colour rather than `0` standing out from its neighbours. */}
             <View style={styles.digitRow}>
               <Key
                 label={decimalSeparatorFor(locale)}
@@ -218,6 +221,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                 disabled={numberEditingKeysDisabled}
                 testID="keypad-decimal"
                 style={styles.gridEditingKey}
+                labelStyle={styles.keyLabel}
               />
               <DigitKey
                 value="0"
@@ -230,6 +234,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                 disabled={numberEditingKeysDisabled}
                 testID="keypad-sign"
                 style={styles.gridEditingKey}
+                labelStyle={styles.keyLabel}
               />
             </View>
           </View>
@@ -317,16 +322,15 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
             testID="keypad-op-add"
             disabled={!operatorsEnabled}
           />
-          {/* `()` (§8.5): moved underneath `+` into the accent column. Side is resolved in
-              `dispatchEditorCommand` from chain depth so one tap opens or closes as
-              appropriate — unchanged, only its position moved. Neutral fill (not accent
-              amber) since it's structural, not an operator. */}
-          <Key
+          {/* `()` (§8.5): moved underneath `+` into the accent column, styled as an
+              `OperatorKey` — same amber fill and white label as `÷ × − +`. Side is resolved
+              in `dispatchEditorCommand` from chain depth so one tap opens or closes as
+              appropriate; only its position/colour changed, not its behaviour. */}
+          <OperatorKey
             label="()"
             onPress={() => press({ region: 'paren' })}
             disabled={numberEditingKeysDisabled}
             testID="keypad-paren"
-            style={styles.parenAccentKey}
           />
           <EqualsKey
             onPress={() => press({ region: 'equals' })}
@@ -353,6 +357,10 @@ interface KeyProps {
    *  `gridEditingKey`'s taller height to match the digit row it now sits in, or
    *  `linkKey`'s blue fill. */
   style?: StyleProp<ViewStyle>;
+  /** Per-instance override for the fallback label `Text` (ignored when `icon` is set) —
+   *  e.g. `keyLabel` so decimal / `+/-` read white on their teal fill, matching `DigitKey`,
+   *  instead of the default dark `neutralKeyLabel`. */
+  labelStyle?: StyleProp<TextStyle>;
 }
 
 // Web only: a plain TouchableOpacity press starts with a mousedown, which blurs whatever
@@ -366,7 +374,7 @@ interface KeyProps {
 // focus with.
 const preventFocusSteal = { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() };
 
-function Key({ label, icon, onPress, testID, disabled, style }: KeyProps) {
+function Key({ label, icon, onPress, testID, disabled, style, labelStyle }: KeyProps) {
   return (
     <TouchableOpacity
       style={[styles.key, disabled && styles.keyDisabled, style]}
@@ -379,7 +387,9 @@ function Key({ label, icon, onPress, testID, disabled, style }: KeyProps) {
       {...skipTabOrder}
     >
       {icon ?? (
-        <Text style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled]}>
+        <Text
+          style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled, labelStyle]}
+        >
           {label}
         </Text>
       )}
@@ -569,6 +579,7 @@ const styles = StyleSheet.create({
    *  44px `key` height stepping down. Horizontal margin is already shared with `key`. */
   gridEditingKey: {
     height: 48,
+    backgroundColor: rolePalette.number.fill,
   },
   /** §8.6 `Create link`: a blue distinct from every role fill (number/operator/equals/
    *  result) and from the identity hues it might otherwise collide with in meaning —
@@ -576,16 +587,6 @@ const styles = StyleSheet.create({
    *  deuteranopia/protanopia (`paletteAccessibility.ts`) rather than inventing a new one. */
   linkKey: {
     backgroundColor: identityHues[0],
-  },
-  /** `()` in the accent column, underneath `+` (§8.5): same fixed height and edge-to-edge
-   *  width as `accentKey` / `equalsKey` so it stacks flush with its column neighbours —
-   *  `styles.key`'s own `marginHorizontal` would leave it narrower than them. Keeps
-   *  `key`'s neutral grey fill rather than picking up `accentKey`'s amber: it's structural
-   *  (opens/closes a group), not an operator. */
-  parenAccentKey: {
-    height: 44,
-    marginHorizontal: 0,
-    marginBottom: KEY_GAP,
   },
   neutralKeyLabel: {
     color: '#333333',

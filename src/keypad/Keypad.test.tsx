@@ -14,6 +14,8 @@ import {
   setNodeRaw,
 } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
+import { rolePalette } from '../ui/tokens';
+import { findHostByTestID } from '../nodes/testUtils';
 
 beforeEach(() => {
   act(() => {
@@ -369,6 +371,35 @@ describe('() moved into the accent column, under + (§8.5)', () => {
     // the move (§8.5: "the number-editing row … is disabled too" while an operator is
     // selected — `()` itself replaces nothing, it just still belongs to that rule).
     expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBe(true);
+  });
+
+  test('is filled the same amber as the other operator keys', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    const paren = findHostByTestID(renderer.root, 'keypad-paren');
+    const add = findHostByTestID(renderer.root, 'keypad-op-add');
+    expect(paren.props.style).toMatchObject({ backgroundColor: rolePalette.operator.fill });
+    expect(paren.props.style).toMatchObject({ backgroundColor: add.props.style.backgroundColor });
+  });
+});
+
+describe('Decimal / +/- share 0\'s colour (§8.5)', () => {
+  test('are filled the same teal as the digit keys, not the generic grey key', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    const decimal = findHostByTestID(renderer.root, 'keypad-decimal');
+    const sign = findHostByTestID(renderer.root, 'keypad-sign');
+    const zero = findHostByTestID(renderer.root, 'keypad-digit-0');
+    expect(decimal.props.style).toMatchObject({ backgroundColor: rolePalette.number.fill });
+    expect(sign.props.style).toMatchObject({ backgroundColor: rolePalette.number.fill });
+    expect(decimal.props.style.backgroundColor).toBe(zero.props.style.backgroundColor);
+    // `()`, elsewhere in the accent column, still keeps the operator amber — this is
+    // decimal/`+/-` specifically picking up the *number* fill, not a global recolour.
+    expect(decimal.props.style.backgroundColor).not.toBe(rolePalette.operator.fill);
   });
 });
 

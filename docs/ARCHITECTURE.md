@@ -662,13 +662,16 @@ operators are visually separated from digits.
 
 - Keys act on the **selected node** if there is one, otherwise they create a new node at the
   caret/last-tap point.
+- Decimal and `+/-` share `0`'s fill (`rolePalette.number.fill`, the same teal as every digit)
+  and label style, so the bottom digit row reads as one colour rather than `0` standing out
+  from its neighbours.
 - The grouping key is a single **`()`**, in the accent column underneath `+` (own row between
   `+` and `=`, not a wide bottom-row key, and not separate `(` / `)`). Each press inserts
   whichever side fits the chain through the selection: `)` when there is an unmatched open and a
   close is grammatical (after a number, reference, or close paren); otherwise `(`. Hardware
-  `(`/`)` still map to an explicit side. Neutral grey fill, not accent amber — it is structural
-  (opens/closes a group), not an operator — and follows the same `disabled` rule as before the
-  move (off while an operator is selected, §8.5's number-editing gate).
+  `(`/`)` still map to an explicit side. Styled as an `OperatorKey` — same amber
+  `rolePalette.operator.fill` and white label as `÷ × − +` — and follows the same `disabled`
+  rule as before the move (off while an operator is selected, §8.5's number-editing gate).
 - **`Create link`** sits in decimal's old slot on the number-editing row: a link-glyph key,
   filled in `identityHues[0]`'s blue (the palette's own primary blue, already checked for
   deuteranopia/protanopia — reused rather than inventing a new one for keypad chrome). Enabled
