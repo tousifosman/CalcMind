@@ -216,17 +216,22 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                 a selected result or linked cell isn't a number-edit target any more than a
                 digit is, so decimal / `+/-` disable right alongside `0`. They just live in
                 the digit grid now so they land in this row instead of a dedicated one. Same
-                fill and label style as `0` (`rolePalette.number.fill` / `keyLabel`, via
-                `gridEditingKey` + `labelStyle`) so the whole row reads as one colour rather
-                than `0` standing out from its neighbours. */}
+                fill and label style as `0` when enabled (`rolePalette.number.fill` /
+                `keyLabel`, via `gridEditingKey` + `labelStyle`) so the whole row reads as one
+                colour rather than `0` standing out from its neighbours — and the same
+                `digitKeyDisabled` swap-to-grey when disabled, layered on top of
+                `gridEditingKey`/`keyLabel` so it wins over both: `Key`'s own generic
+                `keyDisabled` just fades whatever colour is already there (right for the
+                accent-coloured keys), which used to leave these two visibly greenish while
+                every other number key had already gone flat grey. */}
             <View style={styles.digitRow}>
               <Key
                 label={decimalSeparatorFor(locale)}
                 onPress={() => press({ region: 'decimal' })}
                 disabled={numberKeysDisabled}
                 testID="keypad-decimal"
-                style={styles.gridEditingKey}
-                labelStyle={styles.keyLabel}
+                style={[styles.gridEditingKey, numberKeysDisabled && styles.digitKeyDisabled]}
+                labelStyle={[styles.keyLabel, numberKeysDisabled && styles.digitKeyLabelDisabled]}
               />
               <DigitKey
                 value="0"
@@ -238,8 +243,8 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                 onPress={() => press({ region: 'sign' })}
                 disabled={numberKeysDisabled}
                 testID="keypad-sign"
-                style={styles.gridEditingKey}
-                labelStyle={styles.keyLabel}
+                style={[styles.gridEditingKey, numberKeysDisabled && styles.digitKeyDisabled]}
+                labelStyle={[styles.keyLabel, numberKeysDisabled && styles.digitKeyLabelDisabled]}
               />
             </View>
           </View>
@@ -545,8 +550,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Placeholder tone, not a finished design pass: a grey with a slight number-teal cast
+  // rather than plain neutral grey, so a disabled number key still reads as "this was the
+  // teal one" instead of matching every other disabled key exactly. Revisit once the
+  // disabled palette gets real design attention.
   digitKeyDisabled: {
-    backgroundColor: '#DADADA',
+    backgroundColor: '#ADD1CD',
     opacity: 0.55,
   },
   digitKeyLabelDisabled: {

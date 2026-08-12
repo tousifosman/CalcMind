@@ -409,6 +409,29 @@ describe('Decimal / +/- share 0\'s colour (§8.5)', () => {
     // decimal/`+/-` specifically picking up the *number* fill, not a global recolour.
     expect(decimal.props.style.backgroundColor).not.toBe(rolePalette.operator.fill);
   });
+
+  test('when disabled, turn the same grey as a disabled digit key rather than fading teal', () => {
+    act(() => {
+      const result = addNumberNode({ x: 0, y: 0 }, '3');
+      appendEqualsNode(result);
+      const r = Object.values(useDocumentStore.getState().document.nodes).find(
+        (node) => node.kind === 'result',
+      )!;
+      selectNode(r.id);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    const decimal = findHostByTestID(renderer.root, 'keypad-decimal');
+    const sign = findHostByTestID(renderer.root, 'keypad-sign');
+    const zero = findHostByTestID(renderer.root, 'keypad-digit-0');
+    // Same swapped-to-grey background as `0`, not a faded version of the teal fill.
+    expect(decimal.props.style.backgroundColor).toBe(zero.props.style.backgroundColor);
+    expect(sign.props.style.backgroundColor).toBe(zero.props.style.backgroundColor);
+    expect(decimal.props.style.backgroundColor).not.toBe(rolePalette.number.fill);
+  });
 });
 
 describe('Add components / Notes placeholders (§8.6, behaviour TBD)', () => {

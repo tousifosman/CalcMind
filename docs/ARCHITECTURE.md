@@ -666,7 +666,11 @@ operators are visually separated from digits.
   and label style, so the bottom digit row reads as one colour rather than `0` standing out
   from its neighbours — and share its `disabled` rule too: they are number keys, not a
   separate "number-editing" carve-out, so a selected result/reference/operator disables them
-  right alongside the digits (§8.7).
+  right alongside the digits (§8.7). Disabled, they swap to the same grey-with-a-teal-cast as
+  a disabled digit (`digitKeyDisabled`) rather than just fading their teal fill — a generic
+  `Key`'s ordinary disabled treatment (opacity only) would have left them visibly green next
+  to flat-grey digits. That disabled colour is a placeholder pending a real design pass, not a
+  finished palette choice.
 - The grouping key is a single **`()`**, in the accent column underneath `+` (own row between
   `+` and `=`, not a wide bottom-row key, and not separate `(` / `)`). Each press inserts
   whichever side fits the chain through the selection: `)` when there is an unmatched open and a
