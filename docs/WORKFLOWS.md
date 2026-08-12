@@ -31,13 +31,20 @@ publish).
 
 ### 3. `deploy-pr-preview.yml` — Deploy PR preview
 
-**Triggers:** manual `workflow_dispatch` (maintainer picks a PR number +
-`deploy`/`remove`), and automatically on `pull_request: closed` (always
-treated as `remove`).
+**Triggers:** a `/prpreview` (or `/prpreview remove`) comment on the PR,
+manual `workflow_dispatch` (maintainer picks a PR number + `deploy`/`remove`),
+and automatically on `pull_request: closed` (always treated as `remove`).
 
 **Jobs:**
-- `determine` — normalizes the two trigger shapes (dispatch inputs vs. the
-  PR-closed event payload) into one `pr_number`/`action` output pair.
+- `determine` — normalizes the three trigger shapes (a `/prpreview` comment,
+  dispatch inputs, or the PR-closed event payload) into one `pr_number`/
+  `action` output pair. For the comment trigger, its `if` also gates on the
+  comment being on a PR (not a plain issue) from a commenter with write
+  access (`OWNER`/`MEMBER`/`COLLABORATOR`) — required because `deploy` below
+  checks out and runs the PR's own code, including forked contributions,
+  with a `GITHUB_TOKEN` that can push to `gh-pages`. A comment that doesn't
+  match is silently ignored; one that does gets a 👀 reaction so the
+  commenter knows it was picked up.
 - `deploy` — checks out `refs/pull/<n>/head` (works for fork PRs too),
   builds the web export, and publishes it to `gh-pages` under
   `pr-preview/pr-<n>/`, then comments the preview URL back on the PR.
@@ -45,9 +52,10 @@ treated as `remove`).
   not), deletes `pr-preview/pr-<n>/`, and commits/pushes if there was
   anything to remove.
 
-This is intentionally manual for deploys (not run on every push) — only the
-teardown on PR-close is automatic, so `gh-pages` doesn't accumulate
-abandoned preview directories forever.
+Deploys are opt-in per PR (not run on every push) — the `/prpreview` comment
+or a manual dispatch is what starts one. Only the teardown on PR-close is
+fully automatic, so `gh-pages` doesn't accumulate abandoned preview
+directories forever.
 
 ## GitHub-managed workflows (not files in the repo)
 

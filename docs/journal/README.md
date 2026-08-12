@@ -40,3 +40,4 @@ overturned it.
 | [2026-08-08](2026-08-08.md) | Soft-keyboard suppress; Clear-confirm hides keypad; `()` merge; Heroicons; keypad undo/redo row; focus chrome: stacking, group clear, `=`→result, no identity ring while selected; Select all (+ drag, clear, keypad lock); double-tap selects chain |
 | [2026-08-11](2026-08-11.md) | Keypad `=` key was 6px narrower than the operator keys (missing `marginHorizontal` override); fixed |
 | [2026-08-09](2026-08-09.md) | Continuation stacking; group-mode keypad; operator replace / editing-key disable; main merge-conflict fix |
+| [2026-08-12](2026-08-12.md) | `/prpreview` PR-comment trigger for `deploy-pr-preview.yml` |
