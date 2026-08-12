@@ -54,6 +54,7 @@ describe('Keypad', () => {
     expect(findByTestID(renderer, 'keypad-decimal')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-sign')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-paren')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-link')).toBeTruthy();
     expect(renderer.root.findAllByProps({ testID: 'keypad-paren-open' })).toHaveLength(0);
     expect(renderer.root.findAllByProps({ testID: 'keypad-paren-close' })).toHaveLength(0);
     expect(findByTestID(renderer, 'keypad-history')).toBeTruthy();
@@ -195,11 +196,12 @@ describe('Keypad', () => {
 
     const parenLabel = findByTestID(renderer, 'keypad-paren').findByType('Text' as never);
     expect(parenLabel.children).toEqual(['()']);
-    // `()` shares the number-editing row with decimal / +/- (same Key cell size).
+    // Decimal / `+/-` moved into the digit grid's `0` row (§8.5); the number-editing
+    // row now holds `Create link` (icon, no Text glyph) and `()`.
     const editingLabels = findByTestID(renderer, 'keypad-number-editing')
       .findAllByType('Text' as never)
       .map((node) => node.children[0]);
-    expect(editingLabels).toEqual(['.', '+/-', '()']);
+    expect(editingLabels).toEqual(['()']);
     // Bottom history row is undo, redo, backspace — left to right, all Heroicons
     // (arrow-uturn-left / right, backspace). No Text glyphs in this row.
     // `findByProps({ testID })` hits the Key composite (label = a11y name); the
@@ -218,6 +220,122 @@ describe('Keypad', () => {
     expect(undo.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
     expect(redo.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
     expect(backspace.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('Create link keypad button (§8.6)', () => {
+  test('renders an icon (no text glyph), with "Create link" as the a11y name', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    const link = findByTestID(renderer, 'keypad-link');
+    expect(link.props.label).toBe('Create link');
+    expect(link.findAllByType('Text' as never)).toHaveLength(0);
+    expect(link.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
+  });
+
+  test('disabled when nothing is selected', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
+  });
+
+  test('enabled when a number is selected; pressing reports the createLink region', () => {
+    const presses: KeypadKey[] = [];
+    let n!: string;
+    act(() => {
+      n = addNumberNode({ x: 0, y: 0 }, '3');
+      selectNode(n);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad onKeyPress={(key) => presses.push(key)} />);
+    });
+
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(false);
+    act(() => {
+      findByTestID(renderer, 'keypad-link').props.onPress();
+    });
+    expect(presses).toEqual([{ region: 'createLink' }]);
+  });
+
+  test('enabled when a result is selected', () => {
+    act(() => {
+      const n = addNumberNode({ x: 0, y: 0 }, '3');
+      appendEqualsNode(n);
+      const result = Object.values(useDocumentStore.getState().document.nodes).find(
+        (node) => node.kind === 'result',
+      )!;
+      selectNode(result.id);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(false);
+  });
+
+  test('disabled when a linked cell (reference) is selected', () => {
+    act(() => {
+      const n = addNumberNode({ x: 0, y: 0 }, '3');
+      const { referenceId } = continueFromValue(n, '+');
+      selectNode(referenceId);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
+  });
+
+  test('disabled when an operator is selected', () => {
+    act(() => {
+      const op = addOperatorNode({ x: 0, y: 0 }, '+');
+      selectNode(op);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
+  });
+
+  test('disabled during Select group, even with a number selected beforehand', () => {
+    let n!: string;
+    let op!: string;
+    act(() => {
+      n = addNumberNode({ x: 0, y: 0 }, '1');
+      op = addOperatorNode({ x: 50, y: 0 }, '+');
+      const b = addNumberNode({ x: 84, y: 0 }, '2');
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.chains.ch = { id: 'ch', members: [n, op, b], anchor: { x: 0, y: 0 } };
+        draft.nodes[n].chainId = 'ch';
+        draft.nodes[op].chainId = 'ch';
+        draft.nodes[b].chainId = 'ch';
+      });
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+      selectGroup(op);
+    });
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
+  });
+
+  test('disabled while Select all is active', () => {
+    act(() => {
+      addNumberNode({ x: 0, y: 0 }, '1');
+      selectAll();
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
   });
 });
 
@@ -415,6 +533,7 @@ describe('group-mode keypad (§8.5)', () => {
     expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-op-add').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBe(true);
   });
@@ -440,6 +559,9 @@ describe('group-mode keypad (§8.5)', () => {
     expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-digit-1').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBeFalsy();
+    // `Create link` is not part of the §8.7-continuation carve-out that keeps
+    // operators enabled here — a group selection is not a single number/result.
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
   });
 });
 
@@ -464,6 +586,7 @@ describe('Select all locks data-entry keys (§8.6)', () => {
       'keypad-sign',
       'keypad-backspace',
       'keypad-paren',
+      'keypad-link',
       'keypad-op-add',
       'keypad-op-multiply',
       'keypad-equals',

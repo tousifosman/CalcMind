@@ -15,6 +15,7 @@ import {
   appendEqualsNode,
   appendOperatorAndNumber,
   continueFromValue,
+  createLinkToValue,
   setNodeRaw,
   setOperatorSymbol,
   deleteNode,
@@ -51,7 +52,11 @@ export type KeypadKey =
   | { region: 'operator'; op: OperatorSymbol }
   | { region: 'equals' }
   | { region: 'undo' }
-  | { region: 'redo' };
+  | { region: 'redo' }
+  /** §8.6 keypad `Create link`: the on-screen counterpart to the context-menu action
+   *  of the same name (`createLinkToValue`). Narrower than the menu version — only
+   *  a selected number or result enables it (no live-reference source here). */
+  | { region: 'createLink' };
 
 /** Hardware/web-keyboard-only commands with no on-screen keypad equivalent (§8.5: "arrows
  *  move selection along a chain", Escape deselects; P7.2 adds between-chain arrows).
@@ -347,6 +352,17 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     selectedNode && selectedNode.kind === 'number' && ui.editingNodeId === selectedNode.id
       ? selectedNode
       : undefined;
+
+  // Keypad `Create link`: only a selected number or result is eligible (the keypad
+  // button's on-screen `disabled` state mirrors this exactly). No-op otherwise — the
+  // button is disabled in that case, so this only guards a stale/hardware-triggered
+  // press against a selection that changed underneath it.
+  if (command.region === 'createLink') {
+    if (selectedNode && (selectedNode.kind === 'number' || selectedNode.kind === 'result')) {
+      createLinkToValue(selectedNode.id);
+    }
+    return;
+  }
 
   // A structural key can't sensibly continue an empty in-progress number - §8.6 already
   // discards one abandoned by any other selection change, so do that first and fall

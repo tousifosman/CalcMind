@@ -654,19 +654,27 @@ operators are visually separated from digits.
 
 | Region | Keys |
 |---|---|
-| Digits | `7 8 9 / 4 5 6 / 1 2 3 / 0` |
-| Number editing | decimal separator (locale glyph, inserts canonical `.`), `+/-`, `()` |
+| Digits | `7 8 9 / 4 5 6 / 1 2 3`, bottom row decimal separator (locale glyph, inserts canonical `.`) / `0` / `+/-` — decimal and sign flank `0` rather than sitting in their own row |
+| Number editing | **Create link**, `()` |
 | History | undo, redo, backspace |
 | Operators (accent column) | `÷ × − + =` |
 | Mode strip | dismiss keypad, documents, functions *(later)*, graph *(later)*, **Clear all** |
 
 - Keys act on the **selected node** if there is one, otherwise they create a new node at the
   caret/last-tap point.
-- The grouping key is a single **`()`** on the number-editing row (same cell size as `+/-` /
-  decimal; not a wide bottom-row key, and not separate `(` / `)`). Each press inserts whichever
+- The grouping key is a single **`()`** on the number-editing row (same cell size as `Create
+  link`; not a wide bottom-row key, and not separate `(` / `)`). Each press inserts whichever
   side fits the chain through the selection: `)` when there is an unmatched open and a close is
   grammatical (after a number, reference, or close paren); otherwise `(`. Hardware `(`/`)` still
   map to an explicit side.
+- **`Create link`** sits in decimal's old slot on the number-editing row: a link-glyph key,
+  filled in `identityHues[0]`'s blue (the palette's own primary blue, already checked for
+  deuteranopia/protanopia — reused rather than inventing a new one for keypad chrome). Enabled
+  only when the selected node is a **number** or a **result**; disabled otherwise (including
+  during Select group and Select all). Pressing it calls the same `createLinkToValue` the
+  `Create link` context-menu item uses (§8.6) — a free reference near the selected value, with
+  no bundled operator or empty number. Narrower than the menu action: no live-reference source
+  here, since there is no on-screen "value" concept for a linked cell without also selecting it.
 - The history row exposes **undo** and **redo** next to backspace — the same commands as
   `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` (or `Y`).
 - Pressing `=` on a chain selects the new **result** (not the `=` glyph) so the next operator

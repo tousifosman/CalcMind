@@ -7,14 +7,16 @@
 // `AppShell.tsx` calls, so on-screen and hardware input can't diverge.
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
+import type { StyleProp, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import ArrowUturnLeftIcon from 'react-native-heroicons/outline/ArrowUturnLeftIcon';
 import ArrowUturnRightIcon from 'react-native-heroicons/outline/ArrowUturnRightIcon';
 import BackspaceIcon from 'react-native-heroicons/outline/BackspaceIcon';
 import ChevronDownIcon from 'react-native-heroicons/outline/ChevronDownIcon';
+import LinkIcon from 'react-native-heroicons/outline/LinkIcon';
 import { decimalSeparatorFor } from '../engine/format';
-import { glyphColor, rolePalette } from '../ui/tokens';
+import { glyphColor, identityHues, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
 import { clearDocument } from '../store/commands';
@@ -105,6 +107,13 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     dataEntryLocked || groupMode || selectionBlocksNumberEditing;
   const operatorsEnabled =
     !dataEntryLocked && (!groupMode || groupContainsResult(groupSelectedIds, nodes));
+  // §8.6 `Create link` keypad button: enabled only for a selected number or result —
+  // narrower than the context-menu action of the same name, which also allows a live
+  // reference (there is no "already-a-link" source to re-link here).
+  const canCreateLink =
+    !dataEntryLocked &&
+    !groupMode &&
+    (selectedKind === 'number' || selectedKind === 'result');
 
   function press(key: KeypadKey) {
     if (dataEntryLocked) return;
@@ -196,31 +205,47 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                 ))}
               </View>
             ))}
+            {/* `0`'s row: decimal on its left, `+/-` on its right — under `1` and `3`
+                respectively, the reference app's bottom-row layout. Both are number-editing
+                keys (same `disabled` rule as `()`, which stays below); they just live in
+                the digit grid now so they land in this row instead of a dedicated one. */}
             <View style={styles.digitRow}>
-              <View style={styles.digitSpacer} />
+              <Key
+                label={decimalSeparatorFor(locale)}
+                onPress={() => press({ region: 'decimal' })}
+                disabled={numberEditingKeysDisabled}
+                testID="keypad-decimal"
+                style={styles.gridEditingKey}
+              />
               <DigitKey
                 value="0"
                 disabled={numberKeysDisabled}
                 onPress={() => press({ region: 'digit', value: '0' })}
               />
-              <View style={styles.digitSpacer} />
+              <Key
+                label="+/-"
+                onPress={() => press({ region: 'sign' })}
+                disabled={numberEditingKeysDisabled}
+                testID="keypad-sign"
+                style={styles.gridEditingKey}
+              />
             </View>
           </View>
 
           <View style={styles.editingRow} testID="keypad-number-editing">
+            {/* §8.6 `Create link`: takes the slot `.` used to occupy in this row. Enabled
+                only for a selected number or result (`canCreateLink`); creates a free
+                reference near the selected value, same placement as §8.7 continuation
+                but without the operator/empty-number (`createLinkToValue`). */}
             <Key
-              label={decimalSeparatorFor(locale)}
-              onPress={() => press({ region: 'decimal' })}
-              disabled={numberEditingKeysDisabled}
-              testID="keypad-decimal"
+              label="Create link"
+              icon={<LinkIcon size={20} color={glyphColor} />}
+              onPress={() => press({ region: 'createLink' })}
+              disabled={!canCreateLink}
+              testID="keypad-link"
+              style={styles.linkKey}
             />
-            <Key
-              label="+/-"
-              onPress={() => press({ region: 'sign' })}
-              disabled={numberEditingKeysDisabled}
-              testID="keypad-sign"
-            />
-            {/* Single `()` key (§8.5): same cell size as the other editing keys.
+            {/* Single `()` key (§8.5): same cell size as `Create link` above.
                 Side is resolved in `dispatchEditorCommand` from chain depth so one
                 tap opens or closes as appropriate. */}
             <Key
@@ -301,6 +326,10 @@ interface KeyProps {
   /** When set, rendered instead of the label text; `label` stays the a11y name
    *  (same pattern as ModeKey's Heroicons slot). */
   icon?: ReactNode;
+  /** Per-instance overrides layered after `styles.key` / `styles.keyDisabled` — e.g.
+   *  `gridEditingKey`'s taller height to match the digit row it now sits in, or
+   *  `linkKey`'s blue fill. */
+  style?: StyleProp<ViewStyle>;
 }
 
 // Web only: a plain TouchableOpacity press starts with a mousedown, which blurs whatever
@@ -314,10 +343,10 @@ interface KeyProps {
 // focus with.
 const preventFocusSteal = { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() };
 
-function Key({ label, icon, onPress, testID, disabled }: KeyProps) {
+function Key({ label, icon, onPress, testID, disabled, style }: KeyProps) {
   return (
     <TouchableOpacity
-      style={[styles.key, disabled && styles.keyDisabled]}
+      style={[styles.key, disabled && styles.keyDisabled, style]}
       onPress={disabled ? undefined : onPress}
       disabled={disabled}
       testID={testID}
@@ -469,10 +498,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: KEY_GAP,
   },
-  digitSpacer: {
-    flex: 1,
-    marginHorizontal: KEY_GAP / 2,
-  },
   digitKey: {
     flex: 1,
     height: 48,
@@ -515,6 +540,19 @@ const styles = StyleSheet.create({
   },
   keyLabelDisabled: {
     color: '#B3B3B3',
+  },
+  /** Decimal / `+/-` now live in the digit grid's `0` row (§8.5): match that row's
+   *  48px cell height so the row reads as one aligned line instead of the generic
+   *  44px `key` height stepping down. Horizontal margin is already shared with `key`. */
+  gridEditingKey: {
+    height: 48,
+  },
+  /** §8.6 `Create link`: a blue distinct from every role fill (number/operator/equals/
+   *  result) and from the identity hues it might otherwise collide with in meaning —
+   *  reuses `identityHues[0]`, the palette's own primary blue, already checked for
+   *  deuteranopia/protanopia (`paletteAccessibility.ts`) rather than inventing a new one. */
+  linkKey: {
+    backgroundColor: identityHues[0],
   },
   neutralKeyLabel: {
     color: '#333333',
