@@ -769,8 +769,8 @@ Dragging is not the fast path. Observed in Tydlig for results and extended here 
 value can be linked without first pressing `=`:
 
 ```
-given: a value V (a free number with no chain, a result, or a live reference) is
-         selected, and V is not being edited
+given: a value V (a free number with no chain, or a result) is selected, and V is
+         not being edited
 when:  the user presses an operator ⊕
 then:  create chain C' underneath the first cell of V's group (or under V when free),
          containing [ reference→V , ⊕ , empty number ]
@@ -790,14 +790,27 @@ is still an operand of that formula rather than a free-standing value: an operat
 *that* chain in place, immediately after the selected member (§8.5's append-after-anchor
 targeting), the same as typing does. `1 + 2 = 3`, select `2`, press `+` builds `1 + 2 + _` (the
 stale `=`/result get pushed past the new operand and the chain reads Incomplete until it's
-filled in, then recomputes) — it must not spin off a reference to `2` elsewhere. A **result**,
-**operator**, or **linked cell** (reference) rejects digits — keypad number keys, decimal, and
-`+/-` are all disabled while any of those is selected (decimal / `+/-` are number keys now,
-not a separate "number-editing" carve-out — §8.5). `()` is looser: it only disables while an
-**operator** is selected, since pressing an operator key there instead **replaces** that
-operator's symbol in place. Continuation seeds an empty number and focuses it, so the next
-digits edit in place rather than relying on a selected operator. For a reference, `=` / paren
-still append so a just-dropped link can finish its expression.
+filled in, then recomputes) — it must not spin off a reference to `2` elsewhere.
+
+**A selected live reference never continuation-links, regardless of whether it's free or
+already a chain member — it always extends in place**, the same append-after-anchor path a
+chain-member number uses. A reference is already a link; pressing an operator on one means "keep
+computing with what this points to" (`ref ⊕ _`), not "make another link to this link". A
+freshly-dropped `Create link` reference (§8.6), still free (`chainId === null`) at that point,
+gets exactly the same treatment as a chain-member number getting its first extension: the
+operator+empty-number pair becomes the reference's *own* new chain, anchored at the reference's
+position, rather than spinning off a second reference elsewhere. (This was a shipped bug, caught
+live: continuation used to apply to references too, so pressing an operator on a linked cell
+created a reference-to-the-reference instead of continuing the calculation from it.)
+
+A **result**, **operator**, or **linked cell** (reference) rejects digits — keypad number keys,
+decimal, and `+/-` are all disabled while any of those is selected (decimal / `+/-` are number
+keys now, not a separate "number-editing" carve-out — §8.5). `()` is looser: it only disables
+while an **operator** is selected, since pressing an operator key there instead **replaces**
+that operator's symbol in place. Continuation (or, for a reference, extend-in-place) seeds an
+empty number and focuses it, so the next digits edit in place rather than relying on a selected
+operator. For a reference, `=` / paren still append too, so a just-dropped link can finish its
+expression without first needing an operator.
 
 This is the single most important interaction in the app: it turns "I have a value" into "…and
 now I keep working with it" in one keystroke, and it is what produces the linked trees that make
@@ -810,11 +823,13 @@ its result; a miss (no candidate) cancels so `R` never becomes a free node. Numb
 the ordinary snap/move path so chaining by drag is unchanged — only continuation (and
 result-drag) create links.
 
-**The third path is the `Create link` context-menu item (§8.6).** Same value eligibility as
-continuation (number, result, or live reference), but skips the bundled operator and empty
-number: it drops a lone, unattached reference at the same anchor continuation would use (reusing
-its stacking rule) and selects it. Useful when the user wants a linked cell sitting somewhere
-else on the canvas — read by a later formula, or just placed as a labelled copy — without
+**The third path is the `Create link` context-menu item (§8.6).** Accepts a number, result, or
+live reference — broader than continuation's operator-key gesture, which only fires for a free
+number or a result (a selected reference never continuation-links, per above) — but skips the
+bundled operator and empty number: it drops a lone, unattached reference at the same anchor
+continuation would use (reusing its stacking rule) and selects it. Useful when the user wants a
+linked cell sitting somewhere else on the canvas — read by a later formula, or just placed as a
+labelled copy — without
 committing to an operation on it yet. From there it is an ordinary free node: drag it onto a
 chain via the normal snap path, or select it and press an operator to continue from it like any
 other live reference.

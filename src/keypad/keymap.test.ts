@@ -11,6 +11,7 @@ import {
   deleteNode,
   appendEqualsNode,
   appendOperatorAndNumber,
+  createLinkToValue,
   selectAll,
 } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
@@ -390,7 +391,7 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(Object.keys(doc.chains)).toHaveLength(1);
   });
 
-  test('operator with a selected linked cell creates a new continuation from it', () => {
+  test('operator with a selected linked cell extends its own chain in place, not a second link', () => {
     dispatchEditorCommand({ region: 'digit', value: '3' });
     const numberId = useUiStore.getState().selectedNodeId!;
     selectNode(numberId);
@@ -403,22 +404,56 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     dispatchEditorCommand({ region: 'digit', value: '1' });
     selectNode(firstRef.id);
 
-    const chainLenBefore = useDocumentStore.getState().document.chains[firstRef.chainId!]!
-      .members.length;
+    const before = useDocumentStore.getState().document;
+    const chainId = firstRef.chainId!;
+    const membersBefore = before.chains[chainId]!.members;
+    expect(membersBefore).toHaveLength(3); // [firstRef, +, '1']
 
     dispatchEditorCommand({ region: 'operator', op: '×' });
 
     const doc = useDocumentStore.getState().document;
-    const refs = Object.values(doc.nodes).filter((n) => n.kind === 'reference');
-    expect(refs).toHaveLength(2);
-    const child = refs.find((r) => r.targetNodeId === firstRef.id)!;
-    expect(child).toBeDefined();
-    expect(child.chainId).not.toBe(firstRef.chainId);
-    // Parent chain must not have grown — that was the "adds a cell at the end" bug.
-    expect(doc.chains[firstRef.chainId!]!.members).toHaveLength(chainLenBefore);
-    expect(useUiStore.getState().selectedNodeId).toBe(
-      doc.chains[child.chainId!]!.members[2],
-    );
+    // No second reference was created — this is not §8.7 continuation. Reported live:
+    // pressing an operator on a dropped `Create link` reference used to spin off a
+    // reference-to-the-reference instead of extending from it.
+    expect(Object.values(doc.nodes).filter((n) => n.kind === 'reference')).toHaveLength(1);
+    // Same chain, grown from [ref, +, 1] to [ref, ×, <empty>, +, 1] — the new operand
+    // lands right after the reference, pushing the rest of the formula rightward.
+    const afterMembers = doc.chains[chainId]!.members;
+    expect(afterMembers).toHaveLength(5);
+    expect(afterMembers[0]).toBe(firstRef.id);
+    expect(doc.nodes[afterMembers[1]!]).toMatchObject({ kind: 'operator', op: '×' });
+    expect(doc.nodes[afterMembers[2]!]).toMatchObject({ kind: 'number', raw: '' });
+    expect(afterMembers[3]).toBe(membersBefore[1]);
+    expect(afterMembers[4]).toBe(membersBefore[2]);
+
+    expect(useUiStore.getState().selectedNodeId).toBe(afterMembers[2]);
+    expect(useUiStore.getState().editingNodeId).toBe(afterMembers[2]);
+  });
+
+  test('operator with a selected free (not-yet-chained) linked cell builds [ref, ⊕, empty] in place', () => {
+    // Free-standing reference, e.g. one just dropped by the `Create link` action —
+    // chainId null, not part of any chain yet.
+    const source = addNumberNode({ x: 0, y: 0 }, '14');
+    const refId = createLinkToValue(source);
+    expect(useDocumentStore.getState().document.nodes[refId]).toMatchObject({
+      kind: 'reference',
+      chainId: null,
+    });
+    selectNode(refId);
+
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+
+    const doc = useDocumentStore.getState().document;
+    // Still exactly one reference — no second link spun off.
+    expect(Object.values(doc.nodes).filter((n) => n.kind === 'reference')).toHaveLength(1);
+    const ref = doc.nodes[refId]!;
+    expect(ref.chainId).not.toBeNull();
+    const members = doc.chains[ref.chainId!]!.members;
+    expect(members).toEqual([refId, expect.any(String), expect.any(String)]);
+    expect(doc.nodes[members[1]!]).toMatchObject({ kind: 'operator', op: '+' });
+    expect(doc.nodes[members[2]!]).toMatchObject({ kind: 'number', raw: '' });
+    expect(useUiStore.getState().selectedNodeId).toBe(members[2]);
+    expect(useUiStore.getState().editingNodeId).toBe(members[2]);
   });
 
   test('operator with an operator selected replaces its symbol in place', () => {

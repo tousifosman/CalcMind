@@ -424,12 +424,10 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     return;
   }
 
-  // §8.7 Continuation: operator on a selected result or live reference, or on a
-  // selected *free* number that is not being edited, starts a new chain referencing
-  // that value. Results stay read-only for every other key. Linked cells
-  // (references) reject digits (keypad disables them) but still accept `=` /
-  // paren so drag-to-link can finish the chain the reference was dropped into.
-  // Numbers being edited still append in-chain so typing `5 + 3` is unchanged.
+  // §8.7 Continuation: operator on a selected result, or on a selected *free* number
+  // that is not being edited, starts a new chain referencing that value. Results stay
+  // read-only for every other key. Numbers being edited still append in-chain so typing
+  // `5 + 3` is unchanged.
   //
   // A selected number that already belongs to a chain (typed but not yet edited
   // again, or already `=`'d) is not "a value" the way a result or a free number is —
@@ -438,6 +436,17 @@ export function dispatchEditorCommand(command: EditorCommand): void {
   // member — §8.5) rather than spin off a link. E.g. `1 + 2 =`, select `2`, press
   // `+` must build `1 + 2 + _` (Incomplete until the new operand lands, then
   // recomputes), not create a reference to `2` elsewhere. See the branch below.
+  //
+  // A selected **live reference** follows that same extend-in-place rule, not
+  // continuation, regardless of whether it's already a chain member or still free —
+  // unlike a plain number, a reference is already a link, so pressing an operator on
+  // one means "keep computing with what this points to" (build `ref + _` right there),
+  // never "make another link to this link". Reported live: a free reference dropped by
+  // `Create link`, operator pressed on it, was spinning off a second reference to the
+  // first instead of extending from it. Linked cells reject digits (keypad disables
+  // them) but still accept `=` / paren so drag-to-link can finish the chain the
+  // reference was dropped into. A **dangling** reference (target gone) still rejects
+  // operators too, same as before — nothing to extend from a broken link.
   if (selectedNode?.kind === 'result') {
     if (command.region === 'operator') {
       const { numberId } = continueFromValue(selectedNode.id, command.op);
@@ -451,8 +460,7 @@ export function dispatchEditorCommand(command: EditorCommand): void {
       undefined;
     if (command.region === 'operator') {
       if (targetExists) {
-        const { numberId } = continueFromValue(selectedNode.id, command.op);
-        editNumberNode(numberId);
+        editNumberNode(appendOperatorAndNumber(selectedNode.id, command.op).numberId);
       }
       return;
     }

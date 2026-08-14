@@ -357,17 +357,22 @@ export function continuationAnchor(
  * {@link appendOperatorAndNumber}, and required now that a selected operator
  * rejects digits. Never edits `V`.
  *
- * Numbers and live references are included so a value (or an existing link to one)
- * can seed another link without first pressing `=`. Drag-to-link stays result-only
- * so ordinary number snaps can still move into chains (§8.3).
+ * Numbers and live references are accepted here so *this primitive* can seed a link
+ * from either — but the operator-key dispatcher no longer calls it with a reference at
+ * all (below). Kept generic for the explicit `Create link` context-menu action
+ * ({@link createLinkToValue}), which still accepts a chain-member number or a live
+ * reference, same as `Label` — an explicit "link this" request isn't the implicit
+ * operator-key shorthand.
  *
  * This function itself doesn't care whether `V` already belongs to a chain — that
  * restriction lives in the caller. `dispatchEditorCommand`'s operator-key gesture only
- * reaches here for a *free* number (`chainId === null`); a number already mid-formula
- * gets `appendOperatorAndNumber` instead, extending that formula in place rather than
- * linking it (§8.7). The explicit `Create link` context-menu action
- * ({@link createLinkToValue}) still accepts a chain-member number, same as `Label` —
- * an explicit "link this" request isn't the implicit operator-key shorthand.
+ * reaches here for a *free* number (`chainId === null`) or a selected result; a number
+ * already mid-formula, or *any* live reference (free or chain-member), gets
+ * {@link appendOperatorAndNumber} instead, extending that formula/chain in place rather
+ * than linking it (§8.7). A reference is already a link — pressing an operator on one
+ * means "keep computing with what this points to", not "make another link to this
+ * link". Reported live: a reference dropped by `Create link`, operator pressed on it,
+ * was spinning off a second reference instead of extending from the first.
  */
 export function continueFromValue(
   valueNodeId: NodeId,
