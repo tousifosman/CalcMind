@@ -297,11 +297,35 @@ describe('Create link keypad button (§8.6)', () => {
     expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(false);
   });
 
-  test('disabled when a linked cell (reference) is selected', () => {
+  test('enabled when a live linked cell (reference) is selected', () => {
     act(() => {
       const n = addNumberNode({ x: 0, y: 0 }, '3');
       const { referenceId } = continueFromValue(n, '+');
       selectNode(referenceId);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    // Same eligibility as the context-menu `Create link` action (§8.6): chaining a link
+    // off an existing link works from the keypad too.
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(false);
+  });
+
+  test('disabled when a dangling linked cell (target gone) is selected', () => {
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.nodes.dangling = {
+          id: 'dangling',
+          kind: 'reference',
+          position: { x: 0, y: 0 },
+          chainId: null,
+          createdAt: 0,
+          targetNodeId: 'gone',
+          lastKnownDisplay: '42',
+        };
+      });
+      selectNode('dangling');
     });
     let renderer!: ReactTestRenderer;
     act(() => {

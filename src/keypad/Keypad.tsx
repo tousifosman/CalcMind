@@ -111,13 +111,17 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     dataEntryLocked || groupMode || selectionBlocksNumberEditing;
   const operatorsEnabled =
     !dataEntryLocked && (!groupMode || groupContainsResult(groupSelectedIds, nodes));
-  // §8.6 `Create link` keypad button: enabled only for a selected number or result —
-  // narrower than the context-menu action of the same name, which also allows a live
-  // reference (there is no "already-a-link" source to re-link here).
+  // §8.6 `Create link` keypad button: enabled for a selected number, result, or *live*
+  // reference — same eligibility as the context-menu action of the same name
+  // (`createLinkToValue`) and as `dispatchEditorCommand`'s `createLink` handler. A
+  // dangling reference (target gone) does not count: there is nothing live to re-link.
+  const selectedNode = selectedNodeId ? nodes[selectedNodeId] : undefined;
+  const selectedIsLiveReference =
+    selectedNode?.kind === 'reference' && nodes[selectedNode.targetNodeId] !== undefined;
   const canCreateLink =
     !dataEntryLocked &&
     !groupMode &&
-    (selectedKind === 'number' || selectedKind === 'result');
+    (selectedKind === 'number' || selectedKind === 'result' || selectedIsLiveReference);
 
   function press(key: KeypadKey) {
     if (dataEntryLocked) return;
@@ -251,9 +255,9 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
 
           <View style={styles.editingRow} testID="keypad-number-editing">
             {/* §8.6 `Create link`: takes the slot `.` used to occupy in this row. Enabled
-                only for a selected number or result (`canCreateLink`); creates a free
-                reference near the selected value, same placement as §8.7 continuation
-                but without the operator/empty-number (`createLinkToValue`). */}
+                for a selected number, result, or live reference (`canCreateLink`); creates
+                a free reference near the selected value, same placement as §8.7
+                continuation but without the operator/empty-number (`createLinkToValue`). */}
             <Key
               label="Create link"
               icon={<LinkIcon size={20} color={glyphColor} />}

@@ -689,11 +689,12 @@ operators are visually separated from digits.
 - **`Create link`** sits in decimal's old slot on the number-editing row: a link-glyph key,
   filled in `identityHues[0]`'s blue (the palette's own primary blue, already checked for
   deuteranopia/protanopia — reused rather than inventing a new one for keypad chrome). Enabled
-  only when the selected node is a **number** or a **result**; disabled otherwise (including
-  during Select group and Select all). Pressing it calls the same `createLinkToValue` the
-  `Create link` context-menu item uses (§8.6) — a free reference near the selected value, with
-  no bundled operator or empty number. Narrower than the menu action: no live-reference source
-  here, since there is no on-screen "value" concept for a linked cell without also selecting it.
+  for a selected **number**, **result**, or **live reference** — same eligibility as the
+  `Create link` context-menu item (§8.6), so chaining a link off an existing link works from
+  the keypad too; a **dangling** reference (target gone) stays disabled, same as every other
+  data-entry key. Disabled during Select group and Select all regardless. Pressing it calls the
+  same `createLinkToValue` the context-menu item uses — a free reference near the selected
+  value, with no bundled operator or empty number.
 - **`Add components`** (squares-plus glyph) and **`Notes`** (pencil-square glyph) fill out the
   rest of the number-editing row, sharing `Create link`'s blue fill. Declared but not yet
   functional — same "affordance before behaviour" pattern as the context menu's `Copy` or the

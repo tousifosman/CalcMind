@@ -741,6 +741,95 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
   });
 });
 
+describe('dispatchEditorCommand: Create link keypad button (§8.6)', () => {
+  test('on a selected number, drops a free reference and selects it', () => {
+    const n = addNumberNode({ x: 0, y: 0 }, '3');
+    selectNode(n);
+
+    dispatchEditorCommand({ region: 'createLink' });
+
+    const doc = useDocumentStore.getState().document;
+    const refs = Object.values(doc.nodes).filter((node) => node.kind === 'reference');
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({ kind: 'reference', targetNodeId: n, chainId: null });
+    expect(useUiStore.getState().selectedNodeId).toBe(refs[0]!.id);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+  });
+
+  test('on a selected result, drops a free reference to the result', () => {
+    dispatchEditorCommand({ region: 'digit', value: '3' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '4' });
+    dispatchEditorCommand({ region: 'equals' });
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (node) => node.kind === 'result',
+    )!;
+    selectNode(result.id);
+
+    dispatchEditorCommand({ region: 'createLink' });
+
+    const refs = Object.values(useDocumentStore.getState().document.nodes).filter(
+      (node) => node.kind === 'reference',
+    );
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({ kind: 'reference', targetNodeId: result.id });
+  });
+
+  test('on a selected live reference, drops a second reference to it (chaining links, unlike operator)', () => {
+    const n = addNumberNode({ x: 0, y: 0 }, '3');
+    const firstRef = createLinkToValue(n);
+    selectNode(firstRef);
+
+    dispatchEditorCommand({ region: 'createLink' });
+
+    const refs = Object.values(useDocumentStore.getState().document.nodes).filter(
+      (node) => node.kind === 'reference',
+    );
+    expect(refs).toHaveLength(2);
+    const child = refs.find((r) => r.targetNodeId === firstRef)!;
+    expect(child).toBeDefined();
+    expect(useUiStore.getState().selectedNodeId).toBe(child.id);
+  });
+
+  test('on a selected dangling reference, no-ops', () => {
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.nodes.dangling = {
+        id: 'dangling',
+        kind: 'reference',
+        position: { x: 0, y: 0 },
+        chainId: null,
+        createdAt: 0,
+        targetNodeId: 'gone',
+        lastKnownDisplay: '42',
+      };
+    });
+    selectNode('dangling');
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'createLink' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(
+      Object.values(useDocumentStore.getState().document.nodes).filter(
+        (node) => node.kind === 'reference' && node.id !== 'dangling',
+      ),
+    ).toHaveLength(0);
+  });
+
+  test('with nothing selected, no-ops', () => {
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'createLink' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(
+      Object.values(useDocumentStore.getState().document.nodes).filter(
+        (node) => node.kind === 'reference',
+      ),
+    ).toHaveLength(0);
+  });
+});
+
 describe('dispatchEditorCommand: arrows move selection along a chain (§8.5)', () => {
   test('moves from a selected member to its neighbour, and stops at the ends', () => {
     const a = addNumberNode({ x: 0, y: 0 }, '1');

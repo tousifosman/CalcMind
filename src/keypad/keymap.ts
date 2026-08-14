@@ -353,12 +353,22 @@ export function dispatchEditorCommand(command: EditorCommand): void {
       ? selectedNode
       : undefined;
 
-  // Keypad `Create link`: only a selected number or result is eligible (the keypad
-  // button's on-screen `disabled` state mirrors this exactly). No-op otherwise — the
-  // button is disabled in that case, so this only guards a stale/hardware-triggered
+  // Keypad `Create link`: a selected number, result, or *live* reference is eligible —
+  // same set `createLinkToValue` itself accepts, and the keypad button's on-screen
+  // `disabled` state mirrors this exactly (§8.6). A dangling reference (target gone)
+  // stays ineligible, same as it rejects every other data-entry key. No-op otherwise —
+  // the button is disabled in that case, so this only guards a stale/hardware-triggered
   // press against a selection that changed underneath it.
   if (command.region === 'createLink') {
-    if (selectedNode && (selectedNode.kind === 'number' || selectedNode.kind === 'result')) {
+    const targetExists =
+      selectedNode?.kind === 'reference' &&
+      useDocumentStore.getState().document.nodes[selectedNode.targetNodeId] !== undefined;
+    if (
+      selectedNode &&
+      (selectedNode.kind === 'number' ||
+        selectedNode.kind === 'result' ||
+        targetExists)
+    ) {
       createLinkToValue(selectedNode.id);
     }
     return;
