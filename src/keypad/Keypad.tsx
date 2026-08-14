@@ -14,6 +14,7 @@ import ArrowUturnLeftIcon from 'react-native-heroicons/outline/ArrowUturnLeftIco
 import ArrowUturnRightIcon from 'react-native-heroicons/outline/ArrowUturnRightIcon';
 import BackspaceIcon from 'react-native-heroicons/outline/BackspaceIcon';
 import ChevronDownIcon from 'react-native-heroicons/outline/ChevronDownIcon';
+import Cog6ToothIcon from 'react-native-heroicons/outline/Cog6ToothIcon';
 import LinkIcon from 'react-native-heroicons/outline/LinkIcon';
 import SquaresPlusIcon from 'react-native-heroicons/outline/SquaresPlusIcon';
 import PencilSquareIcon from 'react-native-heroicons/outline/PencilSquareIcon';
@@ -195,6 +196,16 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           onPress={requestClearConfirm}
           disabled={documentEmpty}
           testID="keypad-mode-clear-all"
+        />
+        {/* Declared, not yet functional - same "affordance before behaviour" pattern as
+            Documents/ƒ(x)/Graph above and Add components/Notes below. Icon-only (no
+            settings screen exists yet to name in a label). `modeKeyLabelDisabled`'s color
+            stands in for the disabled tint ModeKey would otherwise only apply to text. */}
+        <ModeKey
+          label="Settings"
+          icon={<Cog6ToothIcon size={18} color={styles.modeKeyLabelDisabled.color} />}
+          disabled
+          testID="keypad-mode-settings"
         />
       </View>
 
