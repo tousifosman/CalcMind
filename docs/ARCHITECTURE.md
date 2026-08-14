@@ -1046,11 +1046,13 @@ which renders through the same `react-native-svg` dependency. Import from a styl
 (`outline` / `solid` / `mini` / `micro`); deep imports
 (`react-native-heroicons/outline/TrashIcon`) keep the web bundle from pulling the whole set.
 
-One exception: the mode strip's Clear all key (§8.5) uses `ClearAllIcon`, a hand-authored "AC"
-monogram - Heroicons has no letter-glyph icons to import. It matches the outline set's own
-conventions (24x24 viewBox, stroke-width 1.5, round caps/joins, fill: none, `color` resolved the
-same way `react-native-heroicons` resolves it) rather than deviating from them; see the component
-file for the frame corner-radius ratio finding that made the first draft look wrong.
+One exception: the mode strip's Clear all key (§8.5) uses `ClearAllIcon`, an "AC" monogram -
+Heroicons has no letter-glyph icons to import, and two rounds of hand-drawn SVG letterforms
+(bad enough a person flagged it) confirmed that path data isn't how to draw letters when a font
+renderer is sitting right there. It renders real text - `tokens.numeralFontWeight`, the same
+plain-system-font weight every other Text in the app already uses, not a new typeface - inside a
+bordered rounded square sized off Heroicons' own stroke-to-viewBox and corner-radius ratios, so it
+still reads as part of the same icon set at a glance.
 
 ### 11.4 Performance budget
 
