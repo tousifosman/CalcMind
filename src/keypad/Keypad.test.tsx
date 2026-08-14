@@ -347,6 +347,19 @@ describe('Clear all mode-strip button (P7.8)', () => {
     expect(findByTestID(renderer, 'keypad-mode-clear-all').props.disabled).toBe(false);
   });
 
+  test('the AC icon dims with the label - grey while disabled, dark once enabled', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-mode-clear-all').props.icon.props.color).toBe('#B3B3B3');
+
+    act(() => {
+      addNumberNode({ x: 0, y: 0 }, '7');
+    });
+    expect(findByTestID(renderer, 'keypad-mode-clear-all').props.icon.props.color).toBe('#333333');
+  });
+
   test('pressing it raises the same confirmation as swipe-to-clear', () => {
     act(() => {
       addNumberNode({ x: 0, y: 0 }, '7');

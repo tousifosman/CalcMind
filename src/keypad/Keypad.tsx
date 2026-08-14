@@ -16,6 +16,7 @@ import ChevronDownIcon from 'react-native-heroicons/outline/ChevronDownIcon';
 import Cog6ToothIcon from 'react-native-heroicons/outline/Cog6ToothIcon';
 import FolderIcon from 'react-native-heroicons/outline/FolderIcon';
 import { decimalSeparatorFor } from '../engine/format';
+import { ClearAllIcon } from '../ui/ClearAllIcon';
 import { glyphColor, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
@@ -183,9 +184,12 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
         <ModeKey label="Graph" disabled testID="keypad-mode-graph" />
         {/* Discoverable clear (P7.8). Same confirm gate as swipe-across-backspace
             (decision #15); disabled on an empty canvas so the affordance does not
-            invite a no-op confirm. */}
+            invite a no-op confirm. The AC monogram is the strip's one hand-authored
+            icon - see ClearAllIcon.tsx for why. Icon dims with the label since,
+            unlike Documents/Settings, this button's disabled state is conditional. */}
         <ModeKey
           label="Clear all"
+          icon={<ClearAllIcon size={18} color={documentEmpty ? '#B3B3B3' : '#333333'} />}
           onPress={requestClearConfirm}
           disabled={documentEmpty}
           testID="keypad-mode-clear-all"
