@@ -364,8 +364,9 @@ interface KeyProps {
    *  (same pattern as ModeKey's Heroicons slot). */
   icon?: ReactNode;
   /** Per-instance overrides layered after `styles.key` / `styles.keyDisabled` — e.g.
-   *  `gridEditingKey`'s taller height to match the digit row it now sits in, or
-   *  `linkKey`'s blue fill. */
+   *  `gridEditingKey`'s teal fill to match `0`, or `linkKey`'s blue. Every key shares
+   *  `key`'s height (§8.5 — see its comment) so rows across the two keypad columns stay
+   *  aligned; an override here should not touch `height` without checking that. */
   style?: StyleProp<ViewStyle>;
   /** Per-instance override for the fallback label `Text` (ignored when `icon` is set) —
    *  e.g. `keyLabel` so decimal / `+/-` read white on their teal fill, matching `DigitKey`,
@@ -570,7 +571,14 @@ const styles = StyleSheet.create({
   },
   key: {
     flex: 1,
-    height: 44,
+    // Matches `digitKey`'s height (§8.5): the main column (digit grid + number-editing
+    // row + history row) and the accent column (operators + `()` + `=`) both stack six
+    // rows now that `()` moved into the accent column, and every row uses the shared
+    // `KEY_GAP` bottom margin — so keeping every key the same height is what makes the
+    // two columns land on the same six row boundaries instead of drifting apart by a few
+    // px per row. Previously 44 vs `digitKey`'s 48, invisible while the columns had
+    // different row counts; became a visible misalignment once they matched.
+    height: 48,
     marginHorizontal: KEY_GAP / 2,
     borderRadius: 8,
     backgroundColor: '#DADADA',
@@ -588,11 +596,9 @@ const styles = StyleSheet.create({
   keyLabelDisabled: {
     color: '#B3B3B3',
   },
-  /** Decimal / `+/-` now live in the digit grid's `0` row (§8.5): match that row's
-   *  48px cell height so the row reads as one aligned line instead of the generic
-   *  44px `key` height stepping down. Horizontal margin is already shared with `key`. */
+  /** Decimal / `+/-` now live in the digit grid's `0` row (§8.5) and share `0`'s teal fill.
+   *  Height and horizontal margin already match `key`'s own — no override needed for those. */
   gridEditingKey: {
-    height: 48,
     backgroundColor: rolePalette.number.fill,
   },
   /** §8.6 `Create link`: a blue distinct from every role fill (number/operator/equals/
@@ -612,7 +618,11 @@ const styles = StyleSheet.create({
     marginLeft: KEY_GAP,
   },
   accentKey: {
-    height: 44,
+    // Explicit despite matching `key`'s own height — this overrides `key`'s
+    // `marginHorizontal` too, and `borderRadius: 8` from `key` still needs to be there in
+    // the merged style array. Kept in sync with `key`'s height (see its comment: this is
+    // what keeps the accent column's six rows aligned with the main column's six).
+    height: 48,
     marginHorizontal: 0,
     marginBottom: KEY_GAP,
     backgroundColor: rolePalette.operator.fill,

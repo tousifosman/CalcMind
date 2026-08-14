@@ -662,6 +662,14 @@ operators are visually separated from digits.
 
 - Keys act on the **selected node** if there is one, otherwise they create a new node at the
   caret/last-tap point.
+- **Every key is the same 48px tall.** The main column (digit grid + number-editing row +
+  history row) and the accent column (operators + `()` + `=`) both stack six rows, and every
+  row uses the same `KEY_GAP` bottom margin, so a shared height is what keeps the two columns'
+  rows landing on the same lines instead of drifting apart by a few px per row. This was a
+  real, reported bug: `key`'s base height (and therefore every key built on it —
+  `OperatorKey`, `EqualsKey`, `Create link`, etc.) used to be 44px against `digitKey`'s 48px,
+  invisible while the two columns had different row counts and only became a visible
+  cumulative stagger once `()`'s move (above) made them match.
 - Decimal and `+/-` share `0`'s fill (`rolePalette.number.fill`, the same teal as every digit)
   and label style, so the bottom digit row reads as one colour rather than `0` standing out
   from its neighbours — and share its `disabled` rule too: they are number keys, not a

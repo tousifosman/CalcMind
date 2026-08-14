@@ -357,6 +357,34 @@ describe('Create link keypad button (§8.6)', () => {
   });
 });
 
+describe('main column and accent column rows stay aligned (§8.5)', () => {
+  test('every key shares one row height, so the two six-row columns land on the same lines', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    // One representative per row on each side: digit grid (4 rows) + number-editing row +
+    // history row on the left; operators + `()` + `=` on the right — six rows each since
+    // `()` moved into the accent column. If any of these drifts from the rest, the two
+    // columns step out of alignment the way the reported screenshot showed.
+    const testIDs = [
+      'keypad-digit-7',
+      'keypad-decimal',
+      'keypad-link',
+      'keypad-undo',
+      'keypad-op-divide',
+      'keypad-paren',
+      'keypad-equals',
+    ];
+    const heights = testIDs.map(
+      (testID) => findHostByTestID(renderer.root, testID).props.style.height,
+    );
+    expect(new Set(heights).size).toBe(1);
+    expect(heights[0]).toBe(48);
+  });
+});
+
 describe('() moved into the accent column, under + (§8.5)', () => {
   test('still reports the paren region and follows numberEditingKeysDisabled', () => {
     const presses: KeypadKey[] = [];
