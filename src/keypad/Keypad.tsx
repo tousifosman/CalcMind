@@ -164,13 +164,15 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
         <ModeKey
           label="Dismiss keypad"
           icon={<ChevronDownIcon size={18} color="#333333" />}
+          iconOnly
           onPress={hideKeypad}
           testID="keypad-mode-dismiss"
         />
         {/* Documents (P5) and functions/graph (§10.2, §17.2) have no feature behind them
-            yet - all three render disabled rather than functional-looking but inert. Icon-only
-            (folder), same treatment as the settings button below - "Documents" would not fit
-            this strip on a small screen. */}
+            yet - all three render disabled rather than functional-looking but inert. The
+            "Documents" label stays alongside the folder icon (unlike the dismiss chevron
+            above) - the mode strip has room for it, and this button is the one users are
+            most likely to look for by name. */}
         <ModeKey
           label="Documents"
           icon={<FolderIcon size={18} color="#B3B3B3" />}
@@ -189,8 +191,8 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           testID="keypad-mode-clear-all"
         />
         {/* Settings, at the strip's end. No feature behind it yet (same placeholder rule
-            as Documents/functions/graph above); icon-only like Dismiss keypad, since there
-            is no room for a "Settings" label at this end of the strip on a small screen. */}
+            as Documents/functions/graph above); label stays next to the cog, same as
+            Documents above. */}
         <ModeKey
           label="Settings"
           icon={<Cog6ToothIcon size={18} color="#B3B3B3" />}
@@ -420,17 +422,24 @@ function EqualsKey({
 function ModeKey({
   label,
   icon,
+  iconOnly,
   onPress,
   disabled,
   testID,
 }: {
   label: string;
-  /** When set, rendered instead of the label text; `label` stays the a11y name. */
+  /** Rendered alongside the label by default. Pass `iconOnly` to replace the label with it
+   *  instead (§8.5's dismiss chevron - there is no room for "Dismiss keypad" text in the
+   *  strip); `label` stays the a11y name either way. */
   icon?: ReactNode;
+  iconOnly?: boolean;
   onPress?: () => void;
   disabled?: boolean;
   testID?: string;
 }) {
+  const textLabel = (
+    <Text style={[styles.modeKeyLabel, disabled && styles.modeKeyLabelDisabled]}>{label}</Text>
+  );
   return (
     <TouchableOpacity
       style={styles.modeKey}
@@ -440,8 +449,15 @@ function ModeKey({
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
     >
-      {icon ?? (
-        <Text style={[styles.modeKeyLabel, disabled && styles.modeKeyLabelDisabled]}>{label}</Text>
+      {icon && iconOnly ? (
+        icon
+      ) : icon ? (
+        <View style={styles.modeKeyContent}>
+          {icon}
+          {textLabel}
+        </View>
+      ) : (
+        textLabel
       )}
     </TouchableOpacity>
   );
@@ -459,12 +475,17 @@ const styles = StyleSheet.create({
   modeStrip: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 4,
+    paddingHorizontal: 2,
     paddingBottom: 8,
   },
   modeKey: {
     paddingVertical: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 3,
+  },
+  modeKeyContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   modeKeyLabel: {
     color: '#333333',
