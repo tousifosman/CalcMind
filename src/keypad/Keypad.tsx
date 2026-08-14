@@ -69,6 +69,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   const clearConfirmVisible = useUiStore((state) => state.clearConfirmVisible);
   const requestClearConfirm = useUiStore((state) => state.requestClearConfirm);
   const dismissClearConfirm = useUiStore((state) => state.dismissClearConfirm);
+  const openSettings = useUiStore((state) => state.openSettings);
   const groupSelectedIds = useUiStore((state) => state.groupSelectedIds);
   const allSelected = useUiStore((state) => state.allSelected);
   // Empty-canvas gate for the Clear all mode-strip button — disabled when there
@@ -197,14 +198,12 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           disabled={documentEmpty}
           testID="keypad-mode-clear-all"
         />
-        {/* Declared, not yet functional - same "affordance before behaviour" pattern as
-            Documents/ƒ(x)/Graph above and Add components/Notes below. Icon-only (no
-            settings screen exists yet to name in a label). `modeKeyLabelDisabled`'s color
-            stands in for the disabled tint ModeKey would otherwise only apply to text. */}
+        {/* Icon-only (no text) - opens the settings sheet (§8.5), currently just an About
+            row (SettingsSheet.tsx). */}
         <ModeKey
           label="Settings"
-          icon={<Cog6ToothIcon size={18} color={styles.modeKeyLabelDisabled.color} />}
-          disabled
+          icon={<Cog6ToothIcon size={18} color="#333333" />}
+          onPress={openSettings}
           testID="keypad-mode-settings"
         />
       </View>

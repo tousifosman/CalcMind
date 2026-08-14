@@ -112,6 +112,13 @@ export interface UiState {
    *  the insertion caret (P3.6); cleared on release before any document commit. */
   dragSnap: DragSnapState | null;
   setDragSnap: (state: DragSnapState | null) => void;
+
+  /** Settings sheet (§8.5, mode-strip cog). Ephemeral, same reasoning as every other
+   *  prompt in this store: opening it is not a document edit, so it sits outside undo
+   *  history rather than on `document`. */
+  settingsVisible: boolean;
+  openSettings: () => void;
+  closeSettings: () => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -157,4 +164,8 @@ export const useUiStore = create<UiState>((set) => ({
 
   dragSnap: null,
   setDragSnap: (dragSnap) => set({ dragSnap }),
+
+  settingsVisible: false,
+  openSettings: () => set({ settingsVisible: true }),
+  closeSettings: () => set({ settingsVisible: false }),
 }));

@@ -658,7 +658,7 @@ operators are visually separated from digits.
 | Number editing | **Create link**, **Add components**, **Notes** |
 | History | undo, redo, backspace |
 | Operators (accent column) | `÷ × − + () =` — `()` sits underneath `+` |
-| Mode strip | dismiss keypad, documents, functions *(later)*, graph *(later)*, **Clear all**, settings *(later, icon-only cog)* |
+| Mode strip | dismiss keypad, documents, functions *(later)*, graph *(later)*, **Clear all**, **Settings** (icon-only cog) |
 
 - Keys act on the **selected node** if there is one, otherwise they create a new node at the
   caret/last-tap point.
@@ -724,6 +724,14 @@ operators are visually separated from digits.
   enabled. If the group includes a result, the operator column (`÷ × − +`) stays enabled for
   §8.7 continuation; otherwise those operators are disabled too. Backspace deletes the whole
   group in one undo entry.
+- **Settings** (`SettingsSheet.tsx`) is a full-screen sheet opened from the mode strip's cog,
+  with its own `settingsVisible` flag on `uiStore` — ephemeral like every other prompt in this
+  section, not a document edit. Styled as a one-off dark/amber sheet (not this app's usual light
+  keypad chrome, and not a preview of P7.4's still-pending theme system) so it can match a
+  concrete visual reference without waiting on that work. Currently holds a single row, **About**
+  (app name, `package.json` version, tagline) — everything else that plausibly belongs here
+  (angle units, decimal format, Clear all content, theme) has no feature behind it yet, so it
+  stays off the sheet rather than appearing as an inert placeholder row.
 
 ### 8.6 Selection and context menus
 
