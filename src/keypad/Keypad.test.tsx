@@ -70,6 +70,7 @@ describe('Keypad', () => {
     expect(findByTestID(renderer, 'keypad-mode-functions')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-mode-graph')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-mode-clear-all')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-mode-settings')).toBeTruthy();
   });
 
   test('the decimal key shows the locale glyph but reports a bare "decimal" press', () => {
@@ -97,6 +98,7 @@ describe('Keypad', () => {
     expect(findByTestID(renderer, 'keypad-mode-functions').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-mode-graph').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-mode-documents').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-mode-settings').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-mode-dismiss').props.disabled).toBeFalsy();
   });
 

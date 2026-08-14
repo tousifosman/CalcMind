@@ -13,6 +13,8 @@ import ArrowUturnLeftIcon from 'react-native-heroicons/outline/ArrowUturnLeftIco
 import ArrowUturnRightIcon from 'react-native-heroicons/outline/ArrowUturnRightIcon';
 import BackspaceIcon from 'react-native-heroicons/outline/BackspaceIcon';
 import ChevronDownIcon from 'react-native-heroicons/outline/ChevronDownIcon';
+import Cog6ToothIcon from 'react-native-heroicons/outline/Cog6ToothIcon';
+import FolderIcon from 'react-native-heroicons/outline/FolderIcon';
 import { decimalSeparatorFor } from '../engine/format';
 import { glyphColor, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
@@ -166,8 +168,15 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           testID="keypad-mode-dismiss"
         />
         {/* Documents (P5) and functions/graph (§10.2, §17.2) have no feature behind them
-            yet - all three render disabled rather than functional-looking but inert. */}
-        <ModeKey label="Documents" disabled testID="keypad-mode-documents" />
+            yet - all three render disabled rather than functional-looking but inert. Icon-only
+            (folder), same treatment as the settings button below - "Documents" would not fit
+            this strip on a small screen. */}
+        <ModeKey
+          label="Documents"
+          icon={<FolderIcon size={18} color="#B3B3B3" />}
+          disabled
+          testID="keypad-mode-documents"
+        />
         <ModeKey label="ƒ(x)" disabled testID="keypad-mode-functions" />
         <ModeKey label="Graph" disabled testID="keypad-mode-graph" />
         {/* Discoverable clear (P7.8). Same confirm gate as swipe-across-backspace
@@ -178,6 +187,15 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           onPress={requestClearConfirm}
           disabled={documentEmpty}
           testID="keypad-mode-clear-all"
+        />
+        {/* Settings, at the strip's end. No feature behind it yet (same placeholder rule
+            as Documents/functions/graph above); icon-only like Dismiss keypad, since there
+            is no room for a "Settings" label at this end of the strip on a small screen. */}
+        <ModeKey
+          label="Settings"
+          icon={<Cog6ToothIcon size={18} color="#B3B3B3" />}
+          disabled
+          testID="keypad-mode-settings"
         />
       </View>
 
