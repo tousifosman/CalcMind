@@ -14,6 +14,8 @@ import {
   setNodeRaw,
 } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
+import { rolePalette } from '../ui/tokens';
+import { findHostByTestID } from '../nodes/testUtils';
 
 beforeEach(() => {
   act(() => {
@@ -21,6 +23,11 @@ beforeEach(() => {
       keypadVisible: true,
       clearConfirmVisible: false,
       groupSelectedIds: new Set(),
+      // `allSelected` was missing here — a test that called `selectAll()` (Select all
+      // locks data-entry keys) leaked `allSelected: true` into whichever test ran next,
+      // silently disabling every data-entry key for it. Caught by a later test in this
+      // file asserting `()` was enabled with nothing selected and getting `true` instead.
+      allSelected: false,
       selectedNodeId: null,
       editingNodeId: null,
     });
@@ -54,6 +61,9 @@ describe('Keypad', () => {
     expect(findByTestID(renderer, 'keypad-decimal')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-sign')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-paren')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-link')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-add-components')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-notes')).toBeTruthy();
     expect(renderer.root.findAllByProps({ testID: 'keypad-paren-open' })).toHaveLength(0);
     expect(renderer.root.findAllByProps({ testID: 'keypad-paren-close' })).toHaveLength(0);
     expect(findByTestID(renderer, 'keypad-history')).toBeTruthy();
@@ -117,6 +127,10 @@ describe('Keypad', () => {
 
     expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-digit-0').props.disabled).toBe(true);
+    // Decimal / +/- are number keys now (not a separate number-editing carve-out): a
+    // selected linked cell disables them right alongside the digits.
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
     act(() => {
       findByTestID(renderer, 'keypad-digit-5').props.onPress?.();
     });
@@ -126,6 +140,10 @@ describe('Keypad', () => {
       selectNode(result.id);
     });
     expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
+    // Same for a selected result — this was the reported gap: decimal / +/- used to stay
+    // enabled here even though every digit disabled.
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
 
     act(() => {
       selectNode(operatorId);
@@ -195,11 +213,13 @@ describe('Keypad', () => {
 
     const parenLabel = findByTestID(renderer, 'keypad-paren').findByType('Text' as never);
     expect(parenLabel.children).toEqual(['()']);
-    // `()` shares the number-editing row with decimal / +/- (same Key cell size).
+    // Decimal / `+/-` moved into the digit grid's `0` row, and `()` moved into the accent
+    // column under `+` (§8.5); the number-editing row now holds only icon keys —
+    // `Create link`, `Add components`, `Notes` — so no Text glyphs remain in it.
     const editingLabels = findByTestID(renderer, 'keypad-number-editing')
       .findAllByType('Text' as never)
       .map((node) => node.children[0]);
-    expect(editingLabels).toEqual(['.', '+/-', '()']);
+    expect(editingLabels).toEqual([]);
     // Bottom history row is undo, redo, backspace — left to right, all Heroicons
     // (arrow-uturn-left / right, backspace). No Text glyphs in this row.
     // `findByProps({ testID })` hits the Key composite (label = a11y name); the
@@ -218,6 +238,287 @@ describe('Keypad', () => {
     expect(undo.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
     expect(redo.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
     expect(backspace.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
+  });
+});
+
+describe('Create link keypad button (§8.6)', () => {
+  test('renders an icon (no text glyph), with "Create link" as the a11y name', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    const link = findByTestID(renderer, 'keypad-link');
+    expect(link.props.label).toBe('Create link');
+    expect(link.findAllByType('Text' as never)).toHaveLength(0);
+    expect(link.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
+  });
+
+  test('disabled when nothing is selected', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
+  });
+
+  test('enabled when a number is selected; pressing reports the createLink region', () => {
+    const presses: KeypadKey[] = [];
+    let n!: string;
+    act(() => {
+      n = addNumberNode({ x: 0, y: 0 }, '3');
+      selectNode(n);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad onKeyPress={(key) => presses.push(key)} />);
+    });
+
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(false);
+    act(() => {
+      findByTestID(renderer, 'keypad-link').props.onPress();
+    });
+    expect(presses).toEqual([{ region: 'createLink' }]);
+  });
+
+  test('enabled when a result is selected', () => {
+    act(() => {
+      const n = addNumberNode({ x: 0, y: 0 }, '3');
+      appendEqualsNode(n);
+      const result = Object.values(useDocumentStore.getState().document.nodes).find(
+        (node) => node.kind === 'result',
+      )!;
+      selectNode(result.id);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(false);
+  });
+
+  test('enabled when a live linked cell (reference) is selected', () => {
+    act(() => {
+      const n = addNumberNode({ x: 0, y: 0 }, '3');
+      const { referenceId } = continueFromValue(n, '+');
+      selectNode(referenceId);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    // Same eligibility as the context-menu `Create link` action (§8.6): chaining a link
+    // off an existing link works from the keypad too.
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(false);
+  });
+
+  test('disabled when a dangling linked cell (target gone) is selected', () => {
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.nodes.dangling = {
+          id: 'dangling',
+          kind: 'reference',
+          position: { x: 0, y: 0 },
+          chainId: null,
+          createdAt: 0,
+          targetNodeId: 'gone',
+          lastKnownDisplay: '42',
+        };
+      });
+      selectNode('dangling');
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
+  });
+
+  test('disabled when an operator is selected', () => {
+    act(() => {
+      const op = addOperatorNode({ x: 0, y: 0 }, '+');
+      selectNode(op);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
+  });
+
+  test('disabled during Select group, even with a number selected beforehand', () => {
+    let n!: string;
+    let op!: string;
+    act(() => {
+      n = addNumberNode({ x: 0, y: 0 }, '1');
+      op = addOperatorNode({ x: 50, y: 0 }, '+');
+      const b = addNumberNode({ x: 84, y: 0 }, '2');
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.chains.ch = { id: 'ch', members: [n, op, b], anchor: { x: 0, y: 0 } };
+        draft.nodes[n].chainId = 'ch';
+        draft.nodes[op].chainId = 'ch';
+        draft.nodes[b].chainId = 'ch';
+      });
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+      selectGroup(op);
+    });
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
+  });
+
+  test('disabled while Select all is active', () => {
+    act(() => {
+      addNumberNode({ x: 0, y: 0 }, '1');
+      selectAll();
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
+  });
+});
+
+describe('main column and accent column rows stay aligned (§8.5)', () => {
+  test('every key shares one row height, so the two six-row columns land on the same lines', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    // One representative per row on each side: digit grid (4 rows) + number-editing row +
+    // history row on the left; operators + `()` + `=` on the right — six rows each since
+    // `()` moved into the accent column. If any of these drifts from the rest, the two
+    // columns step out of alignment the way the reported screenshot showed.
+    const testIDs = [
+      'keypad-digit-7',
+      'keypad-decimal',
+      'keypad-link',
+      'keypad-undo',
+      'keypad-op-divide',
+      'keypad-paren',
+      'keypad-equals',
+    ];
+    const heights = testIDs.map(
+      (testID) => findHostByTestID(renderer.root, testID).props.style.height,
+    );
+    expect(new Set(heights).size).toBe(1);
+    expect(heights[0]).toBe(48);
+  });
+});
+
+describe('() moved into the accent column, under + (§8.5)', () => {
+  test('still reports the paren region and follows numberEditingKeysDisabled', () => {
+    const presses: KeypadKey[] = [];
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad onKeyPress={(key) => presses.push(key)} />);
+    });
+
+    expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBeFalsy();
+    act(() => {
+      findByTestID(renderer, 'keypad-paren').props.onPress();
+    });
+    expect(presses).toEqual([{ region: 'paren' }]);
+
+    act(() => {
+      const op = addOperatorNode({ x: 0, y: 0 }, '+');
+      selectNode(op);
+    });
+    // An operator selected disables the number-editing row, () included, same as before
+    // the move (§8.5: "the number-editing row … is disabled too" while an operator is
+    // selected — `()` itself replaces nothing, it just still belongs to that rule).
+    expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBe(true);
+  });
+
+  test('is filled the same amber as the other operator keys', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    const paren = findHostByTestID(renderer.root, 'keypad-paren');
+    const add = findHostByTestID(renderer.root, 'keypad-op-add');
+    expect(paren.props.style).toMatchObject({ backgroundColor: rolePalette.operator.fill });
+    expect(paren.props.style).toMatchObject({ backgroundColor: add.props.style.backgroundColor });
+  });
+});
+
+describe('Decimal / +/- share 0\'s colour (§8.5)', () => {
+  test('are filled the same teal as the digit keys, not the generic grey key', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    const decimal = findHostByTestID(renderer.root, 'keypad-decimal');
+    const sign = findHostByTestID(renderer.root, 'keypad-sign');
+    const zero = findHostByTestID(renderer.root, 'keypad-digit-0');
+    expect(decimal.props.style).toMatchObject({ backgroundColor: rolePalette.number.fill });
+    expect(sign.props.style).toMatchObject({ backgroundColor: rolePalette.number.fill });
+    expect(decimal.props.style.backgroundColor).toBe(zero.props.style.backgroundColor);
+    // `()`, elsewhere in the accent column, still keeps the operator amber — this is
+    // decimal/`+/-` specifically picking up the *number* fill, not a global recolour.
+    expect(decimal.props.style.backgroundColor).not.toBe(rolePalette.operator.fill);
+  });
+
+  test('when disabled, turn the same grey as a disabled digit key rather than fading teal', () => {
+    act(() => {
+      const result = addNumberNode({ x: 0, y: 0 }, '3');
+      appendEqualsNode(result);
+      const r = Object.values(useDocumentStore.getState().document.nodes).find(
+        (node) => node.kind === 'result',
+      )!;
+      selectNode(r.id);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    const decimal = findHostByTestID(renderer.root, 'keypad-decimal');
+    const sign = findHostByTestID(renderer.root, 'keypad-sign');
+    const zero = findHostByTestID(renderer.root, 'keypad-digit-0');
+    // Same swapped-to-grey background as `0`, not a faded version of the teal fill.
+    expect(decimal.props.style.backgroundColor).toBe(zero.props.style.backgroundColor);
+    expect(sign.props.style.backgroundColor).toBe(zero.props.style.backgroundColor);
+    expect(decimal.props.style.backgroundColor).not.toBe(rolePalette.number.fill);
+  });
+});
+
+describe('Add components / Notes placeholders (§8.6, behaviour TBD)', () => {
+  test('render disabled with their icon, Create link\'s blue fill, and no onPress', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    for (const [testID, label] of [
+      ['keypad-add-components', 'Add components'],
+      ['keypad-notes', 'Notes'],
+    ] as const) {
+      const key = findByTestID(renderer, testID);
+      expect(key.props.disabled).toBe(true);
+      expect(key.props.label).toBe(label);
+      expect(key.props.onPress).toBeUndefined();
+      expect(key.findAllByProps({ accessibilityRole: 'Svg' }).length).toBeGreaterThan(0);
+      expect(key.findAllByType('Text' as never)).toHaveLength(0);
+    }
+  });
+
+  test('stay disabled regardless of selection (behaviour not wired up yet)', () => {
+    let n!: string;
+    act(() => {
+      n = addNumberNode({ x: 0, y: 0 }, '3');
+      selectNode(n);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    expect(findByTestID(renderer, 'keypad-add-components').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-notes').props.disabled).toBe(true);
   });
 });
 
@@ -415,6 +716,7 @@ describe('group-mode keypad (§8.5)', () => {
     expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-op-add').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBe(true);
   });
@@ -440,6 +742,9 @@ describe('group-mode keypad (§8.5)', () => {
     expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-digit-1').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBeFalsy();
+    // `Create link` is not part of the §8.7-continuation carve-out that keeps
+    // operators enabled here — a group selection is not a single number/result.
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
   });
 });
 
@@ -464,6 +769,7 @@ describe('Select all locks data-entry keys (§8.6)', () => {
       'keypad-sign',
       'keypad-backspace',
       'keypad-paren',
+      'keypad-link',
       'keypad-op-add',
       'keypad-op-multiply',
       'keypad-equals',

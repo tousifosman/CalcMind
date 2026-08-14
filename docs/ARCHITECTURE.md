@@ -654,19 +654,52 @@ operators are visually separated from digits.
 
 | Region | Keys |
 |---|---|
-| Digits | `7 8 9 / 4 5 6 / 1 2 3 / 0` |
-| Number editing | decimal separator (locale glyph, inserts canonical `.`), `+/-`, `()` |
+| Digits | `7 8 9 / 4 5 6 / 1 2 3`, bottom row decimal separator (locale glyph, inserts canonical `.`) / `0` / `+/-` — decimal and sign flank `0` rather than sitting in their own row |
+| Number editing | **Create link**, **Add components**, **Notes** |
 | History | undo, redo, backspace |
-| Operators (accent column) | `÷ × − + =` |
+| Operators (accent column) | `÷ × − + () =` — `()` sits underneath `+` |
 | Mode strip | dismiss keypad, documents, functions *(later)*, graph *(later)*, **Clear all** |
 
 - Keys act on the **selected node** if there is one, otherwise they create a new node at the
   caret/last-tap point.
-- The grouping key is a single **`()`** on the number-editing row (same cell size as `+/-` /
-  decimal; not a wide bottom-row key, and not separate `(` / `)`). Each press inserts whichever
-  side fits the chain through the selection: `)` when there is an unmatched open and a close is
-  grammatical (after a number, reference, or close paren); otherwise `(`. Hardware `(`/`)` still
-  map to an explicit side.
+- **Every key is the same 48px tall.** The main column (digit grid + number-editing row +
+  history row) and the accent column (operators + `()` + `=`) both stack six rows, and every
+  row uses the same `KEY_GAP` bottom margin, so a shared height is what keeps the two columns'
+  rows landing on the same lines instead of drifting apart by a few px per row. This was a
+  real, reported bug: `key`'s base height (and therefore every key built on it —
+  `OperatorKey`, `EqualsKey`, `Create link`, etc.) used to be 44px against `digitKey`'s 48px,
+  invisible while the two columns had different row counts and only became a visible
+  cumulative stagger once `()`'s move (above) made them match.
+- Decimal and `+/-` share `0`'s fill (`rolePalette.number.fill`, the same teal as every digit)
+  and label style, so the bottom digit row reads as one colour rather than `0` standing out
+  from its neighbours — and share its `disabled` rule too: they are number keys, not a
+  separate "number-editing" carve-out, so a selected result/reference/operator disables them
+  right alongside the digits (§8.7). Disabled, they swap to the same grey-with-a-teal-cast as
+  a disabled digit (`digitKeyDisabled`) rather than just fading their teal fill — a generic
+  `Key`'s ordinary disabled treatment (opacity only) would have left them visibly green next
+  to flat-grey digits. That disabled colour is a placeholder pending a real design pass, not a
+  finished palette choice.
+- The grouping key is a single **`()`**, in the accent column underneath `+` (own row between
+  `+` and `=`, not a wide bottom-row key, and not separate `(` / `)`). Each press inserts
+  whichever side fits the chain through the selection: `)` when there is an unmatched open and a
+  close is grammatical (after a number, reference, or close paren); otherwise `(`. Hardware
+  `(`/`)` still map to an explicit side. Styled as an `OperatorKey` — same amber
+  `rolePalette.operator.fill` and white label as `÷ × − +` — and follows the same `disabled`
+  rule as before the move (off while an operator is selected, §8.5's number-editing gate).
+- **`Create link`** sits in decimal's old slot on the number-editing row: a link-glyph key,
+  filled in `identityHues[0]`'s blue (the palette's own primary blue, already checked for
+  deuteranopia/protanopia — reused rather than inventing a new one for keypad chrome). Enabled
+  for a selected **number**, **result**, or **live reference** — same eligibility as the
+  `Create link` context-menu item (§8.6), so chaining a link off an existing link works from
+  the keypad too; a **dangling** reference (target gone) stays disabled, same as every other
+  data-entry key. Disabled during Select group and Select all regardless. Pressing it calls the
+  same `createLinkToValue` the context-menu item uses — a free reference near the selected
+  value, with no bundled operator or empty number.
+- **`Add components`** (squares-plus glyph) and **`Notes`** (pencil-square glyph) fill out the
+  rest of the number-editing row, sharing `Create link`'s blue fill. Declared but not yet
+  functional — same "affordance before behaviour" pattern as the context menu's `Copy` or the
+  canvas menu's `Add number` / `Add graph` (§8.6): always rendered disabled, with no `onPress`,
+  until their behaviour is specified.
 - The history row exposes **undo** and **redo** next to backspace — the same commands as
   `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` (or `Y`).
 - Pressing `=` on a chain selects the new **result** (not the `=` glyph) so the next operator
@@ -706,8 +739,11 @@ operators are visually separated from digits.
   focus is a single chrome layer; hue still reads from the caption and connectors.
 - `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
   nothing typed) discards it rather than leaving a blank cell on the canvas.
-- Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` on values
+- Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` and `Create link` on values
   (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
+  `Create link` drops a free reference to the value near it — no operator, not attached to a
+  chain — for a link the user wants to place and drag elsewhere rather than keep computing from
+  immediately (§8.7's third path, alongside continuation and drag-to-link).
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`, `Select all`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
   Double-tap / double-click any cell is the fast path to the same command (dwell-free, no
@@ -734,7 +770,8 @@ Dragging is not the fast path. Observed in Tydlig for results and extended here 
 value can be linked without first pressing `=`:
 
 ```
-given: a value V (number, result, or live reference) is selected, and V is not being edited
+given: a value V (a free number with no chain, or a result) is selected, and V is
+         not being edited
 when:  the user presses an operator ⊕
 then:  create chain C' underneath the first cell of V's group (or under V when free),
          containing [ reference→V , ⊕ , empty number ]
@@ -748,24 +785,55 @@ then:  create chain C' underneath the first cell of V's group (or under V when f
 
 A number that *is* being edited still appends the operator in-chain — that is how `5 + 3` is
 typed. Tap or arrow selection leaves the number selected-but-not-editing, which is the
-continuation-ready state (mirroring a selected result). A **result**, **operator**, or
-**linked cell** (reference) rejects digits — keypad number keys are disabled while any of
-those is selected. While an **operator** is selected, the number-editing row (`.`, `+/-`,
-`()`) is disabled too; pressing an operator key **replaces** that operator's symbol in place.
-Continuation seeds an empty number and focuses it, so the next digits edit in place rather
-than relying on a selected operator. For a reference, `=` / paren still append so a
-just-dropped link can finish its expression.
+continuation-ready state (mirroring a selected result) **only while that number has no chain of
+its own.** A selected number that already belongs to a chain — mid-formula, or already `=`'d —
+is still an operand of that formula rather than a free-standing value: an operator there extends
+*that* chain in place, immediately after the selected member (§8.5's append-after-anchor
+targeting), the same as typing does. `1 + 2 = 3`, select `2`, press `+` builds `1 + 2 + _` (the
+stale `=`/result get pushed past the new operand and the chain reads Incomplete until it's
+filled in, then recomputes) — it must not spin off a reference to `2` elsewhere.
+
+**A selected live reference never continuation-links, regardless of whether it's free or
+already a chain member — it always extends in place**, the same append-after-anchor path a
+chain-member number uses. A reference is already a link; pressing an operator on one means "keep
+computing with what this points to" (`ref ⊕ _`), not "make another link to this link". A
+freshly-dropped `Create link` reference (§8.6), still free (`chainId === null`) at that point,
+gets exactly the same treatment as a chain-member number getting its first extension: the
+operator+empty-number pair becomes the reference's *own* new chain, anchored at the reference's
+position, rather than spinning off a second reference elsewhere. (This was a shipped bug, caught
+live: continuation used to apply to references too, so pressing an operator on a linked cell
+created a reference-to-the-reference instead of continuing the calculation from it.)
+
+A **result**, **operator**, or **linked cell** (reference) rejects digits — keypad number keys,
+decimal, and `+/-` are all disabled while any of those is selected (decimal / `+/-` are number
+keys now, not a separate "number-editing" carve-out — §8.5). `()` is looser: it only disables
+while an **operator** is selected, since pressing an operator key there instead **replaces**
+that operator's symbol in place. Continuation (or, for a reference, extend-in-place) seeds an
+empty number and focuses it, so the next digits edit in place rather than relying on a selected
+operator. For a reference, `=` / paren still append too, so a just-dropped link can finish its
+expression without first needing an operator.
 
 This is the single most important interaction in the app: it turns "I have a value" into "…and
 now I keep working with it" in one keystroke, and it is what produces the linked trees that make
 the canvas worth having.
 
-**The other path is drag-to-link (§11).** Dragging result `R` onto another chain (or onto a free
+**The second path is drag-to-link (§11).** Dragging result `R` onto another chain (or onto a free
 node to form a new chain) uses the same §8.3 snap outcomes — no special case in `snapping.ts` —
 but the commit inserts a fresh **reference** to `R` rather than moving `R`. The source chain keeps
 its result; a miss (no candidate) cancels so `R` never becomes a free node. Number drags stay on
 the ordinary snap/move path so chaining by drag is unchanged — only continuation (and
 result-drag) create links.
+
+**The third path is the `Create link` context-menu item (§8.6).** Accepts a number, result, or
+live reference — broader than continuation's operator-key gesture, which only fires for a free
+number or a result (a selected reference never continuation-links, per above) — but skips the
+bundled operator and empty number: it drops a lone, unattached reference at the same anchor
+continuation would use (reusing its stacking rule) and selects it. Useful when the user wants a
+linked cell sitting somewhere else on the canvas — read by a later formula, or just placed as a
+labelled copy — without
+committing to an operation on it yet. From there it is an ordinary free node: drag it onto a
+chain via the normal snap path, or select it and press an operator to continue from it like any
+other live reference.
 
 ### 8.8 Value slider
 

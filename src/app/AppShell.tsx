@@ -31,6 +31,7 @@ import {
   unlinkFromParent,
   repointReference,
   editNodeLabel,
+  createLinkToValue,
 } from '../store/commands';
 import { isDanglingReference, isRepointTarget } from '../engine/reference';
 import { getDeviceLocale } from '../ui/locale';
@@ -182,6 +183,7 @@ export function AppShell() {
           onSelectAll={selectAll}
           onUnlinkFromParent={unlinkFromParent}
           onLabelNode={editNodeLabel}
+          onCreateLink={createLinkToValue}
         />
         <DanglingRecoveryOverlay />
       </View>

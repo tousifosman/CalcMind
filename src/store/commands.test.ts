@@ -12,6 +12,7 @@ import {
   appendOperatorAndNumber,
   continueFromResult,
   continueFromValue,
+  createLinkToValue,
   setOperatorSymbol,
   continuationAnchor,
   CONTINUATION_OFFSET,
@@ -291,6 +292,39 @@ describe('appendOperatorAndNumber', () => {
     useDocumentStore.getState().redo();
     expect(useDocumentStore.getState().document.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '+' });
     expect(useDocumentStore.getState().document.nodes[numberId]).toMatchObject({ kind: 'number', raw: '' });
+  });
+
+  test('inserts right after a non-last anchor, not at the chain end (§8.5 regression)', () => {
+    // 1 + 2 =
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const { numberId: b } = appendOperatorAndNumber(a, '+');
+    setNodeRaw(b, '2');
+    appendEqualsNode(b);
+
+    const doc = useDocumentStore.getState().document;
+    const chainId = doc.nodes[a]!.chainId!;
+    const before = doc.chains[chainId]!.members;
+    expect(before.map((id) => doc.nodes[id]!.kind)).toEqual([
+      'number',
+      'operator',
+      'number',
+      'equals',
+      'result',
+    ]);
+
+    // Append after `b` (`2`), which is no longer the chain's last member — `=` and its
+    // result sit after it. The new operator+number must land right after `b`, pushing
+    // `=` rightward, not past it at the literal array end. The expression is now
+    // Incomplete (trailing operator, empty operand), so the stale result is dropped
+    // rather than left showing a value the expression no longer implies.
+    const { operatorId, numberId } = appendOperatorAndNumber(b, '+');
+
+    const after = useDocumentStore.getState().document;
+    const members = after.chains[chainId]!.members;
+    expect(members).toEqual([a, before[1], b, operatorId, numberId, before[3]]);
+    // Trailing `=` is unchanged, just relocated — same node id.
+    expect(members[5]).toBe(before[3]);
+    expect(Object.values(after.nodes).filter((n) => n.kind === 'result')).toHaveLength(0);
   });
 });
 
@@ -1555,6 +1589,93 @@ describe('continueFromValue (P4.9, §8.7)', () => {
     const { chainId } = continueFromResult(result.id, '+');
 
     expect(useDocumentStore.getState().document.chains[chainId]!.anchor).toEqual({
+      x: source.anchor.x,
+      y: blockerY + CONTINUATION_OFFSET.y,
+    });
+  });
+});
+
+describe('createLinkToValue (§8.6 "Create link" context-menu action)', () => {
+  test('drops a free reference to a number at the continuation anchor and selects it', () => {
+    const n = addNumberNode({ x: 40, y: 80 }, '12');
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    const referenceId = createLinkToValue(n);
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: n,
+      chainId: null,
+    });
+    expect(doc.nodes[referenceId]!.position).toEqual({
+      x: 40,
+      y: 80 + CONTINUATION_OFFSET.y,
+    });
+    // No operator, no bundled number, no chain — unlike continuation.
+    expect(Object.values(doc.nodes).filter((node) => node.kind === 'operator')).toHaveLength(0);
+    expect(Object.values(doc.nodes).filter((node) => node.kind === 'number')).toHaveLength(1);
+    expect(Object.keys(doc.chains)).toHaveLength(0);
+    // Source is untouched.
+    expect(doc.nodes[n]).toMatchObject({ kind: 'number', raw: '12', chainId: null });
+
+    expect(useUiStore.getState().selectedNodeId).toBe(referenceId);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toBeUndefined();
+  });
+
+  test('drops a free reference to a result', () => {
+    const a = addNumberNode({ x: 10, y: 20 }, '7');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (node) => node.kind === 'result',
+    )!;
+
+    const referenceId = createLinkToValue(result.id);
+
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: result.id,
+      chainId: null,
+    });
+  });
+
+  test('drops a free reference to a live linked cell', () => {
+    const n = addNumberNode({ x: 10, y: 20 }, '3');
+    const parentRef = createLinkToValue(n);
+
+    const childRef = createLinkToValue(parentRef);
+
+    expect(useDocumentStore.getState().document.nodes[childRef]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: parentRef,
+      chainId: null,
+    });
+  });
+
+  test('rejects a non-value target', () => {
+    const op = addOperatorNode({ x: 0, y: 0 }, '+');
+    expect(() => createLinkToValue(op)).toThrow(
+      /not a number, result, or live reference/,
+    );
+  });
+
+  test('stacks under an existing occupant like continuation does', () => {
+    const a = addNumberNode({ x: 40, y: 10 }, '3');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (node) => node.kind === 'result',
+    )!;
+    const source = useDocumentStore.getState().document.chains[result.chainId!]!;
+    const blockerY = source.anchor.y + CONTINUATION_OFFSET.y;
+    addNumberNode({ x: 40, y: blockerY }, '9');
+
+    const referenceId = createLinkToValue(result.id);
+
+    expect(useDocumentStore.getState().document.nodes[referenceId]!.position).toEqual({
       x: source.anchor.x,
       y: blockerY + CONTINUATION_OFFSET.y,
     });

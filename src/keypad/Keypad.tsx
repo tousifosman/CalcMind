@@ -7,14 +7,18 @@
 // `AppShell.tsx` calls, so on-screen and hardware input can't diverge.
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
+import type { StyleProp, TextStyle, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import ArrowUturnLeftIcon from 'react-native-heroicons/outline/ArrowUturnLeftIcon';
 import ArrowUturnRightIcon from 'react-native-heroicons/outline/ArrowUturnRightIcon';
 import BackspaceIcon from 'react-native-heroicons/outline/BackspaceIcon';
 import ChevronDownIcon from 'react-native-heroicons/outline/ChevronDownIcon';
+import LinkIcon from 'react-native-heroicons/outline/LinkIcon';
+import SquaresPlusIcon from 'react-native-heroicons/outline/SquaresPlusIcon';
+import PencilSquareIcon from 'react-native-heroicons/outline/PencilSquareIcon';
 import { decimalSeparatorFor } from '../engine/format';
-import { glyphColor, rolePalette } from '../ui/tokens';
+import { glyphColor, identityHues, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
 import { clearDocument } from '../store/commands';
@@ -87,8 +91,10 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     selectedKind === 'reference' ||
     selectedKind === 'result' ||
     selectedKind === 'operator';
-  // Number-editing row (., +/-, ()) is for operands; hide it while an operator
-  // is selected (operator keys still replace the symbol).
+  // `()` is for operands; disable it while an operator is selected (operator keys still
+  // replace the symbol). Decimal and `+/-` used to share this rule too, but they're number
+  // buttons now (`numberKeysDisabled`, below) — a selected result/reference disables them
+  // right alongside the digits, not just a selected operator.
   const selectionBlocksNumberEditing = selectedKind === 'operator';
 
   if (!visible) {
@@ -105,6 +111,17 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     dataEntryLocked || groupMode || selectionBlocksNumberEditing;
   const operatorsEnabled =
     !dataEntryLocked && (!groupMode || groupContainsResult(groupSelectedIds, nodes));
+  // §8.6 `Create link` keypad button: enabled for a selected number, result, or *live*
+  // reference — same eligibility as the context-menu action of the same name
+  // (`createLinkToValue`) and as `dispatchEditorCommand`'s `createLink` handler. A
+  // dangling reference (target gone) does not count: there is nothing live to re-link.
+  const selectedNode = selectedNodeId ? nodes[selectedNodeId] : undefined;
+  const selectedIsLiveReference =
+    selectedNode?.kind === 'reference' && nodes[selectedNode.targetNodeId] !== undefined;
+  const canCreateLink =
+    !dataEntryLocked &&
+    !groupMode &&
+    (selectedKind === 'number' || selectedKind === 'result' || selectedIsLiveReference);
 
   function press(key: KeypadKey) {
     if (dataEntryLocked) return;
@@ -196,38 +213,75 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                 ))}
               </View>
             ))}
+            {/* `0`'s row: decimal on its left, `+/-` on its right — under `1` and `3`
+                respectively, the reference app's bottom-row layout. Both now use
+                `numberKeysDisabled` — the same rule the digits use — rather than the looser
+                `numberEditingKeysDisabled` (which only blocks while an operator is selected):
+                a selected result or linked cell isn't a number-edit target any more than a
+                digit is, so decimal / `+/-` disable right alongside `0`. They just live in
+                the digit grid now so they land in this row instead of a dedicated one. Same
+                fill and label style as `0` when enabled (`rolePalette.number.fill` /
+                `keyLabel`, via `gridEditingKey` + `labelStyle`) so the whole row reads as one
+                colour rather than `0` standing out from its neighbours — and the same
+                `digitKeyDisabled` swap-to-grey when disabled, layered on top of
+                `gridEditingKey`/`keyLabel` so it wins over both: `Key`'s own generic
+                `keyDisabled` just fades whatever colour is already there (right for the
+                accent-coloured keys), which used to leave these two visibly greenish while
+                every other number key had already gone flat grey. */}
             <View style={styles.digitRow}>
-              <View style={styles.digitSpacer} />
+              <Key
+                label={decimalSeparatorFor(locale)}
+                onPress={() => press({ region: 'decimal' })}
+                disabled={numberKeysDisabled}
+                testID="keypad-decimal"
+                style={[styles.gridEditingKey, numberKeysDisabled && styles.digitKeyDisabled]}
+                labelStyle={[styles.keyLabel, numberKeysDisabled && styles.digitKeyLabelDisabled]}
+              />
               <DigitKey
                 value="0"
                 disabled={numberKeysDisabled}
                 onPress={() => press({ region: 'digit', value: '0' })}
               />
-              <View style={styles.digitSpacer} />
+              <Key
+                label="+/-"
+                onPress={() => press({ region: 'sign' })}
+                disabled={numberKeysDisabled}
+                testID="keypad-sign"
+                style={[styles.gridEditingKey, numberKeysDisabled && styles.digitKeyDisabled]}
+                labelStyle={[styles.keyLabel, numberKeysDisabled && styles.digitKeyLabelDisabled]}
+              />
             </View>
           </View>
 
           <View style={styles.editingRow} testID="keypad-number-editing">
+            {/* §8.6 `Create link`: takes the slot `.` used to occupy in this row. Enabled
+                for a selected number, result, or live reference (`canCreateLink`); creates
+                a free reference near the selected value, same placement as §8.7
+                continuation but without the operator/empty-number (`createLinkToValue`). */}
             <Key
-              label={decimalSeparatorFor(locale)}
-              onPress={() => press({ region: 'decimal' })}
-              disabled={numberEditingKeysDisabled}
-              testID="keypad-decimal"
+              label="Create link"
+              icon={<LinkIcon size={20} color={glyphColor} />}
+              onPress={() => press({ region: 'createLink' })}
+              disabled={!canCreateLink}
+              testID="keypad-link"
+              style={styles.linkKey}
+            />
+            {/* Declared, not yet functional — same "affordance before behaviour" pattern as
+                the context menu's `Copy` / canvas menu's `Add number` / `Add graph`. Shares
+                `Create link`'s blue fill; behaviour to follow. */}
+            <Key
+              label="Add components"
+              icon={<SquaresPlusIcon size={20} color={glyphColor} />}
+              disabled
+              testID="keypad-add-components"
+              style={styles.linkKey}
             />
             <Key
-              label="+/-"
-              onPress={() => press({ region: 'sign' })}
-              disabled={numberEditingKeysDisabled}
-              testID="keypad-sign"
-            />
-            {/* Single `()` key (§8.5): same cell size as the other editing keys.
-                Side is resolved in `dispatchEditorCommand` from chain depth so one
-                tap opens or closes as appropriate. */}
-            <Key
-              label="()"
-              onPress={() => press({ region: 'paren' })}
-              disabled={numberEditingKeysDisabled}
-              testID="keypad-paren"
+              label="Notes"
+              icon={<PencilSquareIcon size={20} color={glyphColor} />}
+              disabled
+              testID="keypad-notes"
+              style={styles.linkKey}
             />
           </View>
 
@@ -282,6 +336,16 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
             testID="keypad-op-add"
             disabled={!operatorsEnabled}
           />
+          {/* `()` (§8.5): moved underneath `+` into the accent column, styled as an
+              `OperatorKey` — same amber fill and white label as `÷ × − +`. Side is resolved
+              in `dispatchEditorCommand` from chain depth so one tap opens or closes as
+              appropriate; only its position/colour changed, not its behaviour. */}
+          <OperatorKey
+            label="()"
+            onPress={() => press({ region: 'paren' })}
+            disabled={numberEditingKeysDisabled}
+            testID="keypad-paren"
+          />
           <EqualsKey
             onPress={() => press({ region: 'equals' })}
             testID="keypad-equals"
@@ -295,12 +359,23 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
 
 interface KeyProps {
   label: string;
-  onPress: () => void;
+  /** Omit for a declared-but-not-yet-functional key (always pair with `disabled`, same
+   *  as `ModeKey`'s optional `onPress`). */
+  onPress?: () => void;
   testID?: string;
   disabled?: boolean;
   /** When set, rendered instead of the label text; `label` stays the a11y name
    *  (same pattern as ModeKey's Heroicons slot). */
   icon?: ReactNode;
+  /** Per-instance overrides layered after `styles.key` / `styles.keyDisabled` — e.g.
+   *  `gridEditingKey`'s teal fill to match `0`, or `linkKey`'s blue. Every key shares
+   *  `key`'s height (§8.5 — see its comment) so rows across the two keypad columns stay
+   *  aligned; an override here should not touch `height` without checking that. */
+  style?: StyleProp<ViewStyle>;
+  /** Per-instance override for the fallback label `Text` (ignored when `icon` is set) —
+   *  e.g. `keyLabel` so decimal / `+/-` read white on their teal fill, matching `DigitKey`,
+   *  instead of the default dark `neutralKeyLabel`. */
+  labelStyle?: StyleProp<TextStyle>;
 }
 
 // Web only: a plain TouchableOpacity press starts with a mousedown, which blurs whatever
@@ -314,10 +389,10 @@ interface KeyProps {
 // focus with.
 const preventFocusSteal = { onMouseDown: (e: { preventDefault: () => void }) => e.preventDefault() };
 
-function Key({ label, icon, onPress, testID, disabled }: KeyProps) {
+function Key({ label, icon, onPress, testID, disabled, style, labelStyle }: KeyProps) {
   return (
     <TouchableOpacity
-      style={[styles.key, disabled && styles.keyDisabled]}
+      style={[styles.key, disabled && styles.keyDisabled, style]}
       onPress={disabled ? undefined : onPress}
       disabled={disabled}
       testID={testID}
@@ -327,7 +402,9 @@ function Key({ label, icon, onPress, testID, disabled }: KeyProps) {
       {...skipTabOrder}
     >
       {icon ?? (
-        <Text style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled]}>
+        <Text
+          style={[styles.neutralKeyLabel, disabled && styles.keyLabelDisabled, labelStyle]}
+        >
           {label}
         </Text>
       )}
@@ -469,10 +546,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: KEY_GAP,
   },
-  digitSpacer: {
-    flex: 1,
-    marginHorizontal: KEY_GAP / 2,
-  },
   digitKey: {
     flex: 1,
     height: 48,
@@ -482,8 +555,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Placeholder tone, not a finished design pass: a grey with a slight number-teal cast
+  // rather than plain neutral grey, so a disabled number key still reads as "this was the
+  // teal one" instead of matching every other disabled key exactly. Revisit once the
+  // disabled palette gets real design attention.
   digitKeyDisabled: {
-    backgroundColor: '#DADADA',
+    backgroundColor: '#ADD1CD',
     opacity: 0.55,
   },
   digitKeyLabelDisabled: {
@@ -498,7 +575,14 @@ const styles = StyleSheet.create({
   },
   key: {
     flex: 1,
-    height: 44,
+    // Matches `digitKey`'s height (§8.5): the main column (digit grid + number-editing
+    // row + history row) and the accent column (operators + `()` + `=`) both stack six
+    // rows now that `()` moved into the accent column, and every row uses the shared
+    // `KEY_GAP` bottom margin — so keeping every key the same height is what makes the
+    // two columns land on the same six row boundaries instead of drifting apart by a few
+    // px per row. Previously 44 vs `digitKey`'s 48, invisible while the columns had
+    // different row counts; became a visible misalignment once they matched.
+    height: 48,
     marginHorizontal: KEY_GAP / 2,
     borderRadius: 8,
     backgroundColor: '#DADADA',
@@ -516,6 +600,18 @@ const styles = StyleSheet.create({
   keyLabelDisabled: {
     color: '#B3B3B3',
   },
+  /** Decimal / `+/-` now live in the digit grid's `0` row (§8.5) and share `0`'s teal fill.
+   *  Height and horizontal margin already match `key`'s own — no override needed for those. */
+  gridEditingKey: {
+    backgroundColor: rolePalette.number.fill,
+  },
+  /** §8.6 `Create link`: a blue distinct from every role fill (number/operator/equals/
+   *  result) and from the identity hues it might otherwise collide with in meaning —
+   *  reuses `identityHues[0]`, the palette's own primary blue, already checked for
+   *  deuteranopia/protanopia (`paletteAccessibility.ts`) rather than inventing a new one. */
+  linkKey: {
+    backgroundColor: identityHues[0],
+  },
   neutralKeyLabel: {
     color: '#333333',
     fontSize: 18,
@@ -526,7 +622,11 @@ const styles = StyleSheet.create({
     marginLeft: KEY_GAP,
   },
   accentKey: {
-    height: 44,
+    // Explicit despite matching `key`'s own height — this overrides `key`'s
+    // `marginHorizontal` too, and `borderRadius: 8` from `key` still needs to be there in
+    // the merged style array. Kept in sync with `key`'s height (see its comment: this is
+    // what keeps the accent column's six rows aligned with the main column's six).
+    height: 48,
     marginHorizontal: 0,
     marginBottom: KEY_GAP,
     backgroundColor: rolePalette.operator.fill,

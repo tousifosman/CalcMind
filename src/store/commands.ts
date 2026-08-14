@@ -190,10 +190,20 @@ function removeFromCurrentChain(draft: CalcDocument, nodeId: NodeId): void {
 }
 
 /** Appends already-constructed nodes to the chain the node at `anchorNodeId` belongs to,
- *  creating a new one-member chain first if it doesn't have one yet, then re-flows the
- *  whole chain with `layoutChain` (P3.1) so every member reads correctly immediately.
- *  One call is one undo entry, however many nodes it appends - which is what lets
- *  `appendOperatorAndNumber` below insert its operator and its fresh operand atomically. */
+ *  immediately after the anchor's own position in `members` — not necessarily the
+ *  chain's end, creating a new one-member chain first if it doesn't have one yet — then
+ *  re-flows the whole chain with `layoutChain` (P3.1) so every member reads correctly
+ *  immediately. One call is one undo entry, however many nodes it appends - which is
+ *  what lets `appendOperatorAndNumber` below insert its operator and its fresh operand
+ *  atomically.
+ *
+ *  Inserting at the anchor's index (rather than always pushing to the array's end)
+ *  matters whenever the anchor isn't already the chain's last member — e.g. selecting
+ *  `2` in the already-`=`'d chain `1 + 2 = 3` and pressing `+` must build `1 + 2 + _ = 3`
+ *  in place, not push past the trailing `=`/result. `finalizeChain`'s recompute finds
+ *  `=` wherever it now sits (`writeChainDerived` looks it up fresh) and the sequence
+ *  validator reads `members` in stored order, so no other bookkeeping needs to know the
+ *  anchor moved out of last place. */
 function appendMembersToChain(anchorNodeId: NodeId, newNodes: CalcNode[]): void {
   useDocumentStore.getState().applyCommand((draft) => {
     const anchorNode = draft.nodes[anchorNodeId];
@@ -207,11 +217,14 @@ function appendMembersToChain(anchorNodeId: NodeId, newNodes: CalcNode[]): void 
       anchorNode.chainId = chain.id;
     }
 
+    const anchorIndex = chain.members.indexOf(anchorNodeId);
+    const insertAt = anchorIndex === -1 ? chain.members.length : anchorIndex + 1;
+
     for (const node of newNodes) {
       node.chainId = chain.id;
       draft.nodes[node.id] = node;
-      chain.members.push(node.id);
     }
+    chain.members.splice(insertAt, 0, ...newNodes.map((node) => node.id));
 
     // Length is always ≥ 2 here (anchor + at least one append), so finalize reflows;
     // using it rather than reflowChain alone keeps equals/result bookkeeping in one place.
@@ -344,9 +357,22 @@ export function continuationAnchor(
  * {@link appendOperatorAndNumber}, and required now that a selected operator
  * rejects digits. Never edits `V`.
  *
- * Numbers and live references are included so a value (or an existing link to one)
- * can seed another link without first pressing `=`. Drag-to-link stays result-only
- * so ordinary number snaps can still move into chains (§8.3).
+ * Numbers and live references are accepted here so *this primitive* can seed a link
+ * from either — but the operator-key dispatcher no longer calls it with a reference at
+ * all (below). Kept generic for the explicit `Create link` context-menu action
+ * ({@link createLinkToValue}), which still accepts a chain-member number or a live
+ * reference, same as `Label` — an explicit "link this" request isn't the implicit
+ * operator-key shorthand.
+ *
+ * This function itself doesn't care whether `V` already belongs to a chain — that
+ * restriction lives in the caller. `dispatchEditorCommand`'s operator-key gesture only
+ * reaches here for a *free* number (`chainId === null`) or a selected result; a number
+ * already mid-formula, or *any* live reference (free or chain-member), gets
+ * {@link appendOperatorAndNumber} instead, extending that formula/chain in place rather
+ * than linking it (§8.7). A reference is already a link — pressing an operator on one
+ * means "keep computing with what this points to", not "make another link to this
+ * link". Reported live: a reference dropped by `Create link`, operator pressed on it,
+ * was spinning off a second reference instead of extending from the first.
  */
 export function continueFromValue(
   valueNodeId: NodeId,
@@ -406,6 +432,44 @@ export function continueFromResult(
   op: OperatorSymbol,
 ): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId; numberId: NodeId } {
   return continueFromValue(resultNodeId, op);
+}
+
+/**
+ * §8.6 "Create link" context-menu action: drops a free-floating reference to
+ * `valueNodeId` near its source — no operator, no bundled empty number, and not
+ * attached to any chain. The explicit counterpart to §8.7 continuation for a link the
+ * user wants to place and drag elsewhere rather than keep computing from immediately;
+ * dragging the fresh reference onto a chain afterward is the ordinary snap path, same
+ * as any other free node (only a *dragged result* gets the special drag-to-link
+ * commit — §11). Shares {@link continuationAnchor}'s placement and stacking rule so
+ * the new cell doesn't land on an existing occupant, and the same value eligibility
+ * (number, result, or live reference) as continuation and `Label`. Selects the new
+ * reference so it's ready to drag or, for a live reference, continue from.
+ */
+export function createLinkToValue(valueNodeId: NodeId): NodeId {
+  const { nodes, chains } = useDocumentStore.getState().document;
+  const value = nodes[valueNodeId];
+  const isLiveReference =
+    value?.kind === 'reference' && nodes[value.targetNodeId] !== undefined;
+  if (
+    !value ||
+    (value.kind !== 'result' && value.kind !== 'number' && !isLiveReference)
+  ) {
+    throw new Error(
+      `createLinkToValue: node ${valueNodeId} is not a number, result, or live reference (got ${value?.kind ?? 'missing'})`,
+    );
+  }
+
+  const reference = createReferenceNode(
+    continuationAnchor(valueNodeId, nodes, chains, getDeviceLocale()),
+    valueNodeId,
+  );
+
+  useDocumentStore.getState().applyCommand((draft) => {
+    draft.nodes[reference.id] = reference;
+  });
+  selectNode(reference.id);
+  return reference.id;
 }
 
 /** setNodeRaw coalescing window (§13): keystrokes to the same node within this

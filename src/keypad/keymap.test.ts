@@ -11,6 +11,7 @@ import {
   deleteNode,
   appendEqualsNode,
   appendOperatorAndNumber,
+  createLinkToValue,
   selectAll,
 } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
@@ -390,7 +391,7 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(Object.keys(doc.chains)).toHaveLength(1);
   });
 
-  test('operator with a selected linked cell creates a new continuation from it', () => {
+  test('operator with a selected linked cell extends its own chain in place, not a second link', () => {
     dispatchEditorCommand({ region: 'digit', value: '3' });
     const numberId = useUiStore.getState().selectedNodeId!;
     selectNode(numberId);
@@ -403,22 +404,56 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     dispatchEditorCommand({ region: 'digit', value: '1' });
     selectNode(firstRef.id);
 
-    const chainLenBefore = useDocumentStore.getState().document.chains[firstRef.chainId!]!
-      .members.length;
+    const before = useDocumentStore.getState().document;
+    const chainId = firstRef.chainId!;
+    const membersBefore = before.chains[chainId]!.members;
+    expect(membersBefore).toHaveLength(3); // [firstRef, +, '1']
 
     dispatchEditorCommand({ region: 'operator', op: '×' });
 
     const doc = useDocumentStore.getState().document;
-    const refs = Object.values(doc.nodes).filter((n) => n.kind === 'reference');
-    expect(refs).toHaveLength(2);
-    const child = refs.find((r) => r.targetNodeId === firstRef.id)!;
-    expect(child).toBeDefined();
-    expect(child.chainId).not.toBe(firstRef.chainId);
-    // Parent chain must not have grown — that was the "adds a cell at the end" bug.
-    expect(doc.chains[firstRef.chainId!]!.members).toHaveLength(chainLenBefore);
-    expect(useUiStore.getState().selectedNodeId).toBe(
-      doc.chains[child.chainId!]!.members[2],
-    );
+    // No second reference was created — this is not §8.7 continuation. Reported live:
+    // pressing an operator on a dropped `Create link` reference used to spin off a
+    // reference-to-the-reference instead of extending from it.
+    expect(Object.values(doc.nodes).filter((n) => n.kind === 'reference')).toHaveLength(1);
+    // Same chain, grown from [ref, +, 1] to [ref, ×, <empty>, +, 1] — the new operand
+    // lands right after the reference, pushing the rest of the formula rightward.
+    const afterMembers = doc.chains[chainId]!.members;
+    expect(afterMembers).toHaveLength(5);
+    expect(afterMembers[0]).toBe(firstRef.id);
+    expect(doc.nodes[afterMembers[1]!]).toMatchObject({ kind: 'operator', op: '×' });
+    expect(doc.nodes[afterMembers[2]!]).toMatchObject({ kind: 'number', raw: '' });
+    expect(afterMembers[3]).toBe(membersBefore[1]);
+    expect(afterMembers[4]).toBe(membersBefore[2]);
+
+    expect(useUiStore.getState().selectedNodeId).toBe(afterMembers[2]);
+    expect(useUiStore.getState().editingNodeId).toBe(afterMembers[2]);
+  });
+
+  test('operator with a selected free (not-yet-chained) linked cell builds [ref, ⊕, empty] in place', () => {
+    // Free-standing reference, e.g. one just dropped by the `Create link` action —
+    // chainId null, not part of any chain yet.
+    const source = addNumberNode({ x: 0, y: 0 }, '14');
+    const refId = createLinkToValue(source);
+    expect(useDocumentStore.getState().document.nodes[refId]).toMatchObject({
+      kind: 'reference',
+      chainId: null,
+    });
+    selectNode(refId);
+
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+
+    const doc = useDocumentStore.getState().document;
+    // Still exactly one reference — no second link spun off.
+    expect(Object.values(doc.nodes).filter((n) => n.kind === 'reference')).toHaveLength(1);
+    const ref = doc.nodes[refId]!;
+    expect(ref.chainId).not.toBeNull();
+    const members = doc.chains[ref.chainId!]!.members;
+    expect(members).toEqual([refId, expect.any(String), expect.any(String)]);
+    expect(doc.nodes[members[1]!]).toMatchObject({ kind: 'operator', op: '+' });
+    expect(doc.nodes[members[2]!]).toMatchObject({ kind: 'number', raw: '' });
+    expect(useUiStore.getState().selectedNodeId).toBe(members[2]);
+    expect(useUiStore.getState().editingNodeId).toBe(members[2]);
   });
 
   test('operator with an operator selected replaces its symbol in place', () => {
@@ -606,6 +641,192 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     );
     expect(refreshed?.kind).toBe('result');
     expect(refreshed && refreshed.kind === 'result' ? refreshed.derived?.display : undefined).toBe('50');
+  });
+
+  test('operator on a selected chain-member number extends that chain in place, not a link', () => {
+    // 1 + 2 =
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const before = useDocumentStore.getState().document;
+    const two = Object.values(before.nodes).find(
+      (n) => n.kind === 'number' && n.raw === '2',
+    )!;
+    const chainId = two.chainId!;
+    const membersBefore = before.chains[chainId]!.members;
+    expect(membersBefore.map((id) => before.nodes[id]!.kind)).toEqual([
+      'number',
+      'operator',
+      'number',
+      'equals',
+      'result',
+    ]);
+
+    // Select `2` (tap-selected, not editing) and press `+`.
+    selectNode(two.id);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+
+    const doc = useDocumentStore.getState().document;
+    // No reference/link was created — this must not be §8.7 continuation.
+    expect(Object.values(doc.nodes).filter((n) => n.kind === 'reference')).toHaveLength(0);
+    // Same chain, now [1, +, 2, +, <empty>, =] — the new operand lands right after `2`,
+    // pushing the stale `=` rightward rather than past it. The formula is Incomplete
+    // (trailing operator, empty operand) until filled in, so the stale result is
+    // dropped rather than kept showing a value the expression no longer implies.
+    const afterMembers = doc.chains[chainId]!.members;
+    expect(afterMembers).toHaveLength(6);
+    expect(afterMembers.map((id) => doc.nodes[id]!.kind)).toEqual([
+      'number',
+      'operator',
+      'number',
+      'operator',
+      'number',
+      'equals',
+    ]);
+    expect(afterMembers[0]).toBe(membersBefore[0]);
+    expect(afterMembers[2]).toBe(two.id);
+    expect(doc.nodes[afterMembers[3]!]).toMatchObject({ kind: 'operator', op: '+' });
+    expect(doc.nodes[afterMembers[4]!]).toMatchObject({ kind: 'number', raw: '' });
+    // Trailing `=` is the same node, just shifted right.
+    expect(afterMembers[5]).toBe(membersBefore[3]);
+    expect(Object.values(doc.nodes).filter((n) => n.kind === 'result')).toHaveLength(0);
+
+    expect(useUiStore.getState().selectedNodeId).toBe(afterMembers[4]);
+    expect(useUiStore.getState().editingNodeId).toBe(afterMembers[4]);
+
+    // Filling in the new operand recomputes: 1 + 2 + 6 = 9.
+    dispatchEditorCommand({ region: 'digit', value: '6' });
+    const recomputed = Object.values(useDocumentStore.getState().document.nodes).find(
+      (n) => n.kind === 'result',
+    );
+    expect(recomputed).toMatchObject({ kind: 'result', derived: { display: '9' } });
+  });
+
+  test('operator on a selected mid-chain number (no `=` yet) still extends in place', () => {
+    // 1 + 2 + 3, no equals — select the middle `2` and insert `×` right after it.
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '3' });
+
+    const before = useDocumentStore.getState().document;
+    const two = Object.values(before.nodes).find(
+      (n) => n.kind === 'number' && n.raw === '2',
+    )!;
+    const chainId = two.chainId!;
+
+    selectNode(two.id);
+    dispatchEditorCommand({ region: 'operator', op: '×' });
+
+    const doc = useDocumentStore.getState().document;
+    expect(Object.values(doc.nodes).filter((n) => n.kind === 'reference')).toHaveLength(0);
+    const members = doc.chains[chainId]!.members;
+    expect(members.map((id) => doc.nodes[id]!.kind)).toEqual([
+      'number',
+      'operator',
+      'number',
+      'operator',
+      'number',
+      'operator',
+      'number',
+    ]);
+    expect(doc.nodes[members[3]!]).toMatchObject({ kind: 'operator', op: '×' });
+    expect(doc.nodes[members[4]!]).toMatchObject({ kind: 'number', raw: '' });
+    // The original trailing `3` is still last, just pushed one slot further right.
+    expect(doc.nodes[members[6]!]).toMatchObject({ kind: 'number', raw: '3' });
+  });
+});
+
+describe('dispatchEditorCommand: Create link keypad button (§8.6)', () => {
+  test('on a selected number, drops a free reference and selects it', () => {
+    const n = addNumberNode({ x: 0, y: 0 }, '3');
+    selectNode(n);
+
+    dispatchEditorCommand({ region: 'createLink' });
+
+    const doc = useDocumentStore.getState().document;
+    const refs = Object.values(doc.nodes).filter((node) => node.kind === 'reference');
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({ kind: 'reference', targetNodeId: n, chainId: null });
+    expect(useUiStore.getState().selectedNodeId).toBe(refs[0]!.id);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+  });
+
+  test('on a selected result, drops a free reference to the result', () => {
+    dispatchEditorCommand({ region: 'digit', value: '3' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '4' });
+    dispatchEditorCommand({ region: 'equals' });
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (node) => node.kind === 'result',
+    )!;
+    selectNode(result.id);
+
+    dispatchEditorCommand({ region: 'createLink' });
+
+    const refs = Object.values(useDocumentStore.getState().document.nodes).filter(
+      (node) => node.kind === 'reference',
+    );
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({ kind: 'reference', targetNodeId: result.id });
+  });
+
+  test('on a selected live reference, drops a second reference to it (chaining links, unlike operator)', () => {
+    const n = addNumberNode({ x: 0, y: 0 }, '3');
+    const firstRef = createLinkToValue(n);
+    selectNode(firstRef);
+
+    dispatchEditorCommand({ region: 'createLink' });
+
+    const refs = Object.values(useDocumentStore.getState().document.nodes).filter(
+      (node) => node.kind === 'reference',
+    );
+    expect(refs).toHaveLength(2);
+    const child = refs.find((r) => r.targetNodeId === firstRef)!;
+    expect(child).toBeDefined();
+    expect(useUiStore.getState().selectedNodeId).toBe(child.id);
+  });
+
+  test('on a selected dangling reference, no-ops', () => {
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.nodes.dangling = {
+        id: 'dangling',
+        kind: 'reference',
+        position: { x: 0, y: 0 },
+        chainId: null,
+        createdAt: 0,
+        targetNodeId: 'gone',
+        lastKnownDisplay: '42',
+      };
+    });
+    selectNode('dangling');
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'createLink' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(
+      Object.values(useDocumentStore.getState().document.nodes).filter(
+        (node) => node.kind === 'reference' && node.id !== 'dangling',
+      ),
+    ).toHaveLength(0);
+  });
+
+  test('with nothing selected, no-ops', () => {
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'createLink' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(
+      Object.values(useDocumentStore.getState().document.nodes).filter(
+        (node) => node.kind === 'reference',
+      ),
+    ).toHaveLength(0);
   });
 });
 

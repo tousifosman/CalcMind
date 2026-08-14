@@ -3,8 +3,8 @@
 // Two variants, both rendered as a floating sheet positioned at the long-press
 // screen point:
 //
-//   • Node menu — `Copy`, `Delete`, `Select group`, `Label` on values (P6b.1),
-//     and for a reference `Unlink from parent` (P6.4 / §8.6).
+//   • Node menu — `Copy`, `Delete`, `Select group`, `Label` and `Create link` on values
+//     (P6b.1, §8.6), and for a reference `Unlink from parent` (P6.4 / §8.6).
 //   • Canvas menu — `Add number`, `Paste`, `Add graph` (disabled: §17.2 defers
 //     graphing; copy/paste is future work; Add number is a normal tap), plus
 //     `Select all` when the canvas has nodes (§8.6).
@@ -89,6 +89,7 @@ interface NodeContextMenuProps {
   onSelectGroup: (nodeId: NodeId) => void;
   onUnlinkFromParent: (nodeId: NodeId) => void;
   onLabel: (nodeId: NodeId) => void;
+  onCreateLink: (nodeId: NodeId) => void;
   onDismiss: () => void;
 }
 
@@ -99,6 +100,7 @@ export function NodeContextMenu({
   onSelectGroup,
   onUnlinkFromParent,
   onLabel,
+  onCreateLink,
   onDismiss,
 }: NodeContextMenuProps) {
   const nodes = useDocumentStore((s) => s.document.nodes);
@@ -138,6 +140,20 @@ export function NodeContextMenu({
       label: 'Label',
       onPress: () => {
         onLabel(nodeId);
+        onDismiss();
+      },
+    });
+  }
+
+  // §8.6 `Create link`: the explicit counterpart to §8.7 continuation — drops a free
+  // reference to this value near it without an operator, for a link the user wants to
+  // place and drag elsewhere. Same eligibility as continuation's source value
+  // (number, result, or live reference), so it shares `canLabel`'s condition.
+  if (canLabel) {
+    items.push({
+      label: 'Create link',
+      onPress: () => {
+        onCreateLink(nodeId);
         onDismiss();
       },
     });
@@ -205,6 +221,7 @@ interface ContextMenuOverlayProps {
   onSelectAll: () => void;
   onUnlinkFromParent: (nodeId: NodeId) => void;
   onLabelNode: (nodeId: NodeId) => void;
+  onCreateLink: (nodeId: NodeId) => void;
 }
 
 export function ContextMenuOverlay({
@@ -213,6 +230,7 @@ export function ContextMenuOverlay({
   onSelectAll,
   onUnlinkFromParent,
   onLabelNode,
+  onCreateLink,
 }: ContextMenuOverlayProps) {
   const contextMenu = useUiStore((state) => state.contextMenu);
   const closeContextMenu = useUiStore((state) => state.closeContextMenu);
@@ -228,6 +246,7 @@ export function ContextMenuOverlay({
         onSelectGroup={onSelectGroup}
         onUnlinkFromParent={onUnlinkFromParent}
         onLabel={onLabelNode}
+        onCreateLink={onCreateLink}
         onDismiss={closeContextMenu}
       />
     );
