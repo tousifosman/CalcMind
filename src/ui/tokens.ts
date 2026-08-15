@@ -5,8 +5,11 @@
 export const tokens = {
   nodeHeight: 64,
   borderBand: 3,
-  numeralFontSize: 30,
-  numeralFontWeight: '800' as const,
+  /** Reduced from the reference's ratio-accurate 30 — at that size, in the reference's bold
+   *  800 weight, glyphs read as oversized on-screen. Deliberate deviation from the sampled
+   *  geometry above (§1.2). */
+  numeralFontSize: 22,
+  numeralFontWeight: '400' as const,
   numberPaddingX: 12,
   operatorWidth: 34,
   equalsWidth: 35,

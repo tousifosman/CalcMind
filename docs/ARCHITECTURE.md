@@ -58,7 +58,7 @@ The reference raster has a cell height of 256px. Tokens below are that geometry 
 |---|---|---|---|
 | `nodeHeight` | 256 | 1.000 | **64** |
 | `borderBand` | 11 | 0.043 | **3** |
-| `numeralFontSize` | 127 | 0.496 | **30** (weight 800) |
+| `numeralFontSize` | 127 | 0.496 | **22** (weight 400) *(reduced from the ratio-accurate 30/800 — read as oversized on-screen)* |
 | `numberPaddingX` | 48 | 0.188 | **12** |
 | `operatorWidth` | 136 | 0.531 | **34** |
 | `equalsWidth` | 140 | 0.547 | **35** |
@@ -1348,6 +1348,7 @@ it unclear which parts were claims about the present and which were intentions.
 | 15 | Swipe-to-clear / Clear all require confirmation | Tydlig's bare swipe wipes a document; too destructive for one stray gesture even with undo. The mode-strip Clear all button shares the same confirm (§8.5) | Never |
 | 16 | Typing builds chains directly, not through P3's snapping | Typing always knows exactly which chain to extend (whichever the selected node belongs to), so it appends deterministically (`store/commands.ts`'s `appendMembersToChain`) instead of running §8.2-8.4's geometric candidate search, which exists to disambiguate a *dragged* node's several nearby neighbours (P2.8) | P3's chain layout pass changes how `Chain.anchor`/positions are derived and this stops matching it |
 | 17 | Plain drag detaches; long-press-then-drag moves chain | Detach/rearrange is the frequent edit and must not require a dwell; lifting a whole expression is deliberate. Opposite mapping tried interactively (P3.7); both work, this one won (§8.3, §17.1) | Real-device use shows accidental detaches dominate over accidental chain moves |
+| 18 | `numeralFontSize`/`numeralFontWeight` reduced to 22/400 from the reference-accurate 30/800 | User-reported live: the ratio-accurate glyph size read as oversized in the cell; regular weight at the smaller size stays legible without the bold's extra visual weight (§1.2) | A future reference restyle re-derives the ratio and disagrees |
 
 ## 17. Open questions
 
