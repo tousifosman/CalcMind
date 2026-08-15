@@ -184,12 +184,12 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           onPress={hideKeypad}
           testID="keypad-mode-dismiss"
         />
-        {/* Work space (P5) and functions/chart (§10.2, §17.2) have no feature behind them
+        {/* Workspace (P5) and functions/chart (§10.2, §17.2) have no feature behind them
             yet - all three render disabled rather than functional-looking but inert. Labels
-            read "Work space" / "Chart" rather than the underlying Documents/Graph concepts
+            read "Workspace" / "Chart" rather than the underlying Documents/Graph concepts
             they'll eventually open (§12 / §17.2) - user-facing wording, not a rename of the
             feature itself. */}
-        <ModeKey label="Work space" disabled testID="keypad-mode-documents" />
+        <ModeKey label="Workspace" disabled testID="keypad-mode-documents" />
         <ModeKey label="ƒ(x)" disabled testID="keypad-mode-functions" />
         <ModeKey label="Chart" disabled testID="keypad-mode-graph" />
         {/* Discoverable clear (P7.8). Same confirm gate as swipe-across-backspace

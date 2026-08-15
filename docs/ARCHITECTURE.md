@@ -658,7 +658,7 @@ operators are visually separated from digits.
 | Number editing | **Create link**, **Add components**, **Notes** |
 | History | undo, redo, backspace |
 | Operators (accent column) | `÷ × − + () =` — `()` sits underneath `+` |
-| Mode strip | dismiss keypad, **Work space** *(later — documents, P5)*, functions *(later)*, **Chart** *(later — graph, §17.2)*, **Clear all**, **Settings** (icon-only cog) |
+| Mode strip | dismiss keypad, **Workspace** *(later — documents, P5)*, functions *(later)*, **Chart** *(later — graph, §17.2)*, **Clear all**, **Settings** (icon-only cog) |
 
 - Keys act on the **selected node** if there is one, otherwise they create a new node at the
   caret/last-tap point.
@@ -766,7 +766,7 @@ operators are visually separated from digits.
   `Select group` still uses the ordinary MovingChain path. The same clear-on-single-select
   rule applies. While the whole canvas is selected, keypad **data-entry** keys (digits,
   operators, `=`, decimal, sign, backspace, `()`) are grayed out — there is no single
-  edit target. The mode strip (dismiss / Work space / functions / Chart / Clear all /
+  edit target. The mode strip (dismiss / Workspace / functions / Chart / Clear all /
   settings) stays live, and hardware undo/redo / Escape still work.
 - **`Label` opens an in-place caption editor on the identity source** (§11.1). The write always
   lands on the declaring number or result, so every reference that shares the identity updates
