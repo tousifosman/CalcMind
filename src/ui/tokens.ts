@@ -10,7 +10,9 @@ export const tokens = {
    *  geometry above (§1.2). */
   numeralFontSize: 22,
   numeralFontWeight: '400' as const,
-  numberPaddingX: 12,
+  /** Reduced from the reference's ratio-accurate 12 alongside the numeral shrink above —
+   *  at the smaller glyph size, 12 read as excess whitespace rather than breathing room. */
+  numberPaddingX: 8,
   operatorWidth: 34,
   equalsWidth: 35,
   /** Bumped from the reference's 3 (ratio-accurate) to 8 for a friendlier silhouette. */
