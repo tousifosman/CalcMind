@@ -10,7 +10,7 @@ import { Text } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
 import { tokens, rolePalette, glyphColor, lightenHex } from '../ui/tokens';
-import { Cell, glyphTextStyle } from './Cell';
+import { Cell, useGlyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
 import { useNodeSelected } from './useNodeSelected';
 
@@ -37,6 +37,7 @@ function ParenNodeComponent({ id, depth = 0 }: ParenNodeProps) {
   const node = useNode(id);
   const identityHue = useSourceIdentityHue(id);
   const selected = useNodeSelected(id);
+  const glyphTextStyle = useGlyphTextStyle();
   if (!node || node.kind !== 'paren') return null;
 
   const palette = rolePalette.operator;

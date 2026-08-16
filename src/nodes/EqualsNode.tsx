@@ -5,7 +5,7 @@ import { Text } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
 import { tokens, rolePalette, glyphColor } from '../ui/tokens';
-import { Cell, glyphTextStyle } from './Cell';
+import { Cell, useGlyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
 import { useNodeSelected } from './useNodeSelected';
 
@@ -17,6 +17,7 @@ function EqualsNodeComponent({ id }: EqualsNodeProps) {
   const node = useNode(id);
   const identityHue = useSourceIdentityHue(id);
   const selected = useNodeSelected(id);
+  const glyphTextStyle = useGlyphTextStyle();
   if (!node || node.kind !== 'equals') return null;
 
   const palette = rolePalette.equals;

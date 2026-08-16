@@ -32,6 +32,7 @@ function chainExtent(
   chain: Chain,
   nodes: Record<NodeId, CalcNode>,
   locale: string,
+  fontSize: number,
 ): { left: number; right: number } | null {
   let width = 0;
   let any = false;
@@ -39,7 +40,7 @@ function chainExtent(
     const member = nodes[memberId];
     if (!member) continue;
     any = true;
-    width += widthOf(member, locale, tokens.numeralFontSize, nodes);
+    width += widthOf(member, locale, fontSize, nodes);
   }
   if (!any) return null;
   return { left: chain.anchor.x, right: chain.anchor.x + width };
@@ -65,13 +66,18 @@ export function resolveSnapCandidate(
   neighbours: SnappingNeighbours,
   nodes: Record<NodeId, CalcNode>,
   locale: string,
+  /** Live numeral font size (§1.2 P7 preference); defaults to the compiled-in
+   *  token — see `boundsOf`'s matching parameter. Must agree with whatever value
+   *  `neighbours` was built from, or `chainsNear`/`freeNodesNear`'s bounds and
+   *  this function's own would disagree about where things are. */
+  fontSize: number = tokens.numeralFontSize,
 ): SnapOutcome | null {
-  const draggedBounds = boundsOf(dragged, locale);
+  const draggedBounds = boundsOf(dragged, locale, undefined, fontSize);
   const centerX = (draggedBounds.left + draggedBounds.right) / 2;
   const candidates: RankedCandidate[] = [];
 
   for (const chain of neighbours.chainsNear(dragged)) {
-    const extent = chainExtent(chain, nodes, locale);
+    const extent = chainExtent(chain, nodes, locale, fontSize);
     if (!extent) continue;
 
     consider(candidates, Math.abs(draggedBounds.right - extent.left), {
@@ -83,7 +89,7 @@ export function resolveSnapCandidate(
       chainId: chain.id,
     });
 
-    for (const boundary of memberBoundaries(chain, nodes, locale)) {
+    for (const boundary of memberBoundaries(chain, nodes, locale, fontSize)) {
       consider(candidates, Math.abs(centerX - boundary.x), {
         kind: 'insert',
         chainId: chain.id,
@@ -93,7 +99,7 @@ export function resolveSnapCandidate(
   }
 
   for (const free of neighbours.freeNodesNear(dragged)) {
-    const freeBounds = boundsOf(free, locale);
+    const freeBounds = boundsOf(free, locale, undefined, fontSize);
     consider(candidates, Math.abs(draggedBounds.left - freeBounds.right), {
       kind: 'newChain',
       leftId: free.id,

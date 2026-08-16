@@ -38,6 +38,9 @@ type NeighbourFactory = (
   chains: Record<string, Chain>,
   nodes: Record<NodeId, CalcNode>,
   locale: string,
+  /** Live numeral font size (§1.2 P7 preference); defaults to the compiled-in
+   *  token — see `boundsOf`'s matching parameter. */
+  fontSize?: number,
 ) => SnappingNeighbours;
 
 interface ChainEntry {
@@ -58,10 +61,16 @@ export function boundsOf(
   node: CalcNode,
   locale: string,
   nodes?: Record<NodeId, CalcNode>,
+  /** Live numeral font size (§1.2 P7 preference). Defaults to the compiled-in token
+   *  so every existing caller/test that predates the setting keeps behaving exactly
+   *  as before; production call sites pass the live `usePreferencesStore` value
+   *  explicitly (never read it in here — this module stays pure, like `widthOf`
+   *  itself, whose same-named/defaulted parameter this mirrors). */
+  fontSize: number = tokens.numeralFontSize,
 ): Bounds {
   const { left, right } = horizontalBounds(
     node.position.x,
-    widthOf(node, locale, tokens.numeralFontSize, nodes),
+    widthOf(node, locale, fontSize, nodes),
   );
   return {
     left,
@@ -81,6 +90,7 @@ export function memberBoundaries(
   chain: Chain,
   nodes: Record<NodeId, CalcNode>,
   locale: string,
+  fontSize: number = tokens.numeralFontSize,
 ): ChainBoundary[] {
   const boundaries: ChainBoundary[] = [];
   let x = chain.anchor.x;
@@ -88,14 +98,19 @@ export function memberBoundaries(
   for (let index = 0; index < chain.members.length - 1; index += 1) {
     const member = nodes[chain.members[index]];
     if (!member) continue;
-    x += widthOf(member, locale, tokens.numeralFontSize, nodes);
+    x += widthOf(member, locale, fontSize, nodes);
     boundaries.push({ index: index + 1, x });
   }
 
   return boundaries;
 }
 
-function chainBounds(chain: Chain, nodes: Record<NodeId, CalcNode>, locale: string): Bounds | null {
+function chainBounds(
+  chain: Chain,
+  nodes: Record<NodeId, CalcNode>,
+  locale: string,
+  fontSize: number,
+): Bounds | null {
   const firstMember = chain.members.find((id) => nodes[id]);
   if (!firstMember) return null;
 
@@ -103,7 +118,7 @@ function chainBounds(chain: Chain, nodes: Record<NodeId, CalcNode>, locale: stri
   for (const memberId of chain.members) {
     const member = nodes[memberId];
     if (!member) continue;
-    width += widthOf(member, locale, tokens.numeralFontSize, nodes);
+    width += widthOf(member, locale, fontSize, nodes);
   }
 
   const { left, right } = horizontalBounds(chain.anchor.x, width);
@@ -119,15 +134,16 @@ function collectEntries(
   chains: Record<string, Chain>,
   nodes: Record<NodeId, CalcNode>,
   locale: string,
+  fontSize: number,
 ): { chainEntries: ChainEntry[]; freeEntries: FreeEntry[] } {
   const chainEntries = Object.values(chains)
-    .map((chain) => ({ chain, bounds: chainBounds(chain, nodes, locale) }))
+    .map((chain) => ({ chain, bounds: chainBounds(chain, nodes, locale, fontSize) }))
     .filter((entry): entry is ChainEntry => entry.bounds !== null);
 
   const freeEntries: FreeEntry[] = [];
   for (const node of Object.values(nodes)) {
     if (node.chainId !== null || node.kind === 'reference') continue;
-    freeEntries.push({ node, bounds: boundsOf(node, locale) });
+    freeEntries.push({ node, bounds: boundsOf(node, locale, undefined, fontSize) });
   }
 
   return { chainEntries, freeEntries };
@@ -142,12 +158,17 @@ function byId<T extends { id: string }>(a: T, b: T): number {
 }
 
 /** O(n) scan — the P3.2 shipping path, kept for behavioural parity tests. */
-export const makeLinearSnappingNeighbours: NeighbourFactory = (chains, nodes, locale) => {
-  const { chainEntries, freeEntries } = collectEntries(chains, nodes, locale);
+export const makeLinearSnappingNeighbours: NeighbourFactory = (
+  chains,
+  nodes,
+  locale,
+  fontSize = tokens.numeralFontSize,
+) => {
+  const { chainEntries, freeEntries } = collectEntries(chains, nodes, locale, fontSize);
 
   return {
     chainsNear(node) {
-      const draggedBounds = boundsOf(node, locale);
+      const draggedBounds = boundsOf(node, locale, undefined, fontSize);
       return chainEntries
         .filter(
           ({ chain, bounds }) =>
@@ -157,7 +178,7 @@ export const makeLinearSnappingNeighbours: NeighbourFactory = (chains, nodes, lo
         .sort(byId);
     },
     freeNodesNear(node) {
-      const draggedBounds = boundsOf(node, locale);
+      const draggedBounds = boundsOf(node, locale, undefined, fontSize);
       return freeEntries
         .filter(
           ({ node: candidate, bounds }) =>
@@ -217,8 +238,13 @@ function queryBucketKeys(dragged: Bounds, bucketSize: number): string[] {
 
 /** Uniform spatial hash (§8.4). Same `SnappingNeighbours` surface as the linear
  *  scan — `useNodeDrag` and `resolveSnapCandidate` call sites unchanged. */
-export const makeSpatialHashSnappingNeighbours: NeighbourFactory = (chains, nodes, locale) => {
-  const { chainEntries, freeEntries } = collectEntries(chains, nodes, locale);
+export const makeSpatialHashSnappingNeighbours: NeighbourFactory = (
+  chains,
+  nodes,
+  locale,
+  fontSize = tokens.numeralFontSize,
+) => {
+  const { chainEntries, freeEntries } = collectEntries(chains, nodes, locale, fontSize);
   const bucketSize = SPATIAL_HASH_BUCKET;
   const chainBuckets = new Map<string, ChainEntry[]>();
   const freeBuckets = new Map<string, FreeEntry[]>();
@@ -232,7 +258,7 @@ export const makeSpatialHashSnappingNeighbours: NeighbourFactory = (chains, node
 
   return {
     chainsNear(node) {
-      const draggedBounds = boundsOf(node, locale);
+      const draggedBounds = boundsOf(node, locale, undefined, fontSize);
       const seen = new Set<string>();
       const out: Chain[] = [];
       for (const key of queryBucketKeys(draggedBounds, bucketSize)) {
@@ -249,7 +275,7 @@ export const makeSpatialHashSnappingNeighbours: NeighbourFactory = (chains, node
       return out.sort(byId);
     },
     freeNodesNear(node) {
-      const draggedBounds = boundsOf(node, locale);
+      const draggedBounds = boundsOf(node, locale, undefined, fontSize);
       const seen = new Set<string>();
       const out: CalcNode[] = [];
       for (const key of queryBucketKeys(draggedBounds, bucketSize)) {

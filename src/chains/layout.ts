@@ -28,6 +28,9 @@ export function layoutChain(
   chain: Chain,
   nodes: Record<NodeId, CalcNode>,
   locale: string,
+  /** Live numeral font size (§1.2 P7 preference); defaults to the compiled-in
+   *  token, same as `widthOf`'s own matching parameter this passes through to. */
+  fontSize: number = tokens.numeralFontSize,
 ): Record<NodeId, Vec2> {
   const positions: Record<NodeId, Vec2> = {};
   let x = chain.anchor.x;
@@ -35,7 +38,7 @@ export function layoutChain(
     const member = nodes[memberId];
     if (!member) continue;
     positions[memberId] = { x, y: chain.anchor.y };
-    x += widthOf(member, locale, tokens.numeralFontSize, nodes);
+    x += widthOf(member, locale, fontSize, nodes);
   }
   return positions;
 }
@@ -80,12 +83,13 @@ function chainRight(
   chain: Chain,
   nodes: Record<NodeId, CalcNode>,
   locale: string,
+  fontSize: number,
 ): number {
   let x = chain.anchor.x;
   for (const memberId of chain.members) {
     const member = nodes[memberId];
     if (!member) continue;
-    x += widthOf(member, locale, tokens.numeralFontSize, nodes);
+    x += widthOf(member, locale, fontSize, nodes);
   }
   return x;
 }
@@ -132,10 +136,13 @@ export function insertionFeedback(
    *  `newChain` when the dragged node becomes leftmost — `formNewChain` anchors at
    *  the release point, not the store's stale home. Falls back to `dragged.position`. */
   livePosition?: Vec2,
+  /** Live numeral font size (§1.2 P7 preference); defaults to the compiled-in
+   *  token, same as `widthOf`'s own matching parameter this passes through to. */
+  fontSize: number = tokens.numeralFontSize,
 ): InsertionFeedback {
   if (!candidate) return EMPTY_FEEDBACK;
 
-  const gap = widthOf(dragged, locale, tokens.numeralFontSize, nodes);
+  const gap = widthOf(dragged, locale, fontSize, nodes);
   if (gap <= 0) return EMPTY_FEEDBACK;
 
   const live = livePosition ?? dragged.position;
@@ -157,7 +164,7 @@ export function insertionFeedback(
       if (!raw) return EMPTY_FEEDBACK;
       const chain = chainWithoutDragged(raw, dragged.id);
       return {
-        caret: caretAt(chainRight(chain, nodes, locale), chain.anchor.y),
+        caret: caretAt(chainRight(chain, nodes, locale, fontSize), chain.anchor.y),
         offsets,
       };
     }
@@ -171,7 +178,7 @@ export function insertionFeedback(
       for (let i = 0; i < index; i += 1) {
         const member = nodes[chain.members[i]];
         if (!member) continue;
-        boundaryX += widthOf(member, locale, tokens.numeralFontSize, nodes);
+        boundaryX += widthOf(member, locale, fontSize, nodes);
       }
       if (index === 0) {
         // Same geometry as prepend: gap opens on the left, members stay.
@@ -208,7 +215,7 @@ export function insertionFeedback(
       }
       // Partner stays left; caret at its right edge where the dragged node will land.
       return {
-        caret: caretAt(partner.position.x + widthOf(partner, locale, tokens.numeralFontSize, nodes), partner.position.y),
+        caret: caretAt(partner.position.x + widthOf(partner, locale, fontSize, nodes), partner.position.y),
         offsets,
       };
     }

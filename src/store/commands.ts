@@ -9,6 +9,7 @@
 import { setAutosaveSuppressed, useDocumentStore } from './documentStore';
 import { historyTop, type HistoryEntry } from './undo';
 import { useUiStore } from './uiStore';
+import { usePreferencesStore } from './preferencesStore';
 import {
   createNumberNode,
   createOperatorNode,
@@ -115,7 +116,12 @@ export function addEqualsNode(position: Vec2): NodeId {
 function reflowChain(draft: CalcDocument, chainId: ChainId): void {
   const chain = draft.chains[chainId];
   if (!chain) return;
-  const positions = layoutChain(chain, draft.nodes, getDeviceLocale());
+  const positions = layoutChain(
+    chain,
+    draft.nodes,
+    getDeviceLocale(),
+    usePreferencesStore.getState().numeralFontSize,
+  );
   for (const memberId of chain.members) {
     const member = draft.nodes[memberId];
     const position = positions[memberId];
@@ -320,7 +326,7 @@ export function continuationAnchor(
       : value;
   const columnLeft = originX;
   const columnRight =
-    originX + widthOf(firstMember, locale, tokens.numeralFontSize, nodes);
+    originX + widthOf(firstMember, locale, usePreferencesStore.getState().numeralFontSize, nodes);
 
   let y = originY + pitch;
   // Push below any cell whose bounds intersect the candidate slot in this
@@ -854,7 +860,7 @@ export function prependToChain(nodeId: NodeId, chainId: ChainId): void {
     if (!draft.chains[chainId]) return;
     const locale = getDeviceLocale();
     chain.anchor = {
-      x: chain.anchor.x - widthOf(node, locale, tokens.numeralFontSize, draft.nodes),
+      x: chain.anchor.x - widthOf(node, locale, usePreferencesStore.getState().numeralFontSize, draft.nodes),
       y: chain.anchor.y,
     };
     node.chainId = chainId;
@@ -896,7 +902,7 @@ export function insertIntoChain(nodeId: NodeId, chainId: ChainId, index: number)
     if (clamped === 0) {
       const locale = getDeviceLocale();
       chain.anchor = {
-        x: chain.anchor.x - widthOf(node, locale, tokens.numeralFontSize, draft.nodes),
+        x: chain.anchor.x - widthOf(node, locale, usePreferencesStore.getState().numeralFontSize, draft.nodes),
         y: chain.anchor.y,
       };
     }
@@ -979,7 +985,7 @@ function placeReferenceInChain(
   if (clamped === 0) {
     const locale = getDeviceLocale();
     chain.anchor = {
-      x: chain.anchor.x - widthOf(reference, locale, tokens.numeralFontSize, draft.nodes),
+      x: chain.anchor.x - widthOf(reference, locale, usePreferencesStore.getState().numeralFontSize, draft.nodes),
       y: chain.anchor.y,
     };
   }

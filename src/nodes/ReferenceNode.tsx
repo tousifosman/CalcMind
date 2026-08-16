@@ -11,12 +11,13 @@ import { useNode } from '../store/selectors';
 import { useDocumentStore } from '../store/documentStore';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
-import { glyphColor, identityBorderFor, tokens } from '../ui/tokens';
-import { Cell, glyphTextStyle } from './Cell';
+import { glyphColor, identityBorderFor } from '../ui/tokens';
+import { Cell, useGlyphTextStyle } from './Cell';
 import { referenceCellContent } from '../engine/reference';
 import { labelForNode } from '../engine/identity';
 import { useReferenceIdentityHue } from './useIdentityHue';
 import { useNodeSelected } from './useNodeSelected';
+import { usePreferencesStore } from '../store/preferencesStore';
 
 /** No-identity palette — distinct from role fills so an uncoloured reference is
  *  not mistaken for a number/result (dangling target, or hue not yet assigned). */
@@ -39,6 +40,8 @@ function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
   const nodes = useDocumentStore((s) => s.document.nodes);
   const identityHue = useReferenceIdentityHue(id);
   const selected = useNodeSelected(id);
+  const glyphTextStyle = useGlyphTextStyle();
+  const fontSize = usePreferencesStore((s) => s.numeralFontSize);
   if (!node || node.kind !== 'reference') return null;
 
   const locale = getDeviceLocale();
@@ -64,7 +67,7 @@ function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
   return (
     <Cell
       testID={`reference-node-${id}`}
-      width={widthOf(node, locale, tokens.numeralFontSize, nodes)}
+      width={widthOf(node, locale, fontSize, nodes)}
       fill={fill}
       border={border}
       label={identityLabel}

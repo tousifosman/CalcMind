@@ -12,8 +12,9 @@ function containsPoint(
   point: Vec2,
   locale: string,
   nodes: Record<string, CalcNode>,
+  fontSize: number,
 ): boolean {
-  const width = widthOf(node, locale, tokens.numeralFontSize, nodes);
+  const width = widthOf(node, locale, fontSize, nodes);
   const { x, y } = node.position;
   return point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + tokens.nodeHeight;
 }
@@ -23,9 +24,12 @@ export function hitTestNode(
   nodes: Record<string, CalcNode>,
   point: Vec2,
   locale: string,
+  /** Live numeral font size (§1.2 P7 preference); defaults to the compiled-in
+   *  token, same as `widthOf`'s own matching parameter. */
+  fontSize: number = tokens.numeralFontSize,
 ): CalcNode | null {
   for (const node of Object.values(nodes)) {
-    if (containsPoint(node, point, locale, nodes)) return node;
+    if (containsPoint(node, point, locale, nodes, fontSize)) return node;
   }
   return null;
 }

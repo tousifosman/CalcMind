@@ -102,6 +102,57 @@ describe('setViewport', () => {
   });
 });
 
+describe('mutateWithoutUndo (§1.2 P7: reflowAllChainsForDisplay\'s primitive)', () => {
+  test('mutates the document without touching undo history', () => {
+    useDocumentStore.getState().mutateWithoutUndo((draft) => {
+      draft.name = 'Renamed without undo';
+    });
+    expect(useDocumentStore.getState().document.name).toBe('Renamed without undo');
+    expect(useDocumentStore.getState().undoStack).toHaveLength(0);
+  });
+
+  test('a no-op recipe is a true no-op: no set, no dirty notification', () => {
+    const dirty = jest.fn();
+    setDocumentDirtyHandler(dirty);
+    const before = useDocumentStore.getState().document;
+
+    useDocumentStore.getState().mutateWithoutUndo(() => {
+      // touches nothing
+    });
+
+    expect(useDocumentStore.getState().document).toBe(before); // same reference back
+    expect(dirty).not.toHaveBeenCalled();
+  });
+
+  test('notifies dirty (so autosave still picks it up) when something actually changed', () => {
+    const dirty = jest.fn();
+    setDocumentDirtyHandler(dirty);
+    useDocumentStore.getState().mutateWithoutUndo((draft) => {
+      draft.name = 'Dirty via mutateWithoutUndo';
+    });
+    expect(dirty).toHaveBeenCalledTimes(1);
+  });
+
+  test('stays outside undo even sandwiched between real edits (§7 precedent: setViewport)', () => {
+    renameDocument('First');
+    useDocumentStore.getState().mutateWithoutUndo((draft) => {
+      draft.name = 'Reflowed, not a document edit';
+    });
+    // The reflow-style mutation left no trace on the stack — still exactly the one
+    // entry renameDocument('First') pushed.
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+
+    useDocumentStore.getState().undo();
+    // Reverts renameDocument('First') by its own recorded inverse patch, landing back
+    // on the pre-'First' name — not on 'Reflowed, not a document edit', which undo
+    // never knew existed.
+    expect(useDocumentStore.getState().document.name).toBe('Untitled');
+
+    useDocumentStore.getState().redo();
+    expect(useDocumentStore.getState().document.name).toBe('First');
+  });
+});
+
 describe('undo stack bound (P7.1 / §13)', () => {
   test('the stack is capped at MAX_HISTORY and drops the oldest entry', () => {
     for (let i = 0; i < MAX_HISTORY; i++) {

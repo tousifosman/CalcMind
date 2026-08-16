@@ -12,8 +12,9 @@
 // References that still show the identity caption pass `labelHue` so the caption matches without
 // drawing a ring. In-place label editing (P6b.1) swaps the caption Text for a TextInput.
 import { ReactNode, useEffect, useRef } from 'react';
-import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, TextStyle, View } from 'react-native';
 import { tokens, labelColor, selectionFocusColor } from '../ui/tokens';
+import { usePreferencesStore } from '../store/preferencesStore';
 
 /** Inset identity ring width — matches the structural `borderBand` so the ring reads as
  *  part of the same chrome language, not a thicker selection outline. */
@@ -172,14 +173,20 @@ export function Cell({
 }
 
 /** Text style every glyph (digits, operators, `=`, parens) renders through, so a mixed row reads
- *  as sitting on one baseline: nudged `mathAxisOffset` below the cell's vertical centre (§1.2). */
-export const glyphTextStyle = StyleSheet.create({
-  glyph: {
-    fontSize: tokens.numeralFontSize,
+ *  as sitting on one baseline: nudged `mathAxisOffset` below the cell's vertical centre (§1.2).
+ *  `fontSize` is the one live, user-adjustable piece (§1.2 P7 preference) — subscribed
+ *  reactively so every glyph cell repaints immediately on a Settings change; weight and the
+ *  maths-axis offset stay fixed tokens, not user-adjustable. Not memoised with
+ *  `StyleSheet.create` (that API is for static styles) — a plain object is fine here, same
+ *  cost as the `[glyphTextStyle, { color }]` array every call site already allocates. */
+export function useGlyphTextStyle(): TextStyle {
+  const fontSize = usePreferencesStore((s) => s.numeralFontSize);
+  return {
+    fontSize,
     fontWeight: tokens.numeralFontWeight,
     marginTop: tokens.mathAxisOffset,
-  },
-}).glyph;
+  };
+}
 
 const styles = StyleSheet.create({
   wrapper: {

@@ -86,6 +86,13 @@ export interface DocumentState {
    *  should not also move the camera). Zoom is clamped to [ZOOM_MIN, ZOOM_MAX]. */
   setViewport: (partial: Partial<{ pan: Vec2; zoom: number }>) => void;
 
+  /** Apply a mutation directly, bypassing undo history — same reasoning as
+   *  `setViewport` (§7): for changes that are not user edits (e.g. re-flowing every
+   *  chain's member `position` after the numeral font size preference changes,
+   *  store/reflowAllChains.ts) but must still persist and notify autosave. A no-op
+   *  recipe (nothing actually changed) skips the `set`/notify entirely. */
+  mutateWithoutUndo: (recipe: (draft: CalcDocument) => void) => void;
+
   /** Surfaced by autosave after a successful write (§12.3). */
   setLastSavedAt: (savedAt: string | null) => void;
 
@@ -172,6 +179,24 @@ export const useDocumentStore = create<DocumentState>((set, get) => ({
     });
     // Viewport is persisted with the document (§12.1) even though it is outside
     // undo (§7) — a reopen should restore the camera.
+    notifyDocumentDirty();
+  },
+
+  mutateWithoutUndo: (recipe) => {
+    const { document } = get();
+    // produceWithPatches (not plain produce), same as applyCommand: `updatedAt` is
+    // stamped unconditionally below, so without filtering it out a true no-op recipe
+    // would still look "changed" (a fresh timestamp is itself a patch) and wastefully
+    // notify dirty / trigger a set for literally nothing.
+    const [next, patches] = produceWithPatches(document, (draft) => {
+      recipe(draft);
+      draft.updatedAt = new Date().toISOString();
+    });
+    const meaningfulPatches = patches.filter(
+      (patch) => !(patch.path.length === 1 && patch.path[0] === 'updatedAt'),
+    );
+    if (meaningfulPatches.length === 0) return; // no-op recipe, nothing to record
+    set({ document: next });
     notifyDocumentDirty();
   },
 

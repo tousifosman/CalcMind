@@ -17,6 +17,7 @@ import {
   type CalcDocument,
   type ChainId,
 } from '../model/types';
+import { tokens } from '../ui/tokens';
 import type { StorageAdapter } from './adapter';
 import { runMigrations } from './migrations';
 import { fromSerializedDocument } from './serialize';
@@ -209,6 +210,11 @@ export function validateLoadedJson(text: string): ValidateLoadedJsonResult {
 export function materializeLoadedValue(
   value: unknown,
   locale: string,
+  /** Live numeral font size (§1.2 P7 preference); defaults to the compiled-in
+   *  token. `persistence/` sits below `store/` (§5's dependency rule — never
+   *  upward), so this is threaded in as a parameter, the same as `locale`,
+   *  rather than read from `store/preferencesStore.ts` in here. */
+  fontSize: number = tokens.numeralFontSize,
 ):
   | { ok: true; document: CalcDocument }
   | { ok: false; error: LoadError } {
@@ -218,7 +224,7 @@ export function materializeLoadedValue(
   }
 
   const document = fromSerializedDocument(validated.document);
-  prepareLoadedDocument(document, locale);
+  prepareLoadedDocument(document, locale, fontSize);
   return { ok: true, document };
 }
 
@@ -234,19 +240,20 @@ export function materializeLoadedValue(
 export function prepareLoadedDocument(
   document: CalcDocument,
   locale: string,
+  fontSize: number = tokens.numeralFontSize,
 ): void {
-  reflowAllChains(document, locale);
+  reflowAllChains(document, locale, fontSize);
 
   const allChainIds = Object.keys(document.chains) as ChainId[];
   recomputeFromSeeds(document, allChainIds, locale);
 
   // Result create/remove can change membership widths — lay out again.
-  reflowAllChains(document, locale);
+  reflowAllChains(document, locale, fontSize);
 }
 
-function reflowAllChains(document: CalcDocument, locale: string): void {
+function reflowAllChains(document: CalcDocument, locale: string, fontSize: number): void {
   for (const chain of Object.values(document.chains)) {
-    const positions = layoutChain(chain, document.nodes, locale);
+    const positions = layoutChain(chain, document.nodes, locale, fontSize);
     for (const memberId of chain.members) {
       const member = document.nodes[memberId];
       const position = positions[memberId];
@@ -316,7 +323,7 @@ async function readJsonWithBackup(
 export async function openDocument(
   adapter: StorageAdapter,
   id: string,
-  options?: { locale?: string },
+  options?: { locale?: string; fontSize?: number },
 ): Promise<OpenDocumentResult> {
   const locale = options?.locale ?? 'en-US';
   const fetched = await readJsonWithBackup(adapter, id);
@@ -324,7 +331,7 @@ export async function openDocument(
     return fetched;
   }
 
-  const materialized = materializeLoadedValue(fetched.result.value, locale);
+  const materialized = materializeLoadedValue(fetched.result.value, locale, options?.fontSize);
   if (!materialized.ok) {
     return materialized;
   }

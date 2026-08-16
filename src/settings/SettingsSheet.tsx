@@ -1,8 +1,8 @@
-// Settings sheet (§8.5, mode-strip cog). Opened from the keypad's Settings button;
-// currently holds a single row — About — since nothing else has a home here yet. Styled
-// after the reference screenshot the feature request shipped with: a full-screen dark
-// list with an amber accent, rather than this app's usual light keypad chrome — a
-// deliberate one-off, not a preview of P7.4's still-pending light/dark theme system.
+// Settings sheet (§8.5, mode-strip cog). Opened from the keypad's Settings button; holds
+// a "Numeral size" stepper (§1.2 P7) and an About row. Styled after the reference
+// screenshot the feature request shipped with: a full-screen dark list with an amber
+// accent, rather than this app's usual light keypad chrome — a deliberate one-off, not a
+// preview of P7.4's still-pending light/dark theme system.
 import { useState } from 'react';
 import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import ChevronLeftIcon from 'react-native-heroicons/outline/ChevronLeftIcon';
@@ -10,6 +10,12 @@ import ChevronRightIcon from 'react-native-heroicons/outline/ChevronRightIcon';
 import { version } from '../../package.json';
 import { rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
+import {
+  usePreferencesStore,
+  NUMERAL_FONT_SIZE_MIN,
+  NUMERAL_FONT_SIZE_MAX,
+  NUMERAL_FONT_SIZE_STEP,
+} from '../store/preferencesStore';
 
 const accentColor = rolePalette.operator.fill;
 
@@ -54,6 +60,9 @@ function RootPane({ onDone, onOpenAbout }: { onDone: () => void; onOpenAbout: ()
         </TouchableOpacity>
       </View>
       <View style={styles.section}>
+        <NumeralSizeRow />
+      </View>
+      <View style={styles.section}>
         <TouchableOpacity
           style={styles.row}
           onPress={onOpenAbout}
@@ -65,6 +74,47 @@ function RootPane({ onDone, onOpenAbout }: { onDone: () => void; onOpenAbout: ()
         </TouchableOpacity>
       </View>
     </>
+  );
+}
+
+/** §1.2 P7: live numeral font size, in `NUMERAL_FONT_SIZE_STEP`dp steps. A stepper
+ *  rather than a drag slider — no gesture-handler dependency needed for a settings
+ *  row, and it stays consistent with every other row here being a plain tap target. */
+function NumeralSizeRow() {
+  const fontSize = usePreferencesStore((s) => s.numeralFontSize);
+  const setFontSize = usePreferencesStore((s) => s.setNumeralFontSize);
+  const atMin = fontSize <= NUMERAL_FONT_SIZE_MIN;
+  const atMax = fontSize >= NUMERAL_FONT_SIZE_MAX;
+
+  return (
+    <View style={styles.row} testID="settings-row-numeral-size">
+      <Text style={styles.rowLabel}>Numeral size</Text>
+      <View style={styles.stepper}>
+        <TouchableOpacity
+          style={[styles.stepperButton, atMin && styles.stepperButtonDisabled]}
+          onPress={() => setFontSize(fontSize - NUMERAL_FONT_SIZE_STEP)}
+          disabled={atMin}
+          testID="settings-numeral-size-decrease"
+          accessibilityLabel="Decrease numeral size"
+          accessibilityRole="button"
+        >
+          <Text style={styles.stepperGlyph}>−</Text>
+        </TouchableOpacity>
+        <Text style={styles.stepperValue} testID="settings-numeral-size-value">
+          {fontSize}
+        </Text>
+        <TouchableOpacity
+          style={[styles.stepperButton, atMax && styles.stepperButtonDisabled]}
+          onPress={() => setFontSize(fontSize + NUMERAL_FONT_SIZE_STEP)}
+          disabled={atMax}
+          testID="settings-numeral-size-increase"
+          accessibilityLabel="Increase numeral size"
+          accessibilityRole="button"
+        >
+          <Text style={styles.stepperGlyph}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -173,6 +223,34 @@ const styles = StyleSheet.create({
   rowLabel: {
     color: '#FFFFFF',
     fontSize: 16,
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stepperButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#3A3A3C',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperButtonDisabled: {
+    opacity: 0.35,
+  },
+  stepperGlyph: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    // Optical centring: '−'/'+' glyphs sit slightly high in most system fonts at this size.
+    marginTop: -1,
+  },
+  stepperValue: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    minWidth: 34,
+    textAlign: 'center',
   },
   aboutBody: {
     alignItems: 'center',
