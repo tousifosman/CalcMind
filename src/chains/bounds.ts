@@ -7,14 +7,16 @@
 // hash is now the default. The linear implementation stays exported so the same
 // behavioural suite can prove the two agree.
 import type { CalcNode, Chain, NodeId } from '../model/types';
-import { tokens } from '../ui/tokens';
+import { tokens, nodeHeightFor } from '../ui/tokens';
 import { widthOf } from './measure';
 
 export const SNAP_DISTANCE = 28;
 export const SNAP_VERTICAL = 48;
 export const DETACH_DISTANCE = 44;
 
-/** §8.4: uniform bucket edge. Square cells; chains span every bucket they overlap. */
+/** §8.4: uniform bucket edge, sized off the compiled-in default cell height — a coarse
+ *  performance partition (how many buckets a query touches), not a hit-test bound, so it
+ *  does not need to track the live per-render height (§12.5) the way `boundsOf` does. */
 export const SPATIAL_HASH_BUCKET = 2 * tokens.nodeHeight;
 
 export interface Bounds {
@@ -76,7 +78,7 @@ export function boundsOf(
     left,
     right,
     top: node.position.y,
-    bottom: node.position.y + tokens.nodeHeight,
+    bottom: node.position.y + nodeHeightFor(fontSize),
   };
 }
 
@@ -126,7 +128,7 @@ function chainBounds(
     left,
     right,
     top: chain.anchor.y,
-    bottom: chain.anchor.y + tokens.nodeHeight,
+    bottom: chain.anchor.y + nodeHeightFor(fontSize),
   };
 }
 

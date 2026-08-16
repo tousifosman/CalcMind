@@ -4,7 +4,7 @@
 // spatial hash (§8.4 is about drag-frame snap search, a different problem). It exists only so
 // a tap (P2.6) can tell "landed on a node" from "landed on empty canvas" before P3 exists.
 import { CalcNode, Vec2 } from '../model/types';
-import { tokens } from '../ui/tokens';
+import { tokens, nodeHeightFor } from '../ui/tokens';
 import { widthOf } from '../chains/measure';
 
 function containsPoint(
@@ -16,7 +16,7 @@ function containsPoint(
 ): boolean {
   const width = widthOf(node, locale, fontSize, nodes);
   const { x, y } = node.position;
-  return point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + tokens.nodeHeight;
+  return point.x >= x && point.x <= x + width && point.y >= y && point.y <= y + nodeHeightFor(fontSize);
 }
 
 /** Returns the node under `point` (world coordinates), or `null` for empty canvas. */

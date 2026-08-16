@@ -13,7 +13,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
 import { unlinkReference, finishEditingLabel, setNodeLabel } from '../store/commands';
-import { rolePalette, glyphColor, tokens } from '../ui/tokens';
+import { rolePalette, glyphColor, tokens, nodeHeightFor } from '../ui/tokens';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
 import {
@@ -50,7 +50,7 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
   const content = resultCellContent(node.derived);
   const bandWidth = widthOf(node, locale, fontSize);
   const textureWidth = bandWidth - 2 * tokens.borderBand;
-  const textureHeight = tokens.nodeHeight - 2 * tokens.borderBand;
+  const textureHeight = nodeHeightFor(fontSize) - 2 * tokens.borderBand;
 
   const isCircular =
     content.mode === 'error' &&

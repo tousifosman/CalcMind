@@ -28,7 +28,7 @@ import {
   scrubNodeValue,
 } from '../store/commands';
 import { getDeviceLocale } from '../ui/locale';
-import { rolePalette, tokens } from '../ui/tokens';
+import { rolePalette, nodeHeightFor } from '../ui/tokens';
 import {
   inferSliderRange,
   rawToSliderValue,
@@ -109,7 +109,7 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
   const cellWidth = widthOf(node, locale, fontSize);
   const screenTopLeft = worldToScreen(node.position, viewport);
   const screenBottom = worldToScreen(
-    { x: node.position.x, y: node.position.y + tokens.nodeHeight },
+    { x: node.position.x, y: node.position.y + nodeHeightFor(fontSize) },
     viewport,
   );
   const screenCellWidth = cellWidth * viewport.zoom;

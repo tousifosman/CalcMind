@@ -9,7 +9,7 @@
 // pure over plain data — NodeLayer applies the offsets as transforms; the document is
 // untouched until release.
 import type { CalcNode, Chain, ChainId, NodeId, Vec2 } from '../model/types';
-import { tokens } from '../ui/tokens';
+import { tokens, nodeHeightFor } from '../ui/tokens';
 import type { SnapOutcome } from './snapping';
 import { widthOf } from './measure';
 
@@ -70,12 +70,12 @@ function chainWithoutDragged(chain: Chain, draggedId: NodeId): Chain {
   return { ...chain, members: chain.members.filter((id) => id !== draggedId) };
 }
 
-function caretAt(x: number, y: number): InsertionCaret {
+function caretAt(x: number, y: number, fontSize: number): InsertionCaret {
   return {
     x,
     y,
     width: Math.max(tokens.borderBand, 4),
-    height: tokens.nodeHeight,
+    height: nodeHeightFor(fontSize),
   };
 }
 
@@ -155,7 +155,7 @@ export function insertionFeedback(
       const chain = chainWithoutDragged(raw, dragged.id);
       // Members keep their world x — same as prependToChain shifting the anchor left.
       return {
-        caret: caretAt(chain.anchor.x - gap, chain.anchor.y),
+        caret: caretAt(chain.anchor.x - gap, chain.anchor.y, fontSize),
         offsets,
       };
     }
@@ -164,7 +164,7 @@ export function insertionFeedback(
       if (!raw) return EMPTY_FEEDBACK;
       const chain = chainWithoutDragged(raw, dragged.id);
       return {
-        caret: caretAt(chainRight(chain, nodes, locale, fontSize), chain.anchor.y),
+        caret: caretAt(chainRight(chain, nodes, locale, fontSize), chain.anchor.y, fontSize),
         offsets,
       };
     }
@@ -183,13 +183,13 @@ export function insertionFeedback(
       if (index === 0) {
         // Same geometry as prepend: gap opens on the left, members stay.
         return {
-          caret: caretAt(boundaryX - gap, chain.anchor.y),
+          caret: caretAt(boundaryX - gap, chain.anchor.y, fontSize),
           offsets,
         };
       }
       shiftFromIndex(chain.members, index, gap, offsets);
       return {
-        caret: caretAt(boundaryX, chain.anchor.y),
+        caret: caretAt(boundaryX, chain.anchor.y, fontSize),
         offsets,
       };
     }
@@ -209,13 +209,17 @@ export function insertionFeedback(
           y: partnerAt.y - partner.position.y,
         };
         return {
-          caret: caretAt(partnerAt.x, partnerAt.y),
+          caret: caretAt(partnerAt.x, partnerAt.y, fontSize),
           offsets,
         };
       }
       // Partner stays left; caret at its right edge where the dragged node will land.
       return {
-        caret: caretAt(partner.position.x + widthOf(partner, locale, fontSize, nodes), partner.position.y),
+        caret: caretAt(
+          partner.position.x + widthOf(partner, locale, fontSize, nodes),
+          partner.position.y,
+          fontSize,
+        ),
         offsets,
       };
     }
