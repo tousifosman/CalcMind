@@ -16,6 +16,7 @@ import { NodeId, NodeKind } from '../model/types';
 import { useNode, useNodeIds } from '../store/selectors';
 import { useDocumentStore } from '../store/documentStore';
 import { useUiStore } from '../store/uiStore';
+import { usePreferencesStore } from '../store/preferencesStore';
 import { NumberNode } from '../nodes/NumberNode';
 import { OperatorNode } from '../nodes/OperatorNode';
 import { ParenNode } from '../nodes/ParenNode';
@@ -133,6 +134,7 @@ export function NodeLayer() {
       document.nodes,
       getDeviceLocale(),
       dragSnap.position,
+      usePreferencesStore.getState().numeralFontSize,
     );
   }, [dragSnap]);
 

@@ -21,6 +21,7 @@ import { SettingsOverlay } from '../settings/SettingsSheet';
 import { ValueSliderOverlay } from '../nodes/ValueSlider';
 import { commandFromHardwareKey, dispatchEditorCommand } from '../keypad/keymap';
 import { useUiStore } from '../store/uiStore';
+import { usePreferencesStore } from '../store/preferencesStore';
 import { useDocumentStore } from '../store/documentStore';
 import {
   addNumberNode,
@@ -45,9 +46,14 @@ export function AppShell() {
   useEffect(() => startAutosave(), []);
 
   // Open the most recently saved document on launch, if one exists (§12.3, P5.5). Must run
-  // after startAutosave() above so there is a controller to flush before the swap.
+  // after startAutosave() above so there is a controller to flush before the swap, and after
+  // the numeral font size preference hydrates — loadMostRecentDocument reads it to lay out
+  // the loaded document at the right size on the very first paint (§1.2 P7).
   useEffect(() => {
-    loadMostRecentDocument();
+    (async () => {
+      await usePreferencesStore.getState().hydrate();
+      await loadMostRecentDocument();
+    })();
   }, []);
 
   // Stride for §8.6 double-tap → select group. Ref (not state): a tap must not re-render
@@ -111,7 +117,12 @@ export function AppShell() {
   function handleCanvasTap(worldPoint: Vec2): void {
     useUiStore.getState().setLastInteractionPoint(worldPoint);
     const { document } = useDocumentStore.getState();
-    const hit = hitTestNode(document.nodes, worldPoint, getDeviceLocale());
+    const hit = hitTestNode(
+      document.nodes,
+      worldPoint,
+      getDeviceLocale(),
+      usePreferencesStore.getState().numeralFontSize,
+    );
 
     // Re-point mode (§11.2): the next valid value becomes the new target; empty /
     // invalid taps cancel without creating a node.
@@ -161,7 +172,12 @@ export function AppShell() {
   // coordinates so the floating sheet can be positioned without the viewport transform.
   function handleCanvasLongPress(worldPoint: Vec2, screenPoint: Vec2): void {
     const { document } = useDocumentStore.getState();
-    const hit = hitTestNode(document.nodes, worldPoint, getDeviceLocale());
+    const hit = hitTestNode(
+      document.nodes,
+      worldPoint,
+      getDeviceLocale(),
+      usePreferencesStore.getState().numeralFontSize,
+    );
     if (hit) {
       useUiStore.getState().openContextMenu({ kind: 'node', nodeId: hit.id, anchor: screenPoint });
     } else {

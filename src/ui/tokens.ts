@@ -3,18 +3,55 @@
 // to a 64dp node height.
 
 export const tokens = {
-  nodeHeight: 64,
+  /** The cell height *at the compiled-in default font size* (`numeralFontSize` below) — see
+   *  {@link nodeHeightFor} for the live value at any other size (§1.2 P7: the Settings
+   *  sheet's Canvas Number Font Size row). Used directly only where a live per-render value isn't
+   *  warranted (the §8.4 spatial-hash bucket edge is a coarse performance partition, not a
+   *  hit-test bound) or as the fallback default for a `fontSize`-parameterised function
+   *  nobody has called with a live size. Reduced from the reference's ratio-accurate 64
+   *  alongside the numeral shrink — a fixed 64dp band around a 22px glyph (down from the
+   *  reference's 30px) left visible empty space above and below the text. Cut further to 40
+   *  on follow-up feedback that 48 still looked spacious; held near the ~44dp common
+   *  touch-target minimum since this height is also the cell's tap/drag target (no separate
+   *  hitSlop — see `canvas/hitTest.ts`), not just its paint box. `mathAxisOffset` scaled
+   *  down with it. */
+  nodeHeight: 40,
   borderBand: 3,
-  numeralFontSize: 30,
-  numeralFontWeight: '800' as const,
-  numberPaddingX: 12,
+  /** Reduced from the reference's ratio-accurate 30 — at that size, in the reference's bold
+   *  800 weight, glyphs read as oversized on-screen. Deliberate deviation from the sampled
+   *  geometry above (§1.2). This is only the compiled-in *default* — §12.5's Settings sheet
+   *  lets the user override it live, 14–30dp; live call sites read
+   *  `usePreferencesStore`, not this constant. */
+  numeralFontSize: 22,
+  numeralFontWeight: '400' as const,
+  /** Reduced from the reference's ratio-accurate 12, then halved again to 4 on further
+   *  user feedback that 8 still read as excess whitespace rather than breathing room. */
+  numberPaddingX: 4,
+  /** Vertical counterpart to `numberPaddingX`, added above and below the glyph to derive
+   *  the cell height at any font size (`nodeHeightFor`) — chosen so that
+   *  `nodeHeightFor(numeralFontSize) === nodeHeight` exactly (9×2 + 22 = 40), so the live
+   *  formula reproduces the tuned default rather than jumping on first use (§1.2 P7). */
+  numberPaddingY: 9,
   operatorWidth: 34,
   equalsWidth: 35,
   /** Bumped from the reference's 3 (ratio-accurate) to 8 for a friendlier silhouette. */
   cornerRadius: 8,
-  /** Offset of the maths axis (where +, -, = glyphs are drawn) below the cell's vertical centre. */
-  mathAxisOffset: 4,
+  /** Offset of the maths axis (where +, -, = glyphs are drawn) below the cell's vertical centre.
+   *  Scaled down with `nodeHeight`'s reductions to stay near the same ~0.063 ratio to the band
+   *  height that the reference geometry set (§1.2); rounded to the nearest dp each step. Stays
+   *  fixed even though `nodeHeight` is now live (§12.5) — a 1-2dp baseline nudge reads the same
+   *  across the whole settings range; not worth the extra derivation. */
+  mathAxisOffset: 2,
 } as const;
+
+/** Live cell height at any numeral font size (§1.2 P7) — `fontSize` plus `numberPaddingY` on
+ *  each side, the same symmetric-padding model `numberPaddingX` already uses for width.
+ *  Every call site that needs the *actual* rendered cell height (not the coarse
+ *  `SPATIAL_HASH_BUCKET` partition) derives it from whatever `fontSize` it already has in
+ *  scope through this function, rather than reading `tokens.nodeHeight` — see §12.5. */
+export function nodeHeightFor(fontSize: number): number {
+  return fontSize + 2 * tokens.numberPaddingY;
+}
 
 export type NodeRole = 'number' | 'operator' | 'equals' | 'result';
 

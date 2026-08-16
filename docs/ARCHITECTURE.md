@@ -56,14 +56,14 @@ The reference raster has a cell height of 256px. Tokens below are that geometry 
 
 | Token | Reference (px) | Ratio to cell height | Value (dp) |
 |---|---|---|---|
-| `nodeHeight` | 256 | 1.000 | **64** |
+| `nodeHeight` | 256 | 1.000 | **40** *(reduced from the ratio-accurate 64 in two steps (64→48→40) alongside the numeral shrink; held near the ~44dp common touch-target minimum since it also sizes the cell's tap/drag hit box — see decision 18. This is now only the compiled-in default at the default font size — §12.5's `nodeHeightFor(fontSize)` is the live value everywhere the cell's actual box is computed, decision 20)* |
 | `borderBand` | 11 | 0.043 | **3** |
-| `numeralFontSize` | 127 | 0.496 | **30** (weight 800) |
-| `numberPaddingX` | 48 | 0.188 | **12** |
+| `numeralFontSize` | 127 | 0.496 | **22** (weight 400) *(reduced from the ratio-accurate 30/800 — read as oversized on-screen; this is now only the compiled-in default — §12.5's Settings sheet lets the user override it live, 14–30dp)* |
+| `numberPaddingX` | 48 | 0.188 | **4** *(reduced from the ratio-accurate 12, in two steps — see decision 18)* |
 | `operatorWidth` | 136 | 0.531 | **34** |
 | `equalsWidth` | 140 | 0.547 | **35** |
 | `cornerRadius` | 12 | 0.047 | **8** *(bumped from 3 for a friendlier silhouette)* |
-| `mathAxisOffset` | +16 from centre | 0.063 | **4** below centre |
+| `mathAxisOffset` | +16 from centre | 0.063 | **2** below centre *(scaled down from 4 with `nodeHeight`'s two reductions to stay near the same ratio — decision 18)* |
 
 | Role | Fill | Border band |
 |---|---|---|
@@ -605,7 +605,11 @@ stateDiagram-v2
     MovingChain --> Idle : release, chain anchor updated
 ```
 
-Thresholds (world units): `SNAP_DISTANCE = 28`, `SNAP_VERTICAL = 48` (0.75 × `nodeHeight`),
+Thresholds (world units): `SNAP_DISTANCE = 28`, `SNAP_VERTICAL = 48` (was 0.75 × `nodeHeight`
+when set, against the reference-accurate 64; `nodeHeight` has since shrunk twice, to 48 then 40,
+for the smaller cell font — decision 18 — but `SNAP_VERTICAL` is an independently-tuned
+drag-gesture constant, not a rendering token, so it was left as-is both times rather than
+recomputed against the new ratio; it is now numerically larger than `nodeHeight` itself),
 `DETACH_DISTANCE = 44`. `DETACH_DISTANCE > SNAP_DISTANCE` deliberately, so a member does not
 detach and immediately re-snap into the slot it just left.
 
@@ -728,10 +732,14 @@ operators are visually separated from digits.
   with its own `settingsVisible` flag on `uiStore` — ephemeral like every other prompt in this
   section, not a document edit. Styled as a one-off dark/amber sheet (not this app's usual light
   keypad chrome, and not a preview of P7.4's still-pending theme system) so it can match a
-  concrete visual reference without waiting on that work. Currently holds a single row, **About**
-  (app name, `package.json` version, tagline) — everything else that plausibly belongs here
-  (angle units, decimal format, Clear all content, theme) has no feature behind it yet, so it
-  stays off the sheet rather than appearing as an inert placeholder row.
+  concrete visual reference without waiting on that work. Holds a **Canvas Number Font Size**
+  row (§1.2 P7 — the live override of `tokens.numeralFontSize`, persisted via
+  `store/preferencesStore.ts` and §12.5) — +/− stepper buttons and a typable `TextInput`
+  reading the same value, with a non-editable "pt" unit label so the number's meaning isn't
+  ambiguous — and an **About** row (app name, `package.json` version, tagline) — everything
+  else that plausibly belongs here (angle units, decimal format, Clear all content, theme) has
+  no feature behind it yet, so it stays off the sheet rather than appearing as an inert
+  placeholder row.
 
 ### 8.6 Selection and context menus
 
@@ -1278,6 +1286,80 @@ in `src/persistence/migrations/`; the fixture rule is restated at the top of tha
 next author cannot miss it. A synthetic v0→v1 fixture pair proves the runner before any real
 migration ships (production `migrations` stays empty while v1 is current).
 
+### 12.5 User preferences (§1.2 P7)
+
+A third category of state, alongside `documentStore` (persisted + undoable) and `uiStore`
+(never persisted, never undoable): **persisted, but not undoable, and not part of any
+document.** Currently one setting — the numeral font size, `store/preferencesStore.ts`'s
+`numeralFontSize` — surfaced as the Settings sheet's Canvas Number Font Size row (§8.5).
+
+- **Contract** (`persistence/preferences.ts`, same bundler platform-resolution trick as
+  `adapter.ts` §12.2) is deliberately smaller than the document `StorageAdapter`: `read()` /
+  `write()` over one small `Preferences` blob, no atomic-write/backup machinery — a corrupt or
+  lost preferences file loses a display setting, never user data, so a failed read/write is
+  swallowed and the caller stays on in-memory defaults.
+- **Native** (`preferences.native.ts`): a single JSON file at
+  `DocumentDirectoryPath/calcmind-preferences.json` — a sibling of, not inside, the `calcmind`
+  documents directory, so it can never be mistaken for a document by `readDir`.
+- **Web** (`preferences.web.ts`): its own IndexedDB database, `calcmind-preferences` —
+  deliberately **not** a second object store inside documents' `calcmind` database. Two
+  independent `idb-keyval.createStore(sameDbName, differentStoreName)` calls each open that
+  database name on their own, uncoordinated; IndexedDB only creates the object stores present
+  in whichever `createStore` call's `upgradeneeded` handler happens to fire first, so the other
+  store is silently missing for the lifetime of that database. Caught live: preferences
+  hydrate before any document loads (below), so on a fresh profile its `createStore` opened
+  `calcmind` first and created only a `preferences` store — every subsequent document autosave
+  then threw `NotFoundError` because `documents` was never created. A separate database
+  sidesteps the ordering hazard entirely.
+- **Hydration order.** `AppShell.tsx` awaits `usePreferencesStore.getState().hydrate()` before
+  calling `loadMostRecentDocument()` — the loaded document's chains re-flow (§12.3) using
+  whatever font size was just hydrated, not the compiled-in default, so a document saved under
+  a non-default size lays out correctly on the very first paint.
+- **Applying a change.** `setNumeralFontSize` clamps to range, persists (best-effort), then
+  re-flows every chain in the *currently open* document at the new size via
+  `store/reflowAllChains.ts`'s `reflowAllChainsForDisplay`. That re-flow calls
+  `documentStore`'s `mutateWithoutUndo` — the same bypass-undo primitive `setViewport` (§7)
+  uses — because a display preference change is not a document edit a user would expect
+  Ctrl+Z to touch, even though the re-flowed `position`s do live on document nodes and do get
+  autosaved. `reflowAllChainsForDisplay` lives outside `store/commands.ts` (which has its own
+  private, per-chain `reflowChain` for after document edits) specifically to avoid an import
+  cycle: `commands.ts` already reads the live font size from `preferencesStore.ts` for its own
+  `widthOf` calls, so `preferencesStore.ts` cannot also import `commands.ts` — and takes
+  `fontSize` as a parameter rather than reading `preferencesStore.ts` itself for the same
+  reason, since `preferencesStore.ts` is *its* caller.
+- **Threading the live value.** `chains/measure.ts`, `chains/layout.ts`, `chains/bounds.ts`,
+  and `chains/snapping.ts` stay free of any store import (pure functions over their explicit
+  arguments, same as `locale` already was) — `fontSize` is a parameter defaulted to
+  `tokens.numeralFontSize`, mirroring `widthOf`'s own existing convention, so every pre-existing
+  test call site that predates the setting keeps compiling and behaving identically. Production
+  call sites (`store/commands.ts`, `canvas/hitTest.ts`, `nodes/useNodeDrag.ts`,
+  `canvas/NodeLayer.tsx`) pass `usePreferencesStore.getState().numeralFontSize` explicitly — a
+  plain non-reactive read, the same pattern already used for `uiStore` in those same
+  non-component modules. Node view components (`NumberNode`, `OperatorNode`, `EqualsNode`,
+  `ParenNode`, `ReferenceNode`, `ResultNode`) subscribe reactively via `Cell.tsx`'s
+  `useGlyphTextStyle()` hook (replacing the former static `glyphTextStyle` constant) so an
+  already-mounted cell repaints immediately on a Settings change, not just on its next
+  unrelated re-render. `persistence/load.ts` sits below `store/` in §5's dependency rule
+  (never upward), so its own reflow-on-open takes `fontSize` as a parameter from its caller
+  rather than reading the store directly.
+- **`nodeHeight` tracks the live font size; `numberPaddingX` / `mathAxisOffset` stay fixed.**
+  `ui/tokens.ts`'s `nodeHeightFor(fontSize)` (`fontSize + 2 × numberPaddingY`) replaces the
+  static `tokens.nodeHeight` everywhere a cell's actual box is computed — `chains/measure.ts`
+  (the width floor), `chains/bounds.ts` (`boundsOf`/`chainBounds`), `chains/layout.ts`
+  (`caretAt`, now taking `fontSize` as a third parameter), `canvas/hitTest.ts`
+  (`containsPoint`), and `store/commands.ts` (`continuationAnchor`'s slot pitch and column
+  bounds) — so a chosen size that no longer fits the old 40dp band doesn't clip or leave the
+  cell's tap/drag hit box out of sync with what's drawn. `tokens.nodeHeight` itself stays as
+  the *default-size* value only, used where a live per-render size isn't warranted:
+  `SPATIAL_HASH_BUCKET` in `bounds.ts` (a coarse performance partition, not a hit-test bound)
+  and `CONTINUATION_OFFSET` in `commands.ts` (a fallback default, not the value
+  `continuationAnchor` actually places against). `nodeHeightFor` was calibrated so
+  `nodeHeightFor(22) === 40`, matching today's compiled-in default exactly — nothing about the
+  fixed-size layout changed, only how the height is derived. `numberPaddingX` and
+  `mathAxisOffset` stay fixed tokens, not user-adjustable, since neither needs to track size to
+  keep the cell's proportions readable. The Settings range (14–30dp, `NUMERAL_FONT_SIZE_MIN`/
+  `MAX`/`STEP` in `preferencesStore.ts`) was chosen to stay legible against those fixed values.
+
 ---
 
 ## 13. Undo / redo
@@ -1311,7 +1393,8 @@ Jest is already configured and green in this repo.
 | `engine/graph` | Topological order, incremental dirty propagation, cycle detection, dangling references |
 | `engine/reference` | Live/dangling display text, delete-time `lastKnownDisplay` stamp, re-point eligibility |
 | `chains/` | Layout arithmetic, bounds, snap candidate selection at threshold boundaries, detach hysteresis |
-| `persistence/` | Round-trip equality (document → JSON → document), byte-stability of serialisation, every migration fixture, malformed-file and newer-schema handling |
+| `persistence/` | Round-trip equality (document → JSON → document), byte-stability of serialisation, every migration fixture, malformed-file and newer-schema handling; preferences adapters (native fs, web IndexedDB) round-trip and swallow corrupt/missing files to `{}` |
+| `store/preferencesStore`, `store/reflowAllChains` | Clamping, persist-on-set, hydrate-over-default, reflow bypasses undo and matches `layoutChain` directly at the given font size |
 | Components | Each node kind renders; result nodes reject edit attempts; value slider range inference + popover |
 | `canvas/connectors` | Live-link collection, 1→N fan paths, >4 collapse badge, selection fade (decision #13) |
 | Integration | create → snap → `=` → result; edit input → result updates; save → reload → identical document; scrub gesture → one undo + cascade |
@@ -1356,6 +1439,9 @@ it unclear which parts were claims about the present and which were intentions.
 | 15 | Swipe-to-clear / Clear all require confirmation | Tydlig's bare swipe wipes a document; too destructive for one stray gesture even with undo. The mode-strip Clear all button shares the same confirm (§8.5) | Never |
 | 16 | Typing builds chains directly, not through P3's snapping | Typing always knows exactly which chain to extend (whichever the selected node belongs to), so it appends deterministically (`store/commands.ts`'s `appendMembersToChain`) instead of running §8.2-8.4's geometric candidate search, which exists to disambiguate a *dragged* node's several nearby neighbours (P2.8) | P3's chain layout pass changes how `Chain.anchor`/positions are derived and this stops matching it |
 | 17 | Plain drag detaches; long-press-then-drag moves chain | Detach/rearrange is the frequent edit and must not require a dwell; lifting a whole expression is deliberate. Opposite mapping tried interactively (P3.7); both work, this one won (§8.3, §17.1) | Real-device use shows accidental detaches dominate over accidental chain moves |
+| 18 | `numeralFontSize`/`numeralFontWeight` reduced to 22/400 from the reference-accurate 30/800; `numberPaddingX` reduced to 4 from 12, in two steps (12→8→4); `nodeHeight` reduced to 40 from 64, in two steps (64→48→40), with `mathAxisOffset` scaled 4→2 to match | User-reported live: the ratio-accurate glyph size read as oversized in the cell; regular weight at the smaller size stays legible without the bold's extra visual weight; the number-cell width table in `measure.ts` had to be re-derived by hand too, since it is a fixed lookup keyed to the *value* of `numeralFontSize`, not a live scale from it; 8 still read as excess whitespace on further feedback; a fixed 64dp then 48dp band around the shrunk 22px glyph kept reading as excess space above/below the text even after the first cut — asked the user how far to take it given `nodeHeight` also sizes the tap/drag hit box, and 40 (near the common ~44dp touch-target minimum) was the answer (§1.2, §8.1) | A future reference restyle re-derives the ratio and disagrees; padding or band height reads too tight against the border band, or tap targets prove too small in real use |
+| 19 | Numeral font size made a live, persisted user preference (§12.5) rather than staying a fixed token; `nodeHeight`/`numberPaddingX`/`mathAxisOffset` stay fixed | Direct follow-on from decision #18's thread: the user asked to be able to change it themselves rather than keep asking for a different fixed value. Only the glyph size needed to be adjustable to satisfy the request; moving the padding/height tokens too would have meant re-deriving `measure.ts`'s glyph-width table and the tap-target floor on every change, for no requested benefit | Users want padding/height to visually track a much larger or smaller chosen size too — **fired**, see decision #20 |
+| 20 | `nodeHeight` made a live function of the font size (`nodeHeightFor`, §12.5), not a fixed token; `numberPaddingX`/`mathAxisOffset` stay fixed. Settings row also renamed to "Canvas Number Font Size", given a non-editable "pt" unit label, and its value made directly typable alongside the existing +/− stepper | User noticed the cell stayed a fixed height across a font-size change while its width already tracked live (decision #19 had only wired width) — an inconsistency between the two axes of the same cell, not a new feature. `nodeHeightFor` is derived (`fontSize + 2 × numberPaddingY`), not a second independently-threaded parameter, so most call sites needed no new argument — only `caretAt` (`chains/layout.ts`) gained one, since it's the one site without `fontSize` already in scope. `numberPaddingX`/`mathAxisOffset` were left fixed, matching #19's reasoning: nothing asked for the cell's *proportions* to change, only for both axes of its *size* to agree | A future request wants the padding or maths-axis offset to also scale with the chosen size |
 
 ## 17. Open questions
 

@@ -12,8 +12,9 @@
 // References that still show the identity caption pass `labelHue` so the caption matches without
 // drawing a ring. In-place label editing (P6b.1) swaps the caption Text for a TextInput.
 import { ReactNode, useEffect, useRef } from 'react';
-import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
-import { tokens, labelColor, selectionFocusColor } from '../ui/tokens';
+import { Platform, StyleSheet, Text, TextInput, TextStyle, View } from 'react-native';
+import { tokens, labelColor, selectionFocusColor, nodeHeightFor } from '../ui/tokens';
+import { usePreferencesStore } from '../store/preferencesStore';
 
 /** Inset identity ring width — matches the structural `borderBand` so the ring reads as
  *  part of the same chrome language, not a thicker selection outline. */
@@ -82,6 +83,10 @@ export function Cell({
   const captionColor = labelHue ?? identityHue ?? labelColor;
   const showCaption = isEditingLabel || (label !== undefined && label.length > 0);
   const labelInputRef = useRef<TextInput>(null);
+  // Live cell height (§12.5): every cell shares the same height (unlike `width`, which
+  // varies per node and is computed by each caller), so Cell reads the setting itself
+  // rather than asking all six node components to also thread it through as a prop.
+  const height = nodeHeightFor(usePreferencesStore((s) => s.numeralFontSize));
 
   // Same web-only Space/Enter trap as NumberNode: gesture-handler's KeyboardEventManager
   // treats a bubbling Space/Enter on a GestureDetector ancestor as tap activation, which
@@ -125,7 +130,7 @@ export function Cell({
         testID={testID}
         style={[
           styles.band,
-          { width, borderColor: border, backgroundColor: fill },
+          { width, height, borderColor: border, backgroundColor: fill },
           // Clip inset identity ring / bandBackground to the rounded corner when
           // either is present (P7.3). Selection focus paints *outside* the band
           // (negative inset, P7.2), so leave overflow visible while focused.
@@ -172,14 +177,20 @@ export function Cell({
 }
 
 /** Text style every glyph (digits, operators, `=`, parens) renders through, so a mixed row reads
- *  as sitting on one baseline: nudged `mathAxisOffset` below the cell's vertical centre (§1.2). */
-export const glyphTextStyle = StyleSheet.create({
-  glyph: {
-    fontSize: tokens.numeralFontSize,
+ *  as sitting on one baseline: nudged `mathAxisOffset` below the cell's vertical centre (§1.2).
+ *  `fontSize` is the one live, user-adjustable piece (§1.2 P7 preference) — subscribed
+ *  reactively so every glyph cell repaints immediately on a Settings change; weight and the
+ *  maths-axis offset stay fixed tokens, not user-adjustable. Not memoised with
+ *  `StyleSheet.create` (that API is for static styles) — a plain object is fine here, same
+ *  cost as the `[glyphTextStyle, { color }]` array every call site already allocates. */
+export function useGlyphTextStyle(): TextStyle {
+  const fontSize = usePreferencesStore((s) => s.numeralFontSize);
+  return {
+    fontSize,
     fontWeight: tokens.numeralFontWeight,
     marginTop: tokens.mathAxisOffset,
-  },
-}).glyph;
+  };
+}
 
 const styles = StyleSheet.create({
   wrapper: {
@@ -196,7 +207,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   band: {
-    height: tokens.nodeHeight,
+    // height comes from the inline style array above — live per §12.5, not a static token.
     borderRadius: tokens.cornerRadius,
     borderWidth: tokens.borderBand,
     alignItems: 'center',

@@ -15,9 +15,10 @@ import { widthOf } from '../chains/measure';
 import { rolePalette, glyphColor } from '../ui/tokens';
 import { getDeviceLocale } from '../ui/locale';
 import { commandFromHardwareKey, dispatchEditorCommand } from '../keypad/keymap';
-import { Cell, glyphTextStyle } from './Cell';
+import { Cell, useGlyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
 import { useNodeSelected } from './useNodeSelected';
+import { usePreferencesStore } from '../store/preferencesStore';
 
 interface NumberNodeProps {
   id: NodeId;
@@ -74,6 +75,9 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
     inputNode.addEventListener('keydown', onNativeKeyDown);
     return () => inputNode.removeEventListener('keydown', onNativeKeyDown);
   }, [isEditing]);
+
+  const glyphTextStyle = useGlyphTextStyle();
+  const fontSize = usePreferencesStore((s) => s.numeralFontSize);
 
   if (!node || node.kind !== 'number') return null;
   // Rebound so the narrowing above survives into the closures below - TS does not carry a
@@ -140,7 +144,7 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
   return (
     <Cell
       testID={`number-node-${id}`}
-      width={widthOf(node, locale)}
+      width={widthOf(node, locale, fontSize)}
       fill={palette.fill}
       border={palette.border}
       label={numberNode.label}

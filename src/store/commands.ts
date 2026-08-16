@@ -9,6 +9,7 @@
 import { setAutosaveSuppressed, useDocumentStore } from './documentStore';
 import { historyTop, type HistoryEntry } from './undo';
 import { useUiStore } from './uiStore';
+import { usePreferencesStore } from './preferencesStore';
 import {
   createNumberNode,
   createOperatorNode,
@@ -23,7 +24,7 @@ import { layoutChain } from '../chains/layout';
 import { widthOf } from '../chains/measure';
 import type { SnapOutcome } from '../chains/snapping';
 import { getDeviceLocale } from '../ui/locale';
-import { tokens } from '../ui/tokens';
+import { tokens, nodeHeightFor } from '../ui/tokens';
 import { dirtyClosure, recomputeFromSeeds } from '../engine/graph';
 import {
   deleteNodesLeavingDanglingRefs,
@@ -115,7 +116,12 @@ export function addEqualsNode(position: Vec2): NodeId {
 function reflowChain(draft: CalcDocument, chainId: ChainId): void {
   const chain = draft.chains[chainId];
   if (!chain) return;
-  const positions = layoutChain(chain, draft.nodes, getDeviceLocale());
+  const positions = layoutChain(
+    chain,
+    draft.nodes,
+    getDeviceLocale(),
+    usePreferencesStore.getState().numeralFontSize,
+  );
   for (const memberId of chain.members) {
     const member = draft.nodes[memberId];
     const position = positions[memberId];
@@ -266,9 +272,12 @@ export function appendOperatorAndNumber(
   return { operatorId: operatorNode.id, numberId: numberNode.id };
 }
 
-/** Vertical pitch of a continuation chain from the row above it (§8.7).
- *  One-and-a-half cell heights: a full cell plus a half-cell gap, matching the
- *  spacing under the source group's first cell. */
+/** Vertical pitch of a continuation chain from the row above it (§8.7), *at the
+ *  compiled-in default font size*. One-and-a-half cell heights: a full cell plus a
+ *  half-cell gap, matching the spacing under the source group's first cell.
+ *  `continuationAnchor` below computes the live value (§12.5) from the current numeral
+ *  font size rather than reading this constant — kept exported for tests/reference at
+ *  the default setting. */
 export const CONTINUATION_OFFSET = {
   y: tokens.nodeHeight * 1.5,
 } as const;
@@ -311,7 +320,11 @@ export function continuationAnchor(
     value.chainId !== null ? chains[value.chainId] : undefined;
   const originX = sourceChain?.anchor.x ?? value.position.x;
   const originY = sourceChain?.anchor.y ?? value.position.y;
-  const pitch = CONTINUATION_OFFSET.y;
+  // Live font size (§12.5), read once and reused for every geometry call below so the
+  // pitch, the occupancy-check slot, and boundsOf's own height all agree — not
+  // CONTINUATION_OFFSET.y / tokens.nodeHeight, which are only the default-size values.
+  const fontSize = usePreferencesStore.getState().numeralFontSize;
+  const pitch = nodeHeightFor(fontSize) * 1.5;
   const sourceChainId = sourceChain?.id ?? null;
 
   const firstMember =
@@ -319,8 +332,7 @@ export function continuationAnchor(
       ? nodes[sourceChain.members[0]!]
       : value;
   const columnLeft = originX;
-  const columnRight =
-    originX + widthOf(firstMember, locale, tokens.numeralFontSize, nodes);
+  const columnRight = originX + widthOf(firstMember, locale, fontSize, nodes);
 
   let y = originY + pitch;
   // Push below any cell whose bounds intersect the candidate slot in this
@@ -329,13 +341,13 @@ export function continuationAnchor(
   for (;;) {
     let blockerY: number | null = null;
     const slotTop = y;
-    const slotBottom = y + tokens.nodeHeight;
+    const slotBottom = y + nodeHeightFor(fontSize);
     for (const node of Object.values(nodes)) {
       if (sourceChainId !== null && node.chainId === sourceChainId) continue;
       // A free value seeding continuation must not treat itself as occupying
       // the landing column (its bounds sit at originY, above the default slot).
       if (sourceChainId === null && node.id === valueNodeId) continue;
-      const b = boundsOf(node, locale, nodes);
+      const b = boundsOf(node, locale, nodes, fontSize);
       if (b.right <= columnLeft || b.left >= columnRight) continue;
       if (b.bottom <= slotTop || b.top >= slotBottom) continue;
       if (blockerY === null || node.position.y > blockerY) {
@@ -854,7 +866,7 @@ export function prependToChain(nodeId: NodeId, chainId: ChainId): void {
     if (!draft.chains[chainId]) return;
     const locale = getDeviceLocale();
     chain.anchor = {
-      x: chain.anchor.x - widthOf(node, locale, tokens.numeralFontSize, draft.nodes),
+      x: chain.anchor.x - widthOf(node, locale, usePreferencesStore.getState().numeralFontSize, draft.nodes),
       y: chain.anchor.y,
     };
     node.chainId = chainId;
@@ -896,7 +908,7 @@ export function insertIntoChain(nodeId: NodeId, chainId: ChainId, index: number)
     if (clamped === 0) {
       const locale = getDeviceLocale();
       chain.anchor = {
-        x: chain.anchor.x - widthOf(node, locale, tokens.numeralFontSize, draft.nodes),
+        x: chain.anchor.x - widthOf(node, locale, usePreferencesStore.getState().numeralFontSize, draft.nodes),
         y: chain.anchor.y,
       };
     }
@@ -979,7 +991,7 @@ function placeReferenceInChain(
   if (clamped === 0) {
     const locale = getDeviceLocale();
     chain.anchor = {
-      x: chain.anchor.x - widthOf(reference, locale, tokens.numeralFontSize, draft.nodes),
+      x: chain.anchor.x - widthOf(reference, locale, usePreferencesStore.getState().numeralFontSize, draft.nodes),
       y: chain.anchor.y,
     };
   }

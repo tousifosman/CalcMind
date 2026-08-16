@@ -32,6 +32,7 @@ import {
 import { useDocumentStore } from '../store/documentStore';
 import { useNode } from '../store/selectors';
 import { useUiStore } from '../store/uiStore';
+import { usePreferencesStore } from '../store/preferencesStore';
 import { getDeviceLocale } from '../ui/locale';
 import { useCanvasViewport } from '../canvas/ViewportContext';
 import {
@@ -142,6 +143,11 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
      *  probe position. */
     neighbours: SnappingNeighbours | null;
     locale: string;
+    /** Captured once alongside `neighbours` (§1.2 P7): every frame's
+     *  `resolveSnapCandidate` must agree with whatever font size `neighbours`
+     *  was built from, or its bounds and this session's own would disagree
+     *  about where things are. */
+    fontSize: number;
   } | null>(null);
 
   const beginDrag = useCallback(
@@ -198,11 +204,12 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       }
 
       const locale = getDeviceLocale();
+      const fontSize = usePreferencesStore.getState().numeralFontSize;
       // Index once; whole-selection / chain moves never query it.
       const neighbours =
         mode === 'moveChain' || mode === 'moveSelection'
           ? null
-          : makeSnappingNeighbours(document.chains, document.nodes, locale);
+          : makeSnappingNeighbours(document.chains, document.nodes, locale, fontSize);
 
       session.current = {
         home: { x: current.position.x, y: current.position.y },
@@ -214,6 +221,7 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
         selectionUnits: mode === 'moveSelection' ? selectionUnits : null,
         neighbours,
         locale,
+        fontSize,
       };
       // Re-seed from the store at press time so a stale effect sync can't skew the delta.
       startX.value = current.position.x;
@@ -276,6 +284,7 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
         sess.neighbours,
         document.nodes,
         sess.locale,
+        sess.fontSize,
       );
       publishDragSnap(nodeId, position, candidate, null, null);
     },

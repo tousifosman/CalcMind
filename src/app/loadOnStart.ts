@@ -3,6 +3,7 @@
 import { storageAdapter } from '../persistence/adapter';
 import { openDocument } from '../persistence/load';
 import { useDocumentStore } from '../store/documentStore';
+import { usePreferencesStore } from '../store/preferencesStore';
 import { getDeviceLocale } from '../ui/locale';
 import { getAutosaveController } from './startAutosave';
 
@@ -19,6 +20,10 @@ import { getAutosaveController } from './startAutosave';
  * autosaved document on the next launch — caught live: `npm run web`, type something, wait
  * out the autosave debounce, reload, and the canvas comes back blank despite IndexedDB
  * still holding the file.
+ *
+ * Caller must have already awaited `usePreferencesStore.getState().hydrate()` — the numeral
+ * font size preference below has to be the persisted one, not the compiled-in default, or a
+ * document saved under a non-default size re-flows wrong on the very first paint.
  */
 export async function loadMostRecentDocument(): Promise<void> {
   let list: Awaited<ReturnType<typeof storageAdapter.list>>;
@@ -32,6 +37,7 @@ export async function loadMostRecentDocument(): Promise<void> {
   const mostRecent = [...list].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))[0];
   const result = await openDocument(storageAdapter, mostRecent.id, {
     locale: getDeviceLocale(),
+    fontSize: usePreferencesStore.getState().numeralFontSize,
   });
   if (!result.ok) return;
 

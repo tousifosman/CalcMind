@@ -13,7 +13,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
 import { unlinkReference, finishEditingLabel, setNodeLabel } from '../store/commands';
-import { rolePalette, glyphColor, tokens } from '../ui/tokens';
+import { rolePalette, glyphColor, tokens, nodeHeightFor } from '../ui/tokens';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
 import {
@@ -22,11 +22,12 @@ import {
   resultCellContent,
   RESULT_ERROR_FONT_SIZE,
 } from '../engine/errors';
-import { Cell, glyphTextStyle } from './Cell';
+import { Cell, useGlyphTextStyle } from './Cell';
 import { ResultDotTexture } from './ResultDotTexture';
 import { useSourceIdentityHue } from './useIdentityHue';
 import { useUiStore } from '../store/uiStore';
 import { useNodeSelected } from './useNodeSelected';
+import { usePreferencesStore } from '../store/preferencesStore';
 
 /** Opacity for a §9 Stale result — previous value stays readable but clearly not current. */
 export const STALE_RESULT_OPACITY = 0.45;
@@ -40,14 +41,16 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
   const identityHue = useSourceIdentityHue(id);
   const isEditingLabel = useUiStore((state) => state.editingLabelNodeId === id);
   const selected = useNodeSelected(id);
+  const glyphTextStyle = useGlyphTextStyle();
+  const fontSize = usePreferencesStore((s) => s.numeralFontSize);
   if (!node || node.kind !== 'result') return null;
 
   const locale = getDeviceLocale();
   const palette = rolePalette.result;
   const content = resultCellContent(node.derived);
-  const bandWidth = widthOf(node, locale);
+  const bandWidth = widthOf(node, locale, fontSize);
   const textureWidth = bandWidth - 2 * tokens.borderBand;
-  const textureHeight = tokens.nodeHeight - 2 * tokens.borderBand;
+  const textureHeight = nodeHeightFor(fontSize) - 2 * tokens.borderBand;
 
   const isCircular =
     content.mode === 'error' &&

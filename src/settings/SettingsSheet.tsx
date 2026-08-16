@@ -1,15 +1,21 @@
-// Settings sheet (§8.5, mode-strip cog). Opened from the keypad's Settings button;
-// currently holds a single row — About — since nothing else has a home here yet. Styled
-// after the reference screenshot the feature request shipped with: a full-screen dark
-// list with an amber accent, rather than this app's usual light keypad chrome — a
-// deliberate one-off, not a preview of P7.4's still-pending light/dark theme system.
-import { useState } from 'react';
-import { Modal, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+// Settings sheet (§8.5, mode-strip cog). Opened from the keypad's Settings button; holds
+// a "Canvas Number Font Size" stepper (§1.2 P7) and an About row. Styled after the
+// reference screenshot the feature request shipped with: a full-screen dark list with an
+// amber accent, rather than this app's usual light keypad chrome — a deliberate one-off,
+// not a preview of P7.4's still-pending light/dark theme system.
+import { useEffect, useState } from 'react';
+import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import ChevronLeftIcon from 'react-native-heroicons/outline/ChevronLeftIcon';
 import ChevronRightIcon from 'react-native-heroicons/outline/ChevronRightIcon';
 import { version } from '../../package.json';
 import { rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
+import {
+  usePreferencesStore,
+  NUMERAL_FONT_SIZE_MIN,
+  NUMERAL_FONT_SIZE_MAX,
+  NUMERAL_FONT_SIZE_STEP,
+} from '../store/preferencesStore';
 
 const accentColor = rolePalette.operator.fill;
 
@@ -54,6 +60,9 @@ function RootPane({ onDone, onOpenAbout }: { onDone: () => void; onOpenAbout: ()
         </TouchableOpacity>
       </View>
       <View style={styles.section}>
+        <NumeralSizeRow />
+      </View>
+      <View style={styles.section}>
         <TouchableOpacity
           style={styles.row}
           onPress={onOpenAbout}
@@ -65,6 +74,80 @@ function RootPane({ onDone, onOpenAbout }: { onDone: () => void; onOpenAbout: ()
         </TouchableOpacity>
       </View>
     </>
+  );
+}
+
+/** §1.2 P7: live numeral font size, in `NUMERAL_FONT_SIZE_STEP`dp steps. The +/− stepper
+ *  is the primary control (no gesture-handler dependency needed for a settings row, and
+ *  it stays consistent with every other row here being a plain tap target); the value is
+ *  also directly typable for a precise size, with a non-editable "pt" unit label so it's
+ *  clear what the number represents. */
+function NumeralSizeRow() {
+  const fontSize = usePreferencesStore((s) => s.numeralFontSize);
+  const setFontSize = usePreferencesStore((s) => s.setNumeralFontSize);
+  const atMin = fontSize <= NUMERAL_FONT_SIZE_MIN;
+  const atMax = fontSize >= NUMERAL_FONT_SIZE_MAX;
+
+  // Local text buffer so the field can be freely cleared/retyped without the store's
+  // clamped value fighting every keystroke; committed (and clamped, via setFontSize) on
+  // blur/submit. Resynced from the live value whenever it changes — including via the
+  // +/− buttons — so both controls always agree.
+  const [draft, setDraft] = useState(String(fontSize));
+  useEffect(() => {
+    setDraft(String(fontSize));
+  }, [fontSize]);
+
+  function commitDraft() {
+    const parsed = Number.parseInt(draft, 10);
+    if (Number.isFinite(parsed)) {
+      setFontSize(parsed);
+    } else {
+      setDraft(String(fontSize)); // not a number - revert rather than silently no-op
+    }
+  }
+
+  return (
+    <View style={styles.row} testID="settings-row-numeral-size">
+      <Text style={styles.rowLabel}>Canvas Number Font Size</Text>
+      <View style={styles.stepper}>
+        <TouchableOpacity
+          style={[styles.stepperButton, atMin && styles.stepperButtonDisabled]}
+          onPress={() => setFontSize(fontSize - NUMERAL_FONT_SIZE_STEP)}
+          disabled={atMin}
+          testID="settings-numeral-size-decrease"
+          accessibilityLabel="Decrease numeral size"
+          accessibilityRole="button"
+        >
+          <Text style={styles.stepperGlyph}>−</Text>
+        </TouchableOpacity>
+        <View style={styles.stepperValueGroup}>
+          <TextInput
+            style={styles.stepperInput}
+            value={draft}
+            onChangeText={setDraft}
+            onBlur={commitDraft}
+            onSubmitEditing={commitDraft}
+            keyboardType="number-pad"
+            selectTextOnFocus
+            testID="settings-numeral-size-value"
+            accessibilityLabel="Canvas number font size, points"
+          />
+          <Text style={styles.stepperUnit} testID="settings-numeral-size-unit">
+            pt
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.stepperButton, atMax && styles.stepperButtonDisabled]}
+          onPress={() => setFontSize(fontSize + NUMERAL_FONT_SIZE_STEP)}
+          disabled={atMax}
+          testID="settings-numeral-size-increase"
+          accessibilityLabel="Increase numeral size"
+          accessibilityRole="button"
+        >
+          <Text style={styles.stepperGlyph}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -173,6 +256,45 @@ const styles = StyleSheet.create({
   rowLabel: {
     color: '#FFFFFF',
     fontSize: 16,
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  stepperButton: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#3A3A3C',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperButtonDisabled: {
+    opacity: 0.35,
+  },
+  stepperGlyph: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '600',
+    // Optical centring: '−'/'+' glyphs sit slightly high in most system fonts at this size.
+    marginTop: -1,
+  },
+  stepperValueGroup: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginHorizontal: 4,
+  },
+  stepperInput: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    minWidth: 28,
+    textAlign: 'center',
+    padding: 0,
+  },
+  stepperUnit: {
+    color: '#8E8E93',
+    fontSize: 13,
+    marginLeft: 2,
   },
   aboutBody: {
     alignItems: 'center',
