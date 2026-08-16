@@ -14,6 +14,7 @@ import ArrowUturnLeftIcon from 'react-native-heroicons/outline/ArrowUturnLeftIco
 import ArrowUturnRightIcon from 'react-native-heroicons/outline/ArrowUturnRightIcon';
 import BackspaceIcon from 'react-native-heroicons/outline/BackspaceIcon';
 import ChevronDownIcon from 'react-native-heroicons/outline/ChevronDownIcon';
+import Cog6ToothIcon from 'react-native-heroicons/outline/Cog6ToothIcon';
 import LinkIcon from 'react-native-heroicons/outline/LinkIcon';
 import SquaresPlusIcon from 'react-native-heroicons/outline/SquaresPlusIcon';
 import PencilSquareIcon from 'react-native-heroicons/outline/PencilSquareIcon';
@@ -68,6 +69,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   const clearConfirmVisible = useUiStore((state) => state.clearConfirmVisible);
   const requestClearConfirm = useUiStore((state) => state.requestClearConfirm);
   const dismissClearConfirm = useUiStore((state) => state.dismissClearConfirm);
+  const openSettings = useUiStore((state) => state.openSettings);
   const groupSelectedIds = useUiStore((state) => state.groupSelectedIds);
   const allSelected = useUiStore((state) => state.allSelected);
   // Empty-canvas gate for the Clear all mode-strip button — disabled when there
@@ -182,11 +184,14 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           onPress={hideKeypad}
           testID="keypad-mode-dismiss"
         />
-        {/* Documents (P5) and functions/graph (§10.2, §17.2) have no feature behind them
-            yet - all three render disabled rather than functional-looking but inert. */}
-        <ModeKey label="Documents" disabled testID="keypad-mode-documents" />
+        {/* Workspace (P5) and functions/chart (§10.2, §17.2) have no feature behind them
+            yet - all three render disabled rather than functional-looking but inert. Labels
+            read "Workspace" / "Chart" rather than the underlying Documents/Graph concepts
+            they'll eventually open (§12 / §17.2) - user-facing wording, not a rename of the
+            feature itself. */}
+        <ModeKey label="Workspace" disabled testID="keypad-mode-documents" />
         <ModeKey label="ƒ(x)" disabled testID="keypad-mode-functions" />
-        <ModeKey label="Graph" disabled testID="keypad-mode-graph" />
+        <ModeKey label="Chart" disabled testID="keypad-mode-graph" />
         {/* Discoverable clear (P7.8). Same confirm gate as swipe-across-backspace
             (decision #15); disabled on an empty canvas so the affordance does not
             invite a no-op confirm. */}
@@ -195,6 +200,14 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           onPress={requestClearConfirm}
           disabled={documentEmpty}
           testID="keypad-mode-clear-all"
+        />
+        {/* Icon-only (no text) - opens the settings sheet (§8.5), currently just an About
+            row (SettingsSheet.tsx). */}
+        <ModeKey
+          label="Settings"
+          icon={<Cog6ToothIcon size={18} color="#333333" />}
+          onPress={openSettings}
+          testID="keypad-mode-settings"
         />
       </View>
 
