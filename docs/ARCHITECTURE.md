@@ -56,14 +56,14 @@ The reference raster has a cell height of 256px. Tokens below are that geometry 
 
 | Token | Reference (px) | Ratio to cell height | Value (dp) |
 |---|---|---|---|
-| `nodeHeight` | 256 | 1.000 | **64** |
+| `nodeHeight` | 256 | 1.000 | **48** *(reduced from the ratio-accurate 64 alongside the numeral shrink — see decision 18)* |
 | `borderBand` | 11 | 0.043 | **3** |
 | `numeralFontSize` | 127 | 0.496 | **22** (weight 400) *(reduced from the ratio-accurate 30/800 — read as oversized on-screen)* |
 | `numberPaddingX` | 48 | 0.188 | **4** *(reduced from the ratio-accurate 12, in two steps — see decision 18)* |
 | `operatorWidth` | 136 | 0.531 | **34** |
 | `equalsWidth` | 140 | 0.547 | **35** |
 | `cornerRadius` | 12 | 0.047 | **8** *(bumped from 3 for a friendlier silhouette)* |
-| `mathAxisOffset` | +16 from centre | 0.063 | **4** below centre |
+| `mathAxisOffset` | +16 from centre | 0.063 | **3** below centre *(scaled down from 4 with `nodeHeight` to hold the same ratio — decision 18)* |
 
 | Role | Fill | Border band |
 |---|---|---|
@@ -605,9 +605,12 @@ stateDiagram-v2
     MovingChain --> Idle : release, chain anchor updated
 ```
 
-Thresholds (world units): `SNAP_DISTANCE = 28`, `SNAP_VERTICAL = 48` (0.75 × `nodeHeight`),
-`DETACH_DISTANCE = 44`. `DETACH_DISTANCE > SNAP_DISTANCE` deliberately, so a member does not
-detach and immediately re-snap into the slot it just left.
+Thresholds (world units): `SNAP_DISTANCE = 28`, `SNAP_VERTICAL = 48` (was 0.75 × `nodeHeight`
+when set, against the reference-accurate 64; `nodeHeight` has since shrunk to 48 for the
+smaller cell font — decision 18 — but `SNAP_VERTICAL` is an independently-tuned drag-gesture
+constant, not a rendering token, so it was left as-is rather than recomputed against the new
+ratio), `DETACH_DISTANCE = 44`. `DETACH_DISTANCE > SNAP_DISTANCE` deliberately, so a member does
+not detach and immediately re-snap into the slot it just left.
 
 ### 8.3 Candidate resolution
 
@@ -1348,7 +1351,7 @@ it unclear which parts were claims about the present and which were intentions.
 | 15 | Swipe-to-clear / Clear all require confirmation | Tydlig's bare swipe wipes a document; too destructive for one stray gesture even with undo. The mode-strip Clear all button shares the same confirm (§8.5) | Never |
 | 16 | Typing builds chains directly, not through P3's snapping | Typing always knows exactly which chain to extend (whichever the selected node belongs to), so it appends deterministically (`store/commands.ts`'s `appendMembersToChain`) instead of running §8.2-8.4's geometric candidate search, which exists to disambiguate a *dragged* node's several nearby neighbours (P2.8) | P3's chain layout pass changes how `Chain.anchor`/positions are derived and this stops matching it |
 | 17 | Plain drag detaches; long-press-then-drag moves chain | Detach/rearrange is the frequent edit and must not require a dwell; lifting a whole expression is deliberate. Opposite mapping tried interactively (P3.7); both work, this one won (§8.3, §17.1) | Real-device use shows accidental detaches dominate over accidental chain moves |
-| 18 | `numeralFontSize`/`numeralFontWeight` reduced to 22/400 from the reference-accurate 30/800; `numberPaddingX` reduced to 4 from 12, in two steps (12→8→4) | User-reported live: the ratio-accurate glyph size read as oversized in the cell; regular weight at the smaller size stays legible without the bold's extra visual weight; the number-cell width table in `measure.ts` had to be re-derived by hand too, since it is a fixed lookup keyed to the *value* of `numeralFontSize`, not a live scale from it; 8 still read as excess whitespace on further feedback (§1.2, §8.1) | A future reference restyle re-derives the ratio and disagrees; padding reads too tight against the border band |
+| 18 | `numeralFontSize`/`numeralFontWeight` reduced to 22/400 from the reference-accurate 30/800; `numberPaddingX` reduced to 4 from 12, in two steps (12→8→4); `nodeHeight` reduced to 48 from 64, with `mathAxisOffset` scaled 4→3 to match | User-reported live: the ratio-accurate glyph size read as oversized in the cell; regular weight at the smaller size stays legible without the bold's extra visual weight; the number-cell width table in `measure.ts` had to be re-derived by hand too, since it is a fixed lookup keyed to the *value* of `numeralFontSize`, not a live scale from it; 8 still read as excess whitespace on further feedback; a fixed 64dp band around the shrunk 22px glyph then read as excess space above/below the text, not just beside it (§1.2, §8.1) | A future reference restyle re-derives the ratio and disagrees; padding or band height reads too tight against the border band |
 
 ## 17. Open questions
 

@@ -3,7 +3,11 @@
 // to a 64dp node height.
 
 export const tokens = {
-  nodeHeight: 64,
+  /** Reduced from the reference's ratio-accurate 64 alongside the numeral shrink — a fixed
+   *  64dp band around a 22px glyph (down from the reference's 30px) left visible empty space
+   *  above and below the text. `mathAxisOffset` scaled down with it to hold the same
+   *  reference-derived proportion of the band. */
+  nodeHeight: 48,
   borderBand: 3,
   /** Reduced from the reference's ratio-accurate 30 — at that size, in the reference's bold
    *  800 weight, glyphs read as oversized on-screen. Deliberate deviation from the sampled
@@ -17,8 +21,10 @@ export const tokens = {
   equalsWidth: 35,
   /** Bumped from the reference's 3 (ratio-accurate) to 8 for a friendlier silhouette. */
   cornerRadius: 8,
-  /** Offset of the maths axis (where +, -, = glyphs are drawn) below the cell's vertical centre. */
-  mathAxisOffset: 4,
+  /** Offset of the maths axis (where +, -, = glyphs are drawn) below the cell's vertical centre.
+   *  Scaled down from 4 with `nodeHeight`'s reduction to hold the same ~0.063 ratio to the
+   *  band height that the reference geometry set (§1.2). */
+  mathAxisOffset: 3,
 } as const;
 
 export type NodeRole = 'number' | 'operator' | 'equals' | 'result';

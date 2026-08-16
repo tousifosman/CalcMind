@@ -13,6 +13,7 @@ import {
   appendOperatorAndNumber,
   createLinkToValue,
   selectAll,
+  CONTINUATION_OFFSET,
 } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
 import {
@@ -339,7 +340,7 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
 
     expect(contChain.anchor).toEqual({
       x: sourceChain.anchor.x,
-      y: sourceChain.anchor.y + 96,
+      y: sourceChain.anchor.y + CONTINUATION_OFFSET.y,
     });
 
     const selectedId = useUiStore.getState().selectedNodeId;
