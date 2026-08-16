@@ -5,9 +5,11 @@
 export const tokens = {
   /** Reduced from the reference's ratio-accurate 64 alongside the numeral shrink — a fixed
    *  64dp band around a 22px glyph (down from the reference's 30px) left visible empty space
-   *  above and below the text. `mathAxisOffset` scaled down with it to hold the same
-   *  reference-derived proportion of the band. */
-  nodeHeight: 48,
+   *  above and below the text. Cut further to 40 on follow-up feedback that 48 still looked
+   *  spacious; held near the ~44dp common touch-target minimum since this height is also the
+   *  cell's tap/drag target (no separate hitSlop — see `canvas/hitTest.ts`), not just its
+   *  paint box. `mathAxisOffset` scaled down with it. */
+  nodeHeight: 40,
   borderBand: 3,
   /** Reduced from the reference's ratio-accurate 30 — at that size, in the reference's bold
    *  800 weight, glyphs read as oversized on-screen. Deliberate deviation from the sampled
@@ -22,9 +24,9 @@ export const tokens = {
   /** Bumped from the reference's 3 (ratio-accurate) to 8 for a friendlier silhouette. */
   cornerRadius: 8,
   /** Offset of the maths axis (where +, -, = glyphs are drawn) below the cell's vertical centre.
-   *  Scaled down from 4 with `nodeHeight`'s reduction to hold the same ~0.063 ratio to the
-   *  band height that the reference geometry set (§1.2). */
-  mathAxisOffset: 3,
+   *  Scaled down with `nodeHeight`'s reductions to stay near the same ~0.063 ratio to the band
+   *  height that the reference geometry set (§1.2); rounded to the nearest dp each step. */
+  mathAxisOffset: 2,
 } as const;
 
 export type NodeRole = 'number' | 'operator' | 'equals' | 'result';

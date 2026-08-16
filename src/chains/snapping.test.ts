@@ -264,7 +264,14 @@ describe('detach hysteresis (§8.2)', () => {
   // past the insertion boundary that used to hold it and assert no candidate.
   test('just past DETACH_DISTANCE from the vacated insert slot does not re-snap', () => {
     const a = numberNode('a', '12', { x: 100, y: 0 }, 'c1');
-    const c = numberNode('c', '3', { x: 0, y: 0 }, 'c1');
+    // 'c' is deliberately many digits: this test only cares about the *insert*
+    // boundary between a and c, but a short 'c' floors to tokens.nodeHeight just
+    // like the dragged single digit does, which put the chain's right edge (an
+    // unrelated APPEND boundary) close enough to also register as a candidate once
+    // nodeHeight shrank relative to the fixed DETACH_DISTANCE/SNAP_DISTANCE — a
+    // long 'c' keeps its width (and the chain's right edge) safely far away
+    // regardless of nodeHeight's current value.
+    const c = numberNode('c', '30000000', { x: 0, y: 0 }, 'c1');
     // Chain after B detached: [a, c]. The vacated slot is the boundary between them.
     const c1 = chain('c1', ['a', 'c'], { x: 100, y: 0 });
     const slotX = 100 + widthOf(a, LOCALE);
