@@ -30,6 +30,7 @@ beforeEach(() => {
       allSelected: false,
       selectedNodeId: null,
       editingNodeId: null,
+      settingsVisible: false,
     });
     useDocumentStore.setState({ document: createEmptyDocument(), undoStack: [], redoStack: [] });
   });
@@ -80,6 +81,7 @@ describe('Keypad', () => {
     expect(findByTestID(renderer, 'keypad-mode-functions')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-mode-graph')).toBeTruthy();
     expect(findByTestID(renderer, 'keypad-mode-clear-all')).toBeTruthy();
+    expect(findByTestID(renderer, 'keypad-mode-settings')).toBeTruthy();
   });
 
   test('the decimal key shows the locale glyph but reports a bare "decimal" press', () => {
@@ -108,6 +110,19 @@ describe('Keypad', () => {
     expect(findByTestID(renderer, 'keypad-mode-graph').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-mode-documents').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-mode-dismiss').props.disabled).toBeFalsy();
+  });
+
+  test('the settings mode key is enabled and opens the settings sheet', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    expect(findByTestID(renderer, 'keypad-mode-settings').props.disabled).toBeFalsy();
+    act(() => {
+      findByTestID(renderer, 'keypad-mode-settings').props.onPress();
+    });
+    expect(useUiStore.getState().settingsVisible).toBe(true);
   });
 
   test('digit keys disable while a linked cell, result, or operator is selected', () => {
