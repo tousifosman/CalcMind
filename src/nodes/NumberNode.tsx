@@ -18,6 +18,7 @@ import { commandFromHardwareKey, dispatchEditorCommand } from '../keypad/keymap'
 import { Cell, useGlyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
 import { useNodeSelected } from './useNodeSelected';
+import { useGroupPosition } from './useGroupPosition';
 import { usePreferencesStore } from '../store/preferencesStore';
 
 interface NumberNodeProps {
@@ -30,6 +31,7 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
   const isEditingLabel = useUiStore((state) => state.editingLabelNodeId === id);
   const selected = useNodeSelected(id);
   const identityHue = useSourceIdentityHue(id);
+  const groupPosition = useGroupPosition(id, node?.chainId ?? null);
   const inputRef = useRef<TextInput>(null);
 
   // Web only, same trade as Canvas.tsx's onWheel and AppShell's keydown listener (no DOM lib
@@ -151,6 +153,7 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
       identityHue={identityHue}
       isEditingLabel={isEditingLabel}
       selected={selected}
+      groupPosition={groupPosition}
       onLabelChange={(text) => setNodeLabel(id, text)}
       onLabelBlur={finishEditingLabel}
     >

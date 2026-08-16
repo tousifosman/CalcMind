@@ -1109,7 +1109,14 @@ telling you why the error is there." So:
 ### 11.3 Rendering approach
 
 Nodes are plain RN `View`s with `borderRadius` — no SVG or Skia needed for the common case, which
-keeps web and native identical. The result node's dot texture is the exception:
+keeps web and native identical. A chain's members sit flush (§1.1), so `Cell.tsx` rounds and
+borders only the outer edge of the chain rather than every member's own four corners: each node
+component reads its `chainId` through `useGroupPosition` and passes the result (`'solo' | 'start'
+| 'middle' | 'end'`) as `groupPosition`, which `Cell` turns into per-corner radii and left/right
+border widths (`cornerRadii/sideBorderWidths` in `Cell.tsx`) so a multi-member chain reads as one
+rounded rectangle — same silhouette as `docs/assets/formula-reference.svg`'s clipped outer/inner
+rects — rather than a row of individually-rounded, individually-bordered chips. The result node's
+dot texture is the exception to "plain `View`":
 
 - Solid `#FF7E79` + `#FFA3A0` border band always — hue and border carry read-only-ness on their
   own (decision #9).

@@ -27,6 +27,7 @@ import { ResultDotTexture } from './ResultDotTexture';
 import { useSourceIdentityHue } from './useIdentityHue';
 import { useUiStore } from '../store/uiStore';
 import { useNodeSelected } from './useNodeSelected';
+import { useGroupPosition } from './useGroupPosition';
 import { usePreferencesStore } from '../store/preferencesStore';
 
 /** Opacity for a §9 Stale result — previous value stays readable but clearly not current. */
@@ -41,6 +42,7 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
   const identityHue = useSourceIdentityHue(id);
   const isEditingLabel = useUiStore((state) => state.editingLabelNodeId === id);
   const selected = useNodeSelected(id);
+  const groupPosition = useGroupPosition(id, node?.chainId ?? null);
   const glyphTextStyle = useGlyphTextStyle();
   const fontSize = usePreferencesStore((s) => s.numeralFontSize);
   if (!node || node.kind !== 'result') return null;
@@ -75,6 +77,7 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
       identityHue={identityHue}
       isEditingLabel={isEditingLabel}
       selected={selected}
+      groupPosition={groupPosition}
       onLabelChange={(text) => setNodeLabel(id, text)}
       onLabelBlur={finishEditingLabel}
       bandBackground={

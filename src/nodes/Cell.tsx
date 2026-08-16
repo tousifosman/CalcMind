@@ -1,10 +1,13 @@
 // Shared chrome for every node kind (§1.1, §11.3): the fixed-height, coloured-band pill and its
-// optional label. Plain RN `View`s with `borderRadius`/`borderWidth` for the common case — the
-// border band is drawn as a border rather than a nested inset View because that's the cheapest
-// way to get a flush ring at an exact `borderBand` width without hand-computing an inner radius.
-// Result cells pass an SVG `bandBackground` (dot texture, P7.3) painted under the identity ring.
-// Node-kind components (NumberNode etc.) own their palette, width and glyph content and render
-// through this so the five of them don't each re-derive the same box model.
+// optional label. Plain RN `View`s with per-corner `border*Radius`/`border*Width` for the common
+// case — the border band is drawn as a border rather than a nested inset View because that's the
+// cheapest way to get a flush ring at an exact `borderBand` width without hand-computing an inner
+// radius. A chain's members are flush (§1.1), so only the cell at each end of a multi-member
+// chain rounds its outer corner and carries a border on that outer side — `groupPosition` (from
+// `useGroupPosition`) is what each caller passes to say which cell that is; see `cornerRadii`/
+// `sideBorderWidths` below. Result cells pass an SVG `bandBackground` (dot texture, P7.3) painted
+// under the identity ring. Node-kind components (NumberNode etc.) own their palette, width and
+// glyph content and render through this so the six of them don't each re-derive the same box model.
 //
 // Identity (§11.1 / P6.5 / P6b.1): when `identityHue` is set, a ring is drawn inset on the cell
 // and the label (if any) uses that hue. References pass the hue as their fill/border instead and
@@ -15,6 +18,32 @@ import { ReactNode, useEffect, useRef } from 'react';
 import { Platform, StyleSheet, Text, TextInput, TextStyle, View } from 'react-native';
 import { tokens, labelColor, selectionFocusColor, nodeHeightFor } from '../ui/tokens';
 import { usePreferencesStore } from '../store/preferencesStore';
+import type { GroupPosition } from './useGroupPosition';
+
+/** Per-corner radius for a cell at `groupPosition`: only the chain's outer edge rounds
+ *  (§1.1 / `docs/assets/formula-reference.svg`'s single clipped silhouette around the whole
+ *  chain) — a `start` cell rounds its left corners, an `end` cell its right, a `middle` cell
+ *  is square on both, and a `solo` cell (no chain, or a chain of one) rounds all four, same
+ *  as before this distinction existed. */
+function cornerRadii(groupPosition: GroupPosition, radius: number) {
+  const left = groupPosition === 'solo' || groupPosition === 'start';
+  const right = groupPosition === 'solo' || groupPosition === 'end';
+  return {
+    borderTopLeftRadius: left ? radius : 0,
+    borderBottomLeftRadius: left ? radius : 0,
+    borderTopRightRadius: right ? radius : 0,
+    borderBottomRightRadius: right ? radius : 0,
+  };
+}
+
+/** Left/right border width for a cell at `groupPosition`: an interior seam between flush
+ *  neighbours carries no border on either side of it, only the chain's two outer edges do —
+ *  top and bottom stay full-width on every cell regardless (set as a static style below). */
+function sideBorderWidths(groupPosition: GroupPosition, width: number) {
+  const left = groupPosition === 'solo' || groupPosition === 'start' ? width : 0;
+  const right = groupPosition === 'solo' || groupPosition === 'end' ? width : 0;
+  return { borderLeftWidth: left, borderRightWidth: right };
+}
 
 /** Inset identity ring width — matches the structural `borderBand` so the ring reads as
  *  part of the same chrome language, not a thicker selection outline. */
@@ -57,6 +86,10 @@ interface CellProps {
   isEditingLabel?: boolean;
   /** Selected (or group-selected) — draws the P7.2 focus ring. */
   selected?: boolean;
+  /** This cell's position in its chain's flush run (§1.1). Defaults to `'solo'` — full round,
+   *  full border — so a caller that hasn't wired chain membership through renders exactly as
+   *  it did before this prop existed. */
+  groupPosition?: GroupPosition;
   onLabelChange?: (text: string) => void;
   onLabelBlur?: () => void;
   testID?: string;
@@ -74,6 +107,7 @@ export function Cell({
   labelHue,
   isEditingLabel,
   selected,
+  groupPosition = 'solo',
   onLabelChange,
   onLabelBlur,
   testID,
@@ -131,6 +165,8 @@ export function Cell({
         style={[
           styles.band,
           { width, height, borderColor: border, backgroundColor: fill },
+          cornerRadii(groupPosition, tokens.cornerRadius),
+          sideBorderWidths(groupPosition, tokens.borderBand),
           // Clip inset identity ring / bandBackground to the rounded corner when
           // either is present (P7.3). Selection focus paints *outside* the band
           // (negative inset, P7.2), so leave overflow visible while focused.
@@ -148,12 +184,11 @@ export function Cell({
             testID={testID ? `${testID}-identity-ring` : undefined}
             style={[
               styles.identityRing,
-              {
-                borderColor: identityHue,
-                // Inner radius: outer corner minus the structural band so the ring
-                // sits flush inside the fill rather than clipping the outer curve.
-                borderRadius: Math.max(0, tokens.cornerRadius - tokens.borderBand),
-              },
+              { borderColor: identityHue },
+              // Inner radius: outer corner minus the structural band so the ring
+              // sits flush inside the fill rather than clipping the outer curve.
+              // Square corners stay square — the ring follows the band's own shape.
+              cornerRadii(groupPosition, Math.max(0, tokens.cornerRadius - tokens.borderBand)),
             ]}
           />
         ) : null}
@@ -163,10 +198,10 @@ export function Cell({
             testID={testID ? `${testID}-selection-focus` : undefined}
             style={[
               styles.selectionFocus,
-              {
-                borderColor: selectionFocusColor,
-                borderRadius: tokens.cornerRadius + SELECTION_FOCUS_OUTSET,
-              },
+              { borderColor: selectionFocusColor },
+              // Same outer-edge-only rounding as the band itself (a square middle
+              // cell's focus ring stays square, not a rounded ring on a square cell).
+              cornerRadii(groupPosition, tokens.cornerRadius + SELECTION_FOCUS_OUTSET),
             ]}
           />
         ) : null}
@@ -208,8 +243,11 @@ const styles = StyleSheet.create({
   },
   band: {
     // height comes from the inline style array above — live per §12.5, not a static token.
-    borderRadius: tokens.cornerRadius,
-    borderWidth: tokens.borderBand,
+    // Corner radii and left/right border widths come from `cornerRadii`/`sideBorderWidths`
+    // in the inline style array (§1.1: group position decides those, not a static value).
+    // Top/bottom border stays full-width on every cell regardless of group position.
+    borderTopWidth: tokens.borderBand,
+    borderBottomWidth: tokens.borderBand,
     alignItems: 'center',
     justifyContent: 'center',
   },
