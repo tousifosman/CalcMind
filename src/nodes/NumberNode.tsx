@@ -17,7 +17,7 @@ import { getDeviceLocale } from '../ui/locale';
 import { commandFromHardwareKey, dispatchEditorCommand } from '../keypad/keymap';
 import { Cell, useGlyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
-import { useNodeSelected } from './useNodeSelected';
+import { useNodeSelected, useNodeGroupSelected } from './useNodeSelected';
 import { useGroupPosition } from './useGroupPosition';
 import { usePreferencesStore } from '../store/preferencesStore';
 
@@ -30,6 +30,7 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
   const isEditing = useUiStore((state) => state.editingNodeId === id);
   const isEditingLabel = useUiStore((state) => state.editingLabelNodeId === id);
   const selected = useNodeSelected(id);
+  const groupSelected = useNodeGroupSelected(id);
   const identityHue = useSourceIdentityHue(id);
   const groupPosition = useGroupPosition(id, node?.chainId ?? null);
   const inputRef = useRef<TextInput>(null);
@@ -153,6 +154,7 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
       identityHue={identityHue}
       isEditingLabel={isEditingLabel}
       selected={selected}
+      groupSelected={groupSelected}
       groupPosition={groupPosition}
       onLabelChange={(text) => setNodeLabel(id, text)}
       onLabelBlur={finishEditingLabel}

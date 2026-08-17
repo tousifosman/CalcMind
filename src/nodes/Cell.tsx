@@ -94,6 +94,12 @@ interface CellProps {
   isEditingLabel?: boolean;
   /** Selected (or group-selected) — draws the P7.2 focus ring. */
   selected?: boolean;
+  /** This selection is specifically `Select group` / `Select all` membership (§8.6), not
+   *  the lone keypad-target selection — so the focus ring should merge with flush group
+   *  siblings rather than draw a complete ring around just this one cell. See
+   *  `useNodeGroupSelected`. Defaults to `false`: an ordinary single selection always gets
+   *  a full ring, even on a structurally `'middle'` cell. */
+  groupSelected?: boolean;
   /** This cell's position in its chain's flush run (§1.1). Defaults to `'solo'` — full round,
    *  full border — so a caller that hasn't wired chain membership through renders exactly as
    *  it did before this prop existed. */
@@ -117,6 +123,7 @@ export function Cell({
   labelHue,
   isEditingLabel,
   selected,
+  groupSelected,
   groupPosition = 'solo',
   onLabelChange,
   onLabelBlur,
@@ -222,6 +229,13 @@ export function Cell({
               // Same outer-edge-only rounding as the band itself (a square middle
               // cell's focus ring stays square, not a rounded ring on a square cell).
               cornerRadii(groupPosition, tokens.cornerRadius + SELECTION_FOCUS_OUTSET),
+              // §8.6: a `Select group`/`Select all` member merges its ring with flush
+              // group siblings — no border on the interior seam, only the group's own
+              // outer edge — so the whole selected chain reads as one big cell rather
+              // than N individually-outlined ones. An ordinary single selection (not
+              // part of a group) always gets the full ring regardless of chain
+              // position, hence `'solo'` here when `groupSelected` is false.
+              sideBorderWidths(groupSelected ? groupPosition : 'solo', SELECTION_FOCUS_WIDTH),
             ]}
           />
         ) : null}
@@ -292,6 +306,10 @@ const styles = StyleSheet.create({
     left: -SELECTION_FOCUS_OUTSET,
     right: -SELECTION_FOCUS_OUTSET,
     bottom: -SELECTION_FOCUS_OUTSET,
-    borderWidth: SELECTION_FOCUS_WIDTH,
+    // Top/bottom stay full-width on every cell regardless of group selection — only
+    // left/right (the interior seam) is ever suppressed, via `sideBorderWidths` in the
+    // inline style array above (§8.6).
+    borderTopWidth: SELECTION_FOCUS_WIDTH,
+    borderBottomWidth: SELECTION_FOCUS_WIDTH,
   },
 });

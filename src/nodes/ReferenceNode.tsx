@@ -23,7 +23,7 @@ import { ResultDotTexture, textureSize } from './ResultDotTexture';
 import { referenceCellContent } from '../engine/reference';
 import { identitySourceId, labelForNode } from '../engine/identity';
 import { useReferenceIdentityHue } from './useIdentityHue';
-import { useNodeSelected } from './useNodeSelected';
+import { useNodeSelected, useNodeGroupSelected } from './useNodeSelected';
 import { useGroupPosition } from './useGroupPosition';
 import { usePreferencesStore } from '../store/preferencesStore';
 
@@ -48,6 +48,7 @@ function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
   const nodes = useDocumentStore((s) => s.document.nodes);
   const identityHue = useReferenceIdentityHue(id);
   const selected = useNodeSelected(id);
+  const groupSelected = useNodeGroupSelected(id);
   const groupPosition = useGroupPosition(id, node?.chainId ?? null);
   const glyphTextStyle = useGlyphTextStyle();
   const fontSize = usePreferencesStore((s) => s.numeralFontSize);
@@ -93,6 +94,7 @@ function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
       // Caption uses the identity hue without drawing a declaring-cell ring.
       labelHue={identityHue}
       selected={selected}
+      groupSelected={groupSelected}
       groupPosition={groupPosition}
       bandBackground={
         showResultPattern ? (

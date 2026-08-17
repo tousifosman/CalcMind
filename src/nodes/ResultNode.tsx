@@ -26,7 +26,7 @@ import { Cell, useGlyphTextStyle } from './Cell';
 import { ResultDotTexture, textureSize } from './ResultDotTexture';
 import { useSourceIdentityHue } from './useIdentityHue';
 import { useUiStore } from '../store/uiStore';
-import { useNodeSelected } from './useNodeSelected';
+import { useNodeSelected, useNodeGroupSelected } from './useNodeSelected';
 import { useGroupPosition } from './useGroupPosition';
 import { usePreferencesStore } from '../store/preferencesStore';
 
@@ -42,6 +42,7 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
   const identityHue = useSourceIdentityHue(id);
   const isEditingLabel = useUiStore((state) => state.editingLabelNodeId === id);
   const selected = useNodeSelected(id);
+  const groupSelected = useNodeGroupSelected(id);
   const groupPosition = useGroupPosition(id, node?.chainId ?? null);
   const glyphTextStyle = useGlyphTextStyle();
   const fontSize = usePreferencesStore((s) => s.numeralFontSize);
@@ -80,6 +81,7 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
       identityHue={identityHue}
       isEditingLabel={isEditingLabel}
       selected={selected}
+      groupSelected={groupSelected}
       groupPosition={groupPosition}
       onLabelChange={(text) => setNodeLabel(id, text)}
       onLabelBlur={finishEditingLabel}

@@ -6,7 +6,7 @@ import { useNode } from '../store/selectors';
 import { tokens, rolePalette, glyphColor } from '../ui/tokens';
 import { Cell, useGlyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
-import { useNodeSelected } from './useNodeSelected';
+import { useNodeSelected, useNodeGroupSelected } from './useNodeSelected';
 import { useGroupPosition } from './useGroupPosition';
 
 interface OperatorNodeProps {
@@ -17,6 +17,7 @@ function OperatorNodeComponent({ id }: OperatorNodeProps) {
   const node = useNode(id);
   const identityHue = useSourceIdentityHue(id);
   const selected = useNodeSelected(id);
+  const groupSelected = useNodeGroupSelected(id);
   const groupPosition = useGroupPosition(id, node?.chainId ?? null);
   const glyphTextStyle = useGlyphTextStyle();
   if (!node || node.kind !== 'operator') return null;
@@ -32,6 +33,7 @@ function OperatorNodeComponent({ id }: OperatorNodeProps) {
       label={node.label}
       identityHue={identityHue}
       selected={selected}
+      groupSelected={groupSelected}
       groupPosition={groupPosition}
     >
       <Text style={[glyphTextStyle, { color: glyphColor }]}>{node.op}</Text>
