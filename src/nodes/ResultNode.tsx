@@ -13,7 +13,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
 import { unlinkReference, finishEditingLabel, setNodeLabel } from '../store/commands';
-import { rolePalette, glyphColor, tokens, nodeHeightFor } from '../ui/tokens';
+import { rolePalette, glyphColor } from '../ui/tokens';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
 import {
@@ -23,7 +23,7 @@ import {
   RESULT_ERROR_FONT_SIZE,
 } from '../engine/errors';
 import { Cell, useGlyphTextStyle } from './Cell';
-import { ResultDotTexture } from './ResultDotTexture';
+import { ResultDotTexture, textureSize } from './ResultDotTexture';
 import { useSourceIdentityHue } from './useIdentityHue';
 import { useUiStore } from '../store/uiStore';
 import { useNodeSelected } from './useNodeSelected';
@@ -51,8 +51,11 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
   const palette = rolePalette.result;
   const content = resultCellContent(node.derived);
   const bandWidth = widthOf(node, locale, fontSize);
-  const textureWidth = bandWidth - 2 * tokens.borderBand;
-  const textureHeight = nodeHeightFor(fontSize) - 2 * tokens.borderBand;
+  const { width: textureWidth, height: textureHeight } = textureSize(
+    bandWidth,
+    fontSize,
+    groupPosition,
+  );
 
   const isCircular =
     content.mode === 'error' &&

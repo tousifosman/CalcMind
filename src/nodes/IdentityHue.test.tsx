@@ -84,6 +84,12 @@ describe('identity hue rendering (P6.5 / §11.1)', () => {
     expect(ring.props.style).toEqual(
       expect.arrayContaining([expect.objectContaining({ borderColor: hue })]),
     );
+    // A referenced result carries both the dot texture (always, P7.3) and this ring
+    // (now that it's referenced, §11.1) at once — the ring lives outside the band
+    // precisely so the band's own clip for the texture never touches it.
+    expect(
+      findHostByTestID(resultRenderer.root, `result-node-${resultNode.id}-texture`),
+    ).toBeTruthy();
 
     const refRenderer = renderNode(<ReferenceNode id={referenceId} />);
     const band = findHostByTestID(refRenderer.root, `reference-node-${referenceId}`);

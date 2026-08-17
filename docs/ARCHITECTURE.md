@@ -751,8 +751,10 @@ operators are visually separated from digits.
   appending in-chain. **Focus is always visible:** a white outset ring on the cell marks the
   keypad target, including read-only results and selected-but-not-editing numbers (continuation,
   §8.7). The selected node's wrapper stacks above flush chain neighbours so the ring is not
-  painted under the next member. While selected, the inset identity ring (§11.1) is omitted so
-  focus is a single chrome layer; hue still reads from the caption and connectors.
+  painted under the next member — and a node showing its own outset identity ring (§11.1)
+  elevates the same way while unselected, for the same reason. While selected, the identity
+  ring is omitted so focus is a single chrome layer (an outset white ring in the same spot);
+  hue still reads from the caption and connectors.
 - `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
   nothing typed) discards it rather than leaving a blank cell on the canvas.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` and `Create link` on values
@@ -1053,10 +1055,15 @@ identity, not just by a line.**
   means something.
 - A value **acquires an identity** when it becomes a named thing, which happens two ways: something
   **references** it, or the user gives it a **label**. Either grants an **identity hue** from a
-  rotating palette, drawn as a ring on the cell. (The reference-only rule was wrong: the reference
-  app's own labels illustration colours three *inputs* purely because they are labelled.)
+  rotating palette, drawn as a ring outside the cell — same geometry as the P7.2 selection focus
+  ring, and replaced by that ring (white) while the cell is selected, rather than stacking both.
+  (The reference-only rule was wrong: the reference app's own labels illustration colours three
+  *inputs* purely because they are labelled.)
 - Every **reference** to that value is filled with the same hue. Two cells sharing a hue are the
-  same value, wherever they sit on the canvas.
+  same value, wherever they sit on the canvas. A reference whose ultimate source (walking through
+  any nested reference→reference chain) is a *result* also carries the §1.2 dot texture, same
+  pattern as the result cell itself — colour still carries *which* identity, the pattern alone
+  carries *derived from a result*.
 - The **connector** between them is drawn in that hue too, as a bezier with an arrowhead.
 - **The label belongs to the identity, not the cell.** It renders above the declaring cell *and*
   above every reference to it. In the compound-interest screenshot (§1.3) "Initial Deposit" appears
@@ -1121,8 +1128,17 @@ dot texture is the exception to "plain `View`":
 - Solid `#FF7E79` + `#FFA3A0` border band always — hue and border carry read-only-ness on their
   own (decision #9).
 - Dot texture (P7.3 / §1.2): `ResultDotTexture` paints a `react-native-svg` `Pattern` — 4×4 unit
-  tile, 1-unit dots at `(1,0)` and `(3,2)` in `#FFD1CF` — as a `Cell` `bandBackground` under the
-  identity ring and glyph. Same geometry as `docs/assets/formula-reference.svg`; decorative only.
+  tile, 1-unit dots at `(1,0)` and `(3,2)` in `#FFD1CF` — as a `Cell` `bandBackground`, clipped to
+  the band's own rounded corner. `textureSize` (`ResultDotTexture.tsx`) sizes it to the band's
+  actual content box via the same `sideBorderWidths(groupPosition, …)` the band itself uses,
+  rather than assuming both left and right always carry a border. Any `ReferenceNode` whose
+  ultimate source is a result (§11.1) passes the same component as its own `bandBackground`.
+- The identity ring and the P7.2 selection focus ring are both outset (painted outside the band,
+  not inset within it) and are laid out as **siblings** of the band inside a shared, unclipped
+  `cellOuter` wrapper — not children of the band itself. This matters specifically because the
+  band clips its own content whenever a `bandBackground` is present: an outset ring nested inside
+  that clipped View would be clipped away along with it, rendering correctly in the tree but
+  invisible on screen. Same geometry as `docs/assets/formula-reference.svg`; decorative only.
 
 Connector curves (§11.1) also use `react-native-svg` — beziers in an overlay layer above the
 nodes, sharing the canvas transform. Implemented: `ConnectorLayer` is a sibling of `NodeLayer`
@@ -1449,6 +1465,7 @@ it unclear which parts were claims about the present and which were intentions.
 | 18 | `numeralFontSize`/`numeralFontWeight` reduced to 22/400 from the reference-accurate 30/800; `numberPaddingX` reduced to 4 from 12, in two steps (12→8→4); `nodeHeight` reduced to 40 from 64, in two steps (64→48→40), with `mathAxisOffset` scaled 4→2 to match | User-reported live: the ratio-accurate glyph size read as oversized in the cell; regular weight at the smaller size stays legible without the bold's extra visual weight; the number-cell width table in `measure.ts` had to be re-derived by hand too, since it is a fixed lookup keyed to the *value* of `numeralFontSize`, not a live scale from it; 8 still read as excess whitespace on further feedback; a fixed 64dp then 48dp band around the shrunk 22px glyph kept reading as excess space above/below the text even after the first cut — asked the user how far to take it given `nodeHeight` also sizes the tap/drag hit box, and 40 (near the common ~44dp touch-target minimum) was the answer (§1.2, §8.1) | A future reference restyle re-derives the ratio and disagrees; padding or band height reads too tight against the border band, or tap targets prove too small in real use |
 | 19 | Numeral font size made a live, persisted user preference (§12.5) rather than staying a fixed token; `nodeHeight`/`numberPaddingX`/`mathAxisOffset` stay fixed | Direct follow-on from decision #18's thread: the user asked to be able to change it themselves rather than keep asking for a different fixed value. Only the glyph size needed to be adjustable to satisfy the request; moving the padding/height tokens too would have meant re-deriving `measure.ts`'s glyph-width table and the tap-target floor on every change, for no requested benefit | Users want padding/height to visually track a much larger or smaller chosen size too — **fired**, see decision #20 |
 | 20 | `nodeHeight` made a live function of the font size (`nodeHeightFor`, §12.5), not a fixed token; `numberPaddingX`/`mathAxisOffset` stay fixed. Settings row also renamed to "Canvas Number Font Size", given a non-editable "pt" unit label, and its value made directly typable alongside the existing +/− stepper | User noticed the cell stayed a fixed height across a font-size change while its width already tracked live (decision #19 had only wired width) — an inconsistency between the two axes of the same cell, not a new feature. `nodeHeightFor` is derived (`fontSize + 2 × numberPaddingY`), not a second independently-threaded parameter, so most call sites needed no new argument — only `caretAt` (`chains/layout.ts`) gained one, since it's the one site without `fontSize` already in scope. `numberPaddingX`/`mathAxisOffset` were left fixed, matching #19's reasoning: nothing asked for the cell's *proportions* to change, only for both axes of its *size* to agree | A future request wants the padding or maths-axis offset to also scale with the chosen size |
+| 21 | Identity ring moved from inset to outset (same geometry as the P7.2 selection focus ring, replaced by it while selected); any reference tracing back to a result also gets the result's dot texture, transitively through nested reference→reference chains | User pointed at the shipped-inset ring directly: it read as chrome buried inside the cell rather than the cell's own outer identity, and wanted it to *become* the white focus ring on selection rather than being hidden in favour of a separate one. Reusing the focus ring's exact geometry (`cornerRadii`/outset offsets) made that literal — the same physical ring, recoloured. Also required moving both outset rings out from being children of the band to being its siblings (`cellOuter` wrapper, §11.3): the band clips its own content for a `bandBackground` texture, and a ring nested inside a clipped parent is invisible regardless of its own style being correct — caught live, not by any test, since Jest's renderer doesn't compute real overflow clipping | Never for the ring geometry (it is now the same code path as focus); revisit the pattern-propagation rule if a future request wants it to mean something narrower than "traces back to a result" |
 
 ## 17. Open questions
 

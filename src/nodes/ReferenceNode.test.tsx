@@ -76,3 +76,108 @@ describe('ReferenceNode (P6.4 dangling)', () => {
     expect(flat.opacity).toBe(DANGLING_REFERENCE_OPACITY);
   });
 });
+
+describe('ReferenceNode result-pattern propagation (§11.1)', () => {
+  test('a reference to a number gets no dot texture', () => {
+    inject(
+      {
+        id: 'ref1',
+        kind: 'reference',
+        position: { x: 0, y: 0 },
+        chainId: null,
+        createdAt: 0,
+        targetNodeId: 'n1',
+      },
+      {
+        n1: {
+          id: 'n1',
+          kind: 'number',
+          raw: '42',
+          position: { x: 0, y: 0 },
+          chainId: null,
+          createdAt: 0,
+        },
+      },
+    );
+    const renderer = renderNode(<ReferenceNode id="ref1" />);
+    expect(
+      renderer.root.findAllByProps({ testID: 'reference-node-ref1-texture' }),
+    ).toHaveLength(0);
+  });
+
+  test('a reference straight to a result gets the same dot texture as the result itself', () => {
+    inject(
+      {
+        id: 'ref1',
+        kind: 'reference',
+        position: { x: 0, y: 0 },
+        chainId: null,
+        createdAt: 0,
+        targetNodeId: 'r1',
+      },
+      {
+        r1: {
+          id: 'r1',
+          kind: 'result',
+          sourceChainId: 'c1',
+          position: { x: 0, y: 0 },
+          chainId: 'c1',
+          createdAt: 0,
+          derived: { display: '27', computedAt: '2026-08-17T00:00:00.000Z' },
+        },
+      },
+    );
+    const renderer = renderNode(<ReferenceNode id="ref1" />);
+    expect(findHostByTestID(renderer.root, 'reference-node-ref1-texture')).toBeTruthy();
+  });
+
+  test('a reference to a reference that ultimately targets a result also gets the texture', () => {
+    inject(
+      {
+        id: 'ref2',
+        kind: 'reference',
+        position: { x: 0, y: 0 },
+        chainId: null,
+        createdAt: 0,
+        targetNodeId: 'ref1',
+      },
+      {
+        ref1: {
+          id: 'ref1',
+          kind: 'reference',
+          position: { x: 0, y: 0 },
+          chainId: null,
+          createdAt: 0,
+          targetNodeId: 'r1',
+        },
+        r1: {
+          id: 'r1',
+          kind: 'result',
+          sourceChainId: 'c1',
+          position: { x: 0, y: 0 },
+          chainId: 'c1',
+          createdAt: 0,
+          derived: { display: '27', computedAt: '2026-08-17T00:00:00.000Z' },
+        },
+      },
+    );
+    const renderer = renderNode(<ReferenceNode id="ref2" />);
+    expect(findHostByTestID(renderer.root, 'reference-node-ref2-texture')).toBeTruthy();
+  });
+
+  test('a dangling reference gets no dot texture even if the last-known source was a result', () => {
+    inject({
+      id: 'ref1',
+      kind: 'reference',
+      position: { x: 0, y: 0 },
+      chainId: null,
+      createdAt: 0,
+      targetNodeId: 'gone',
+      lastKnownDisplay: '27',
+    });
+    const renderer = renderNode(<ReferenceNode id="ref1" />);
+    expect(
+      renderer.root.findAllByProps({ testID: 'reference-node-ref1-texture' }),
+    ).toHaveLength(0);
+  });
+});

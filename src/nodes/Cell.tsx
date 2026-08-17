@@ -5,15 +5,19 @@
 // radius. A chain's members are flush (§1.1), so only the cell at each end of a multi-member
 // chain rounds its outer corner and carries a border on that outer side — `groupPosition` (from
 // `useGroupPosition`) is what each caller passes to say which cell that is; see `cornerRadii`/
-// `sideBorderWidths` below. Result cells pass an SVG `bandBackground` (dot texture, P7.3) painted
-// under the identity ring. Node-kind components (NumberNode etc.) own their palette, width and
-// glyph content and render through this so the six of them don't each re-derive the same box model.
+// `sideBorderWidths` below. Result cells — and any reference cell tracing back to one, §11.1 —
+// pass an SVG `bandBackground` (dot texture, P7.3) clipped to the band's own rounded corner.
+// The identity/selection rings sit outside the band as siblings, not children of it, precisely
+// so that per-cell clip never touches them. Node-kind components (NumberNode etc.) own their
+// palette, width and glyph content and render through this so the six of them don't each
+// re-derive the same box model.
 //
-// Identity (§11.1 / P6.5 / P6b.1): when `identityHue` is set, a ring is drawn inset on the cell
-// and the label (if any) uses that hue. References pass the hue as their fill/border instead and
-// leave `identityHue` unset — the ring is for declaring cells, the fill is for reference cells.
-// References that still show the identity caption pass `labelHue` so the caption matches without
-// drawing a ring. In-place label editing (P6b.1) swaps the caption Text for a TextInput.
+// Identity (§11.1 / P6.5 / P6b.1): when `identityHue` is set, a ring is drawn outside the cell
+// (same geometry as the P7.2 selection focus ring below it) and the label (if any) uses that
+// hue. References pass the hue as their fill/border instead and leave `identityHue` unset — the
+// ring is for declaring cells, the fill is for reference cells. References that still show the
+// identity caption pass `labelHue` so the caption matches without drawing a ring. In-place label
+// editing (P6b.1) swaps the caption Text for a TextInput.
 import { ReactNode, useEffect, useRef } from 'react';
 import { Platform, StyleSheet, Text, TextInput, TextStyle, View } from 'react-native';
 import { tokens, labelColor, selectionFocusColor, nodeHeightFor } from '../ui/tokens';
@@ -38,15 +42,19 @@ function cornerRadii(groupPosition: GroupPosition, radius: number) {
 
 /** Left/right border width for a cell at `groupPosition`: an interior seam between flush
  *  neighbours carries no border on either side of it, only the chain's two outer edges do —
- *  top and bottom stay full-width on every cell regardless (set as a static style below). */
-function sideBorderWidths(groupPosition: GroupPosition, width: number) {
+ *  top and bottom stay full-width on every cell regardless (set as a static style below).
+ *  Exported so a `bandBackground` (the P7.3 result dot texture, on `ResultNode` and any
+ *  `ReferenceNode` showing the same pattern) can size itself to the band's actual inner
+ *  content box rather than assuming both sides always carry a border. */
+export function sideBorderWidths(groupPosition: GroupPosition, width: number) {
   const left = groupPosition === 'solo' || groupPosition === 'start' ? width : 0;
   const right = groupPosition === 'solo' || groupPosition === 'end' ? width : 0;
   return { borderLeftWidth: left, borderRightWidth: right };
 }
 
-/** Inset identity ring width — matches the structural `borderBand` so the ring reads as
- *  part of the same chrome language, not a thicker selection outline. */
+/** Outset identity ring width — matches the structural `borderBand` so the ring reads as
+ *  part of the same chrome language, not a thicker selection outline. Same width as
+ *  `SELECTION_FOCUS_WIDTH` (they share the same outset geometry; only the colour differs). */
 export const IDENTITY_RING_WIDTH = tokens.borderBand;
 
 /** Selection focus ring paints just outside the structural band so it stays visible on
@@ -93,7 +101,9 @@ interface CellProps {
   onLabelChange?: (text: string) => void;
   onLabelBlur?: () => void;
   testID?: string;
-  /** Painted inside the band, behind the identity ring and glyph (result dot texture). */
+  /** Painted inside the band, behind the glyph, clipped to its rounded corner (result dot
+   *  texture). The identity/selection rings sit outside the band entirely, so this never
+   *  clips them (§11.1). */
   bandBackground?: ReactNode;
   children: ReactNode;
 }
@@ -160,24 +170,35 @@ export function Cell({
           </Text>
         )
       ) : null}
-      <View
-        testID={testID}
-        style={[
-          styles.band,
-          { width, height, borderColor: border, backgroundColor: fill },
-          cornerRadii(groupPosition, tokens.cornerRadius),
-          sideBorderWidths(groupPosition, tokens.borderBand),
-          // Clip inset identity ring / bandBackground to the rounded corner when
-          // either is present (P7.3). Selection focus paints *outside* the band
-          // (negative inset, P7.2), so leave overflow visible while focused.
-          (identityHue || bandBackground) && !selected ? styles.bandClip : null,
-        ]}
-      >
-        {bandBackground}
-        {/* Identity ring is inset; while selected the outset focus ring already
-         *  marks the cell, so skip the inner hue ring — double chrome reads as a
-         *  second "focus" border (especially the blue first palette swatch).
-         *  Hue still shows via caption colour and connectors (§11.1). */}
+      {/* Outset rings (identity, selection focus) are siblings of the band, not children
+       *  of it: the band clips its own content to the rounded corner whenever it has a
+       *  `bandBackground` texture (P7.3), and an outset ring nested *inside* a clipped
+       *  parent would itself be clipped away — invisible despite rendering correctly.
+       *  This wrapper is the shared positioning frame both the band and the rings size
+       *  themselves against. */}
+      <View style={[styles.cellOuter, { width, height }]}>
+        <View
+          testID={testID}
+          style={[
+            styles.band,
+            { width, height, borderColor: border, backgroundColor: fill },
+            cornerRadii(groupPosition, tokens.cornerRadius),
+            sideBorderWidths(groupPosition, tokens.borderBand),
+            // Clip the result dot texture to the rounded corner (P7.3). Safe to apply
+            // regardless of `selected` now that the rings living outside this View no
+            // longer share its clip.
+            bandBackground ? styles.bandClip : null,
+          ]}
+        >
+          {bandBackground}
+          {children}
+        </View>
+        {/* Identity ring is outset, same geometry as the selection focus ring below —
+         *  the ring *is* the cell's outer chrome, so when selected the outset white
+         *  focus ring takes over instead of stacking a second outer ring in a
+         *  different colour (especially the blue first palette swatch reading as a
+         *  second "focus" border). Hue still shows via caption colour and
+         *  connectors (§11.1) while selected. */}
         {identityHue && !selected ? (
           <View
             pointerEvents="none"
@@ -185,10 +206,9 @@ export function Cell({
             style={[
               styles.identityRing,
               { borderColor: identityHue },
-              // Inner radius: outer corner minus the structural band so the ring
-              // sits flush inside the fill rather than clipping the outer curve.
-              // Square corners stay square — the ring follows the band's own shape.
-              cornerRadii(groupPosition, Math.max(0, tokens.cornerRadius - tokens.borderBand)),
+              // Same outer-edge-only rounding as the selection focus ring — a square
+              // middle cell's identity ring stays square, not rounded past its edge.
+              cornerRadii(groupPosition, tokens.cornerRadius + SELECTION_FOCUS_OUTSET),
             ]}
           />
         ) : null}
@@ -205,7 +225,6 @@ export function Cell({
             ]}
           />
         ) : null}
-        {children}
       </View>
     </View>
   );
@@ -241,6 +260,11 @@ const styles = StyleSheet.create({
     padding: 0,
     textAlign: 'center',
   },
+  // Sized in the inline style array to exactly match the band (width/height are both live
+  // per §12.5) so the band fills it completely. Unclipped, so the identity/selection rings
+  // — its other two children, positioned outset against *this* box — stay visible even
+  // when the band itself clips its own content for a `bandBackground` texture.
+  cellOuter: {},
   band: {
     // height comes from the inline style array above — live per §12.5, not a static token.
     // Corner radii and left/right border widths come from `cornerRadii`/`sideBorderWidths`
@@ -256,10 +280,10 @@ const styles = StyleSheet.create({
   },
   identityRing: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    top: -SELECTION_FOCUS_OUTSET,
+    left: -SELECTION_FOCUS_OUTSET,
+    right: -SELECTION_FOCUS_OUTSET,
+    bottom: -SELECTION_FOCUS_OUTSET,
     borderWidth: IDENTITY_RING_WIDTH,
   },
   selectionFocus: {
