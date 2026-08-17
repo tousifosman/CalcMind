@@ -21,6 +21,7 @@ import {
   dispatchEditorCommand,
   resolveParenSide,
   groupContainsResult,
+  chainHasEquals,
 } from './keymap';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
@@ -577,6 +578,47 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(useUiStore.getState().selectedNodeId).toBe(resultId);
   });
 
+  test('selecting the = cell itself rejects digit/paren/operator/equals — nothing appends after it', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const doc = useDocumentStore.getState().document;
+    const equalsNode = Object.values(doc.nodes).find((n) => n.kind === 'equals')!;
+    const chainId = equalsNode.chainId!;
+    const membersBefore = [...doc.chains[chainId]!.members];
+
+    selectNode(equalsNode.id);
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+    dispatchEditorCommand({ region: 'paren', side: 'open' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    expect(useDocumentStore.getState().document.chains[chainId]!.members).toEqual(membersBefore);
+    // Still selected — every command above was a no-op, not a deselect.
+    expect(useUiStore.getState().selectedNodeId).toBe(equalsNode.id);
+  });
+
+  test('= is rejected on any other member once the chain already has one — no second equals', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const doc = useDocumentStore.getState().document;
+    const one = Object.values(doc.nodes).find((n) => n.kind === 'number' && n.raw === '1')!;
+    const chainId = one.chainId!;
+    const membersBefore = [...doc.chains[chainId]!.members];
+
+    selectNode(one.id);
+    dispatchEditorCommand({ region: 'equals' });
+
+    const after = useDocumentStore.getState().document;
+    expect(after.chains[chainId]!.members).toEqual(membersBefore);
+    expect(after.chains[chainId]!.members.filter((id) => after.nodes[id]?.kind === 'equals')).toHaveLength(1);
+  });
+
   test('backspace still deletes a selected result', () => {
     const resultId = 'n_result_test2';
     useDocumentStore.getState().applyCommand((draft) => {
@@ -935,6 +977,35 @@ describe('dispatchEditorCommand: arrows move selection between chains (P7.2)', (
     expect(useUiStore.getState().selectedNodeId).toBe(id);
     dispatchEditorCommand({ region: 'arrow', direction: 'down' });
     expect(useUiStore.getState().selectedNodeId).toBe(id);
+  });
+});
+
+describe('chainHasEquals (§9: at most one = per chain)', () => {
+  test('false for a free node, a chain with no equals, and a missing/null id', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    const free = Object.values(nodes()).find((n) => n.kind === 'number')!;
+    expect(chainHasEquals(free.id, nodes(), useDocumentStore.getState().document.chains)).toBe(false);
+    expect(chainHasEquals(null, nodes(), useDocumentStore.getState().document.chains)).toBe(false);
+    expect(chainHasEquals('missing', nodes(), useDocumentStore.getState().document.chains)).toBe(false);
+
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    const doc = useDocumentStore.getState().document;
+    const one = Object.values(doc.nodes).find((n) => n.kind === 'number' && n.raw === '1')!;
+    expect(chainHasEquals(one.id, doc.nodes, doc.chains)).toBe(false);
+  });
+
+  test('true for every member once the chain has an equals, including the equals/result themselves', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const doc = useDocumentStore.getState().document;
+    const one = Object.values(doc.nodes).find((n) => n.kind === 'number' && n.raw === '1')!;
+    for (const id of doc.chains[one.chainId!]!.members) {
+      expect(chainHasEquals(id, doc.nodes, doc.chains)).toBe(true);
+    }
   });
 });
 

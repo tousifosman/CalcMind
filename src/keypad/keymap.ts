@@ -39,6 +39,24 @@ export function groupContainsResult(
   return false;
 }
 
+/** True when `nodeId`'s own chain (if any) already contains an equals node (§9: at most
+ *  one `=` per chain — appending a second would splice it in front of the existing
+ *  equals+result pair instead of replacing anything, corrupting the formula). Gates the
+ *  keypad's `=` key (`Keypad.tsx`'s `EqualsKey`) and {@link dispatchEditorCommand}'s
+ *  `equals` case alike, so a hardware Enter/`=` press can't do what the on-screen button
+ *  already refuses to. */
+export function chainHasEquals(
+  nodeId: NodeId | null | undefined,
+  nodes: Record<NodeId, CalcNode>,
+  chains: Record<string, { members: readonly NodeId[] }>,
+): boolean {
+  const chainId = nodeId ? nodes[nodeId]?.chainId : null;
+  if (!chainId) return false;
+  const chain = chains[chainId];
+  if (!chain) return false;
+  return chain.members.some((id) => nodes[id]?.kind === 'equals');
+}
+
 export type Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
 
 export type KeypadKey =
@@ -434,6 +452,18 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     return;
   }
 
+  // §9: a chain's `=` is terminal — nothing can be appended after it. Continuation
+  // (§8.7) happens from the *result*, never from the `=` symbol itself, so every
+  // command is inert while the equals cell is the selected target — backspace already
+  // returned above and still deletes it like any other cell. Without this, selecting
+  // `=` directly and pressing a digit/operator/paren/`=` would splice a new member
+  // right after it (`appendMembersToChain` inserts after whatever node is targeted),
+  // i.e. exactly "a cell after the equals" — a chain's result (added below `=` by
+  // `finalizeChain`) is what should follow it, never user input.
+  if (selectedNode?.kind === 'equals') {
+    return;
+  }
+
   // §8.7 Continuation: operator on a selected result, or on a selected *free* number
   // that is not being edited, starts a new chain referencing that value. Results stay
   // read-only for every other key. Numbers being edited still append in-chain so typing
@@ -573,6 +603,16 @@ export function dispatchEditorCommand(command: EditorCommand): void {
 
     case 'equals': {
       if (selectedNode) {
+        // §9: at most one `=` per chain. The equals cell itself already returned
+        // above, but any *other* member of an already-`=`'d chain (an operand being
+        // edited, e.g.) would otherwise splice a second `=` in front of the existing
+        // one — reject it here too, matching the keypad's own `EqualsKey` disabled
+        // state (`chainHasEquals`, mirrored in `Keypad.tsx`) so a hardware Enter/`=`
+        // can't do what the on-screen button already refuses to.
+        const before = useDocumentStore.getState().document;
+        if (chainHasEquals(selectedNode.id, before.nodes, before.chains)) {
+          return;
+        }
         // §8.7: after `=` the natural next action is continuation (operator on the
         // result). Select the new result when one exists; fall back to `=` only
         // when the chain did not evaluate (no result member).

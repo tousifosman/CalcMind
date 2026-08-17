@@ -23,10 +23,10 @@ import { glyphColor, identityHues, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
 import { clearDocument } from '../store/commands';
-import { Digit, KeypadKey, groupContainsResult } from './keymap';
+import { Digit, KeypadKey, groupContainsResult, chainHasEquals } from './keymap';
 
 export type { Digit, KeypadKey } from './keymap';
-export { groupContainsResult } from './keymap';
+export { groupContainsResult, chainHasEquals } from './keymap';
 
 interface KeypadProps {
   /** BCP-47 locale, used only to show the decimal key's glyph (§10.3); the key still
@@ -79,6 +79,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     return Object.keys(nodes).length === 0 && Object.keys(chains).length === 0;
   });
   const nodes = useDocumentStore((state) => state.document.nodes);
+  const chains = useDocumentStore((state) => state.document.chains);
   // Select all (§8.6): data-entry keys have no single target — gray them out.
   // Mode strip (and hardware undo/redo) stay available.
   const dataEntryLocked = allSelected;
@@ -98,6 +99,12 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   // buttons now (`numberKeysDisabled`, below) — a selected result/reference disables them
   // right alongside the digits, not just a selected operator.
   const selectionBlocksNumberEditing = selectedKind === 'operator';
+  // §9: the selected node's own chain already has an `=` — a second would splice in
+  // front of the existing equals+result pair (`chainHasEquals`, shared with
+  // `dispatchEditorCommand`'s own `equals` guard so the button and the hardware
+  // Enter/`=` key agree). `false` when nothing is selected — a free `=` with no
+  // target is still how §8.5 starts a bare equals node.
+  const selectedChainHasEquals = chainHasEquals(selectedNodeId, nodes, chains);
 
   if (!visible) {
     return null;
@@ -362,7 +369,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
           <EqualsKey
             onPress={() => press({ region: 'equals' })}
             testID="keypad-equals"
-            disabled={dataEntryLocked || groupMode}
+            disabled={dataEntryLocked || groupMode || selectedChainHasEquals}
           />
         </View>
       </View>

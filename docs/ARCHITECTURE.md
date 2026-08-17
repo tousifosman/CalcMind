@@ -60,7 +60,7 @@ The reference raster has a cell height of 256px. Tokens below are that geometry 
 | `borderBand` | 11 | 0.043 | **3** |
 | `numeralFontSize` | 127 | 0.496 | **22** (weight 400) *(reduced from the ratio-accurate 30/800 — read as oversized on-screen; this is now only the compiled-in default — §12.5's Settings sheet lets the user override it live, 14–30dp)* |
 | `numberPaddingX` | 48 | 0.188 | **4** *(reduced from the ratio-accurate 12, in two steps — see decision 18)* |
-| `operatorWidth` | 136 | 0.531 | **34** |
+| `operatorWidth` | 136 | 0.531 | **26** *(reduced from the ratio-accurate 34 — measured live at ~10.5dp either side of the glyph, well past `numberPaddingX`'s own already-trimmed 4dp; also the paren cell's width, unchanged, since it deliberately shares this token — see decision 22)* |
 | `equalsWidth` | 140 | 0.547 | **35** |
 | `cornerRadius` | 12 | 0.047 | **8** *(bumped from 3 for a friendlier silhouette)* |
 | `mathAxisOffset` | +16 from centre | 0.063 | **2** below centre *(scaled down from 4 with `nodeHeight`'s two reductions to stay near the same ratio — decision 18)* |
@@ -708,6 +708,14 @@ operators are visually separated from digits.
   `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` (or `Y`).
 - Pressing `=` on a chain selects the new **result** (not the `=` glyph) so the next operator
   is ready for continuation without an extra tap.
+- **`=` disables once its chain already has one** (§9: at most one `=` per chain). Selecting
+  the equals cell itself, the result, or any other member of an already-`=`'d chain all grey
+  the keypad's `=` key out (`chainHasEquals`, `keymap.ts`) rather than let a second `=` splice
+  in front of the existing equals+result pair. `dispatchEditorCommand`'s own `equals` case
+  carries the identical check, so a hardware Enter/`=` press can't do what the on-screen button
+  already refuses to — and selecting the `=` cell directly rejects every key (digit, paren,
+  operator, `=`), not only `=`, since nothing is meant to append after it at all; a chain's
+  result is what belongs there, placed by `finalizeChain`, never further user input.
 - **Continuation shortcut (§8.7).** With a result — or a number that is selected but not being
   edited — pressing an operator starts a new chain that references that value.
 - Tapping empty canvas creates a number node there, in edit mode, and shows the keypad if it
@@ -809,7 +817,10 @@ is still an operand of that formula rather than a free-standing value: an operat
 *that* chain in place, immediately after the selected member (§8.5's append-after-anchor
 targeting), the same as typing does. `1 + 2 = 3`, select `2`, press `+` builds `1 + 2 + _` (the
 stale `=`/result get pushed past the new operand and the chain reads Incomplete until it's
-filled in, then recomputes) — it must not spin off a reference to `2` elsewhere.
+filled in, then recomputes) — it must not spin off a reference to `2` elsewhere. This
+append-after-anchor targeting is exactly why the `=` cell itself is a hard stop rather than
+just another anchor (§8.5, §9): appending *after* `=` is never a formula edit, so selecting the
+`=` cell rejects every key outright instead of splicing a new member past it.
 
 **A selected live reference never continuation-links, regardless of whether it's free or
 already a chain member — it always extends in place**, the same append-after-anchor path a
@@ -1466,6 +1477,7 @@ it unclear which parts were claims about the present and which were intentions.
 | 19 | Numeral font size made a live, persisted user preference (§12.5) rather than staying a fixed token; `nodeHeight`/`numberPaddingX`/`mathAxisOffset` stay fixed | Direct follow-on from decision #18's thread: the user asked to be able to change it themselves rather than keep asking for a different fixed value. Only the glyph size needed to be adjustable to satisfy the request; moving the padding/height tokens too would have meant re-deriving `measure.ts`'s glyph-width table and the tap-target floor on every change, for no requested benefit | Users want padding/height to visually track a much larger or smaller chosen size too — **fired**, see decision #20 |
 | 20 | `nodeHeight` made a live function of the font size (`nodeHeightFor`, §12.5), not a fixed token; `numberPaddingX`/`mathAxisOffset` stay fixed. Settings row also renamed to "Canvas Number Font Size", given a non-editable "pt" unit label, and its value made directly typable alongside the existing +/− stepper | User noticed the cell stayed a fixed height across a font-size change while its width already tracked live (decision #19 had only wired width) — an inconsistency between the two axes of the same cell, not a new feature. `nodeHeightFor` is derived (`fontSize + 2 × numberPaddingY`), not a second independently-threaded parameter, so most call sites needed no new argument — only `caretAt` (`chains/layout.ts`) gained one, since it's the one site without `fontSize` already in scope. `numberPaddingX`/`mathAxisOffset` were left fixed, matching #19's reasoning: nothing asked for the cell's *proportions* to change, only for both axes of its *size* to agree | A future request wants the padding or maths-axis offset to also scale with the chosen size |
 | 21 | Identity ring moved from inset to outset (same geometry as the P7.2 selection focus ring, replaced by it while selected); any reference tracing back to a result also gets the result's dot texture, transitively through nested reference→reference chains | User pointed at the shipped-inset ring directly: it read as chrome buried inside the cell rather than the cell's own outer identity, and wanted it to *become* the white focus ring on selection rather than being hidden in favour of a separate one. Reusing the focus ring's exact geometry (`cornerRadii`/outset offsets) made that literal — the same physical ring, recoloured. Also required moving both outset rings out from being children of the band to being its siblings (`cellOuter` wrapper, §11.3): the band clips its own content for a `bandBackground` texture, and a ring nested inside a clipped parent is invisible regardless of its own style being correct — caught live, not by any test, since Jest's renderer doesn't compute real overflow clipping | Never for the ring geometry (it is now the same code path as focus); revisit the pattern-propagation rule if a future request wants it to mean something narrower than "traces back to a result" |
+| 22 | `=` is a hard stop: selecting the equals cell rejects every key, and the keypad's `=` key disables once its chain already has one (`chainHasEquals`), regardless of which member is selected; `operatorWidth` reduced 34→26 | User reported two gaps directly. First: selecting `=` and pressing a digit/paren/operator/`=` spliced a new member in right after it (`appendMembersToChain` inserts after whatever node is targeted) — a chain's result belongs there, placed by `finalizeChain`, never further user input; fixed with a full early-return once `selectedNode.kind === 'equals'`, plus a `chainHasEquals` guard inside `dispatchEditorCommand`'s own `equals` case so a hardware Enter/`=` can't bypass what the on-screen key's `disabled` prop already refuses (mirrored in both places rather than only the UI, since the UI gate never covered the hardware path). Second: operator-cell padding (~10.5dp either side of a ~13dp glyph, measured live via `getBoundingClientRect`) read as excessive next to `numberPaddingX`'s already-trimmed 4dp; picked 26 to cut it visibly without leaving the glyph cramped. 26 sits *below* `chains/bounds.ts`'s `SNAP_DISTANCE` (28) — a value `chains/snapping.test.ts` had one fixture built to stay clear of — but the full suite (`resolveSnapCandidate`'s "nearest wins" tie-break) passed unchanged regardless, so no snapping fix was needed. Kept the paren cell sharing the same token, unchanged design intent (§1.2), and left `equalsWidth` untouched since only "operator cells" were named | Never for the equals hard-stop; revisit `operatorWidth` if a future request wants parens sized independently of operators, or `equalsWidth` brought in line with the now-narrower operator cells |
 
 ## 17. Open questions
 

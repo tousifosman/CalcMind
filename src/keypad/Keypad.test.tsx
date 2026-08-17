@@ -763,6 +763,46 @@ describe('group-mode keypad (§8.5)', () => {
   });
 });
 
+describe('= key disables once its chain already has an equals (§9)', () => {
+  test('selecting any member of an already-`=`\'d chain disables keypad-equals', () => {
+    let one!: string;
+    act(() => {
+      const a = addNumberNode({ x: 0, y: 0 }, '1');
+      const built = appendOperatorAndNumber(a, '+');
+      setNodeRaw(built.numberId, '2');
+      appendEqualsNode(built.numberId);
+      one = a;
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+      selectNode(one);
+    });
+
+    expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBe(true);
+  });
+
+  test('a chain with no equals yet, or nothing selected, leaves keypad-equals enabled', () => {
+    let a!: string;
+    act(() => {
+      a = addNumberNode({ x: 0, y: 0 }, '1');
+      addOperatorNode({ x: 50, y: 0 }, '+');
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBeFalsy();
+
+    act(() => {
+      selectNode(a);
+    });
+    expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBeFalsy();
+  });
+});
+
 describe('Select all locks data-entry keys (§8.6)', () => {
   test('digits, operators, editing and grouping keys disable; mode strip stays live', () => {
     const presses: KeypadKey[] = [];
