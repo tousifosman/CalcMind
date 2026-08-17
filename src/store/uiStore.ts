@@ -11,6 +11,13 @@ export type ContextMenu =
   | { kind: 'node'; nodeId: NodeId; anchor: Vec2 }
   | { kind: 'canvas'; anchor: Vec2 };
 
+/** §8.8 value-slider popover state — see `sliderState` below. */
+export interface SliderState {
+  nodeId: NodeId;
+  pinned: boolean;
+  offset: Vec2;
+}
+
 /** Live drag feedback for P3.5 / P3.6. Ephemeral: recomputed every frame from shared
  *  values, never written into the document or undo history (§11.4, §13). */
 export interface DragSnapState {
@@ -113,6 +120,23 @@ export interface UiState {
   dragSnap: DragSnapState | null;
   setDragSnap: (state: DragSnapState | null) => void;
 
+  /**
+   * The value-slider popover (§8.8, P6b.3). Opened explicitly from the cell context
+   * menu's `Show slider` item — it no longer follows selection automatically. `pinned`
+   * is the popover's own "keep open" checkbox: false (the default on open) means the
+   * next canvas tap elsewhere closes it, same as any other momentary prompt in this
+   * store; true suppresses that dismissal, and is also what gates the connector line
+   * back to the cell and the popover's own drag handle (`ValueSlider.tsx` reads
+   * `pinned` for both). `offset` is the popover's drag delta from its anchored
+   * position; it only moves while pinned, and is reset whenever the slider opens fresh
+   * or `pinned` is toggled.
+   */
+  sliderState: SliderState | null;
+  openSlider: (nodeId: NodeId) => void;
+  closeSlider: () => void;
+  setSliderPinned: (pinned: boolean) => void;
+  setSliderOffset: (offset: Vec2) => void;
+
   /** Settings sheet (§8.5, mode-strip cog). Ephemeral, same reasoning as every other
    *  prompt in this store: opening it is not a document edit, so it sits outside undo
    *  history rather than on `document`. */
@@ -164,6 +188,18 @@ export const useUiStore = create<UiState>((set) => ({
 
   dragSnap: null,
   setDragSnap: (dragSnap) => set({ dragSnap }),
+
+  sliderState: null,
+  openSlider: (nodeId) => set({ sliderState: { nodeId, pinned: false, offset: { x: 0, y: 0 } } }),
+  closeSlider: () => set({ sliderState: null }),
+  setSliderPinned: (pinned) =>
+    set((state) =>
+      state.sliderState
+        ? { sliderState: { ...state.sliderState, pinned, offset: { x: 0, y: 0 } } }
+        : state,
+    ),
+  setSliderOffset: (offset) =>
+    set((state) => (state.sliderState ? { sliderState: { ...state.sliderState, offset } } : state)),
 
   settingsVisible: false,
   openSettings: () => set({ settingsVisible: true }),

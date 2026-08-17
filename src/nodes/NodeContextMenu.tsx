@@ -4,7 +4,8 @@
 // screen point:
 //
 //   • Node menu — `Copy`, `Delete`, `Select group`, `Label` and `Create link` on values
-//     (P6b.1, §8.6), and for a reference `Unlink from parent` (P6.4 / §8.6).
+//     (P6b.1, §8.6), `Show slider` on a scrubbable number (§8.8), and for a reference
+//     `Unlink from parent` (P6.4 / §8.6).
 //   • Canvas menu — `Add number`, `Paste`, `Add graph` (disabled: §17.2 defers
 //     graphing; copy/paste is future work; Add number is a normal tap), plus
 //     `Select all` when the canvas has nodes (§8.6).
@@ -27,6 +28,7 @@ import {
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
 import { NodeId, Vec2 } from '../model/types';
+import { rawToSliderValue } from './inferSliderRange';
 
 // ─── Item shape ──────────────────────────────────────────────────────────────
 
@@ -90,6 +92,7 @@ interface NodeContextMenuProps {
   onUnlinkFromParent: (nodeId: NodeId) => void;
   onLabel: (nodeId: NodeId) => void;
   onCreateLink: (nodeId: NodeId) => void;
+  onShowSlider: (nodeId: NodeId) => void;
   onDismiss: () => void;
 }
 
@@ -101,6 +104,7 @@ export function NodeContextMenu({
   onUnlinkFromParent,
   onLabel,
   onCreateLink,
+  onShowSlider,
   onDismiss,
 }: NodeContextMenuProps) {
   const nodes = useDocumentStore((s) => s.document.nodes);
@@ -154,6 +158,20 @@ export function NodeContextMenu({
       label: 'Create link',
       onPress: () => {
         onCreateLink(nodeId);
+        onDismiss();
+      },
+    });
+  }
+
+  // §8.8: the value-slider popover is opened explicitly from here rather than
+  // following selection. Same scrubbability check `ValueSliderOverlay` used to gate
+  // auto-showing on - a plain number with a complete (not mid-typing) raw value.
+  const canSlide = node && node.kind === 'number' && rawToSliderValue(node.raw) !== null;
+  if (canSlide) {
+    items.push({
+      label: 'Show slider',
+      onPress: () => {
+        onShowSlider(nodeId);
         onDismiss();
       },
     });
@@ -222,6 +240,7 @@ interface ContextMenuOverlayProps {
   onUnlinkFromParent: (nodeId: NodeId) => void;
   onLabelNode: (nodeId: NodeId) => void;
   onCreateLink: (nodeId: NodeId) => void;
+  onShowSlider: (nodeId: NodeId) => void;
 }
 
 export function ContextMenuOverlay({
@@ -231,6 +250,7 @@ export function ContextMenuOverlay({
   onUnlinkFromParent,
   onLabelNode,
   onCreateLink,
+  onShowSlider,
 }: ContextMenuOverlayProps) {
   const contextMenu = useUiStore((state) => state.contextMenu);
   const closeContextMenu = useUiStore((state) => state.closeContextMenu);
@@ -247,6 +267,7 @@ export function ContextMenuOverlay({
         onUnlinkFromParent={onUnlinkFromParent}
         onLabel={onLabelNode}
         onCreateLink={onCreateLink}
+        onShowSlider={onShowSlider}
         onDismiss={closeContextMenu}
       />
     );

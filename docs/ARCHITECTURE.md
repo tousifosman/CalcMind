@@ -756,10 +756,11 @@ operators are visually separated from digits.
 - `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
   nothing typed) discards it rather than leaving a blank cell on the canvas.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` and `Create link` on values
-  (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
-  `Create link` drops a free reference to the value near it — no operator, not attached to a
-  chain — for a link the user wants to place and drag elsewhere rather than keep computing from
-  immediately (§8.7's third path, alongside continuation and drag-to-link).
+  (number / result / live reference — P6b.1), `Show slider` on a scrubbable number (§8.8), and
+  for a reference `Unlink from parent`. `Create link` drops a free reference to the value near it
+  — no operator, not attached to a chain — for a link the user wants to place and drag elsewhere
+  rather than keep computing from immediately (§8.7's third path, alongside continuation and
+  drag-to-link).
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`, `Select all`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
   Double-tap / double-click any cell is the fast path to the same command (dwell-free, no
@@ -853,9 +854,12 @@ other live reference.
 
 ### 8.8 Value slider
 
-Selecting a number raises a slider in a popover anchored beneath its cell, with the range endpoints
-labelled. Dragging it rewrites that number and the whole dependent subgraph recomputes live —
-results, and any graphs, updating per frame.
+The cell menu's `Show slider` item (§8.6, a scrubbable plain number only) raises a slider in a
+popover anchored beneath its cell, with the range endpoints labelled. Dragging it rewrites that
+number and the whole dependent subgraph recomputes live — results, and any graphs, updating per
+frame. It no longer follows selection automatically — that was the original P6b.3 shape, but a
+popover on every selected number crowded the canvas for a mode most edits don't need; opening it
+is now a deliberate action, same footing as `Label` or `Create link`.
 
 This is the feature that makes the dependency graph *felt* rather than merely correct: a static
 model answers one question, a scrubable one answers "what if". It is cheap to build on top of §11
@@ -869,6 +873,16 @@ and should not be deferred to the far end of the plan.
   autosave is suppressed until release — otherwise one scrub writes hundreds of documents.
 - Recompute during scrub runs on the dirty subgraph only (§11) and must hold 60fps; if a subgraph
   is too expensive, throttle recompute to the frame budget rather than dropping the interaction.
+- **Dismissal and pinning.** The popover opens unpinned: the next canvas tap or long-press
+  anywhere but its own cell closes it, the same as any other momentary prompt (§8.6's context
+  menu, the dangling-recovery sheet). A `Keep open` checkbox on the popover pins it — this
+  suppresses that dismissal, draws a connector line from the cell to the popover (in the cell's
+  identity hue's border color, same visual family as §11.1/§11.3's connectors, but screen-space
+  chrome rather than a document one — it does not participate in `ConnectorLayer`'s scene), and
+  reveals a drag handle that repositions the popover independent of the cell, via an offset from
+  its anchored position. Unpinning snaps the offset back to zero. All of this is ephemeral
+  `uiStore` state (`sliderState`) — never persisted, never undoable, same reasoning as selection
+  and the context menu (§8.5's last bullet).
 
 ---
 
@@ -1442,6 +1456,7 @@ it unclear which parts were claims about the present and which were intentions.
 | 18 | `numeralFontSize`/`numeralFontWeight` reduced to 22/400 from the reference-accurate 30/800; `numberPaddingX` reduced to 4 from 12, in two steps (12→8→4); `nodeHeight` reduced to 40 from 64, in two steps (64→48→40), with `mathAxisOffset` scaled 4→2 to match | User-reported live: the ratio-accurate glyph size read as oversized in the cell; regular weight at the smaller size stays legible without the bold's extra visual weight; the number-cell width table in `measure.ts` had to be re-derived by hand too, since it is a fixed lookup keyed to the *value* of `numeralFontSize`, not a live scale from it; 8 still read as excess whitespace on further feedback; a fixed 64dp then 48dp band around the shrunk 22px glyph kept reading as excess space above/below the text even after the first cut — asked the user how far to take it given `nodeHeight` also sizes the tap/drag hit box, and 40 (near the common ~44dp touch-target minimum) was the answer (§1.2, §8.1) | A future reference restyle re-derives the ratio and disagrees; padding or band height reads too tight against the border band, or tap targets prove too small in real use |
 | 19 | Numeral font size made a live, persisted user preference (§12.5) rather than staying a fixed token; `nodeHeight`/`numberPaddingX`/`mathAxisOffset` stay fixed | Direct follow-on from decision #18's thread: the user asked to be able to change it themselves rather than keep asking for a different fixed value. Only the glyph size needed to be adjustable to satisfy the request; moving the padding/height tokens too would have meant re-deriving `measure.ts`'s glyph-width table and the tap-target floor on every change, for no requested benefit | Users want padding/height to visually track a much larger or smaller chosen size too — **fired**, see decision #20 |
 | 20 | `nodeHeight` made a live function of the font size (`nodeHeightFor`, §12.5), not a fixed token; `numberPaddingX`/`mathAxisOffset` stay fixed. Settings row also renamed to "Canvas Number Font Size", given a non-editable "pt" unit label, and its value made directly typable alongside the existing +/− stepper | User noticed the cell stayed a fixed height across a font-size change while its width already tracked live (decision #19 had only wired width) — an inconsistency between the two axes of the same cell, not a new feature. `nodeHeightFor` is derived (`fontSize + 2 × numberPaddingY`), not a second independently-threaded parameter, so most call sites needed no new argument — only `caretAt` (`chains/layout.ts`) gained one, since it's the one site without `fontSize` already in scope. `numberPaddingX`/`mathAxisOffset` were left fixed, matching #19's reasoning: nothing asked for the cell's *proportions* to change, only for both axes of its *size* to agree | A future request wants the padding or maths-axis offset to also scale with the chosen size |
+| 21 | Value slider (§8.8) no longer opens automatically on selection; a `Show slider` context-menu item opens it, and a `Keep open` checkbox on the popover jointly gates three things — surviving a tap-elsewhere, drawing a connector line to the cell, and a drag handle to reposition the popover | User request: a popover on every selected number crowded the canvas. Made the trigger explicit (§8.6, same footing as `Label`/`Create link`) rather than tied to selection. The three pinned behaviours were specified separately (a checkbox that keeps it open; drawing a line; making it draggable) but read as one state, not three independent flags, once traced through: a slider worth keeping open across other taps is also one worth relocating away from the cell it's anchored under, and once it can be relocated a line back to that cell is what keeps the association legible — so one `pinned` boolean on `uiStore.sliderState` drives all three, rather than three separate checkboxes | A user wants the connector line or the drag handle without suppressing tap-elsewhere dismissal, or vice versa |
 
 ## 17. Open questions
 

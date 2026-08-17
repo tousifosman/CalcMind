@@ -1,9 +1,17 @@
-// Value slider popover (§8.8 / P6b.3–P6b.4).
+// Value slider popover (§8.8 / P6b.3–P6b.4, plus the show/pin follow-up).
 //
-// Selecting a number raises this sheet anchored beneath its cell. Dragging the
-// thumb rewrites the number through `scrubNodeValue` (one undo entry for the
-// whole gesture, autosave suppressed, dirty-subgraph recompute throttled to the
-// frame budget). Tap toggles integer snap; drag returns to continuous values.
+// Raised explicitly from the cell menu's `Show slider` item (`commands.ts`'s
+// `showValueSlider`) rather than automatically on selection — `ValueSliderOverlay`
+// below reads `uiStore.sliderState`, not `selectedNodeId`. Dragging the thumb
+// rewrites the number through `scrubNodeValue` (one undo entry for the whole
+// gesture, autosave suppressed, dirty-subgraph recompute throttled to the frame
+// budget). Tap toggles integer snap; drag returns to continuous values.
+//
+// The popover opens unpinned: `AppShell`'s canvas tap/long-press handlers close it
+// the moment something else is tapped, the same as any other momentary prompt. The
+// `Keep open` checkbox pins it - suppressing that dismissal - and while pinned also
+// draws a connector line back to the cell and lets the popover itself be dragged via
+// its handle, independent of the anchored position under the cell.
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   LayoutChangeEvent,
@@ -11,13 +19,15 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
+import Svg, { Line } from 'react-native-svg';
 import { worldToScreen } from '../canvas/coords';
 import { widthOf } from '../chains/measure';
-import { NodeId } from '../model/types';
+import { NodeId, Vec2 } from '../model/types';
 import { useDocumentStore } from '../store/documentStore';
 import { useUiStore } from '../store/uiStore';
 import { usePreferencesStore } from '../store/preferencesStore';
@@ -58,6 +68,7 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
   const node = useDocumentStore((s) => s.document.nodes[nodeId]);
   const viewport = useDocumentStore((s) => s.document.viewport);
   const fontSize = usePreferencesStore((s) => s.numeralFontSize);
+  const sliderState = useUiStore((s) => s.sliderState);
   const locale = getDeviceLocale();
 
   const [range, setRange] = useState<SliderRange>({ min: 0, max: 10 });
@@ -102,9 +113,22 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
     };
   }, [nodeId]);
 
-  if (!node || node.kind !== 'number' || value === null) {
+  // Guards against the two ways this popover can be asked to render for a node it
+  // no longer applies to: the slider closed/re-opened elsewhere (sliderState out of
+  // sync with `nodeId`), or the node became invalid mid-open (deleted, or edited to
+  // a mid-typing raw) - same as the original selection-driven guard, just widened.
+  if (
+    !node ||
+    node.kind !== 'number' ||
+    value === null ||
+    !sliderState ||
+    sliderState.nodeId !== nodeId
+  ) {
     return null;
   }
+
+  const pinned = sliderState.pinned;
+  const offset = sliderState.offset;
 
   const cellWidth = widthOf(node, locale, fontSize);
   const screenTopLeft = worldToScreen(node.position, viewport);
@@ -113,8 +137,12 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
     viewport,
   );
   const screenCellWidth = cellWidth * viewport.zoom;
-  const left = screenTopLeft.x + screenCellWidth / 2 - POPOVER_WIDTH / 2;
-  const top = screenBottom.y + ANCHOR_GAP;
+  const left = screenTopLeft.x + screenCellWidth / 2 - POPOVER_WIDTH / 2 + offset.x;
+  const top = screenBottom.y + ANCHOR_GAP + offset.y;
+  // Endpoints for the pinned connector line: the cell's bottom-center (same point
+  // the popover anchors from before any drag offset) to the popover's own top-center.
+  const cellAnchor: Vec2 = { x: screenTopLeft.x + screenCellWidth / 2, y: screenBottom.y };
+  const popoverAnchor: Vec2 = { x: left + POPOVER_WIDTH / 2, y: top };
 
   function writeFraction(fraction: number, snap: boolean): void {
     const next = valueAtTrackFraction(fraction, rangeRef.current, snap);
@@ -169,48 +197,94 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
   const thumbLeft =
     Math.min(Math.max(thumbFraction, 0), 1) * Math.max(0, trackWidth - THUMB_SIZE);
 
+  function onTogglePinned(): void {
+    useUiStore.getState().setSliderPinned(!pinned);
+  }
+
+  const connectorMinX = Math.min(cellAnchor.x, popoverAnchor.x);
+  const connectorMinY = Math.min(cellAnchor.y, popoverAnchor.y);
+  const connectorWidth = Math.max(1, Math.abs(cellAnchor.x - popoverAnchor.x));
+  const connectorHeight = Math.max(1, Math.abs(cellAnchor.y - popoverAnchor.y));
+
   return (
-    <View
-      testID={`value-slider-${nodeId}`}
-      style={[styles.popover, { left, top, width: POPOVER_WIDTH }]}
-      {...preventFocusSteal}
-    >
-      <View style={styles.boundsRow}>
-        <BoundInput
-          testID={`value-slider-min-${nodeId}`}
-          value={minText}
-          onChangeText={setMinText}
-          onCommit={(text) => commitBound('min', text)}
-        />
-        <View style={styles.boundsSpacer} />
-        <BoundInput
-          testID={`value-slider-max-${nodeId}`}
-          value={maxText}
-          onChangeText={setMaxText}
-          onCommit={(text) => commitBound('max', text)}
-        />
-      </View>
-
-      <SliderTrack
-        nodeId={nodeId}
-        trackWidth={trackWidth}
-        thumbLeft={thumbLeft}
-        range={range}
-        value={value}
-        integerSnap={integerSnap}
-        onLayoutWidth={setTrackWidth}
-        onScrubStart={onScrubStart}
-        onScrubEnd={onScrubEnd}
-        onTapFraction={onTrackTap}
-        onDragFraction={onDragFraction}
-      />
-
-      {integerSnap ? (
-        <Text style={styles.snapHint} testID={`value-slider-snap-hint-${nodeId}`}>
-          Integer snap
-        </Text>
+    <>
+      {pinned ? (
+        <Svg
+          pointerEvents="none"
+          testID={`value-slider-connector-${nodeId}`}
+          width={connectorWidth}
+          height={connectorHeight}
+          viewBox={`${connectorMinX} ${connectorMinY} ${connectorWidth} ${connectorHeight}`}
+          style={[styles.connector, { left: connectorMinX, top: connectorMinY }]}
+        >
+          <Line
+            x1={cellAnchor.x}
+            y1={cellAnchor.y}
+            x2={popoverAnchor.x}
+            y2={popoverAnchor.y}
+            stroke={rolePalette.number.border}
+            strokeWidth={2}
+          />
+        </Svg>
       ) : null}
-    </View>
+      <View
+        testID={`value-slider-${nodeId}`}
+        style={[styles.popover, { left, top, width: POPOVER_WIDTH }]}
+        {...preventFocusSteal}
+      >
+        {pinned ? <DragHandle nodeId={nodeId} offset={offset} /> : null}
+        <View style={styles.boundsRow}>
+          <BoundInput
+            testID={`value-slider-min-${nodeId}`}
+            value={minText}
+            onChangeText={setMinText}
+            onCommit={(text) => commitBound('min', text)}
+          />
+          <View style={styles.boundsSpacer} />
+          <BoundInput
+            testID={`value-slider-max-${nodeId}`}
+            value={maxText}
+            onChangeText={setMaxText}
+            onCommit={(text) => commitBound('max', text)}
+          />
+        </View>
+
+        <SliderTrack
+          nodeId={nodeId}
+          trackWidth={trackWidth}
+          thumbLeft={thumbLeft}
+          range={range}
+          value={value}
+          integerSnap={integerSnap}
+          onLayoutWidth={setTrackWidth}
+          onScrubStart={onScrubStart}
+          onScrubEnd={onScrubEnd}
+          onTapFraction={onTrackTap}
+          onDragFraction={onDragFraction}
+        />
+
+        {integerSnap ? (
+          <Text style={styles.snapHint} testID={`value-slider-snap-hint-${nodeId}`}>
+            Integer snap
+          </Text>
+        ) : null}
+
+        <TouchableOpacity
+          testID={`value-slider-pin-${nodeId}`}
+          style={styles.pinRow}
+          onPress={onTogglePinned}
+          accessibilityRole="checkbox"
+          accessibilityState={{ checked: pinned }}
+          accessibilityLabel="Keep slider open"
+          {...preventFocusSteal}
+        >
+          <View style={[styles.checkbox, pinned && styles.checkboxChecked]}>
+            {pinned ? <View style={styles.checkboxMark} /> : null}
+          </View>
+          <Text style={styles.pinLabel}>Keep open</Text>
+        </TouchableOpacity>
+      </View>
+    </>
   );
 }
 
@@ -330,14 +404,60 @@ function SliderTrack({
   );
 }
 
-/** Reads selection and mounts the slider when a scrubbable number is selected. */
+interface DragHandleProps {
+  nodeId: NodeId;
+  /** The offset as of this render, captured on gesture start so drag deltas
+   *  compose onto wherever the popover already was rather than resetting it. */
+  offset: Vec2;
+}
+
+/** Grip strip at the top of a pinned popover (§8.8): dragging it moves the whole
+ *  window via `uiStore.setSliderOffset`, independent of the cell it's anchored to.
+ *  Only rendered while pinned - see the `pinned ?` guard at the call site. */
+function DragHandle({ nodeId, offset }: DragHandleProps) {
+  const offsetRef = useRef(offset);
+  offsetRef.current = offset;
+  // Captured once per gesture on `onBegin` so `onUpdate`'s per-frame translation
+  // composes onto the offset the drag actually started from, not the live one.
+  const dragStartOffset = useRef(offset);
+
+  function onDragBegin(): void {
+    dragStartOffset.current = offsetRef.current;
+  }
+
+  function onDragMove(dx: number, dy: number): void {
+    useUiStore.getState().setSliderOffset({
+      x: dragStartOffset.current.x + dx,
+      y: dragStartOffset.current.y + dy,
+    });
+  }
+
+  const pan = Gesture.Pan()
+    .onBegin(() => {
+      runOnJS(onDragBegin)();
+    })
+    .onUpdate((e) => {
+      runOnJS(onDragMove)(e.translationX, e.translationY);
+    });
+
+  return (
+    <GestureDetector gesture={pan}>
+      <View testID={`value-slider-drag-handle-${nodeId}`} style={styles.dragHandle} {...preventFocusSteal}>
+        <View style={styles.dragHandleBar} />
+      </View>
+    </GestureDetector>
+  );
+}
+
+/** Mounts the §8.8 popover for whichever node `uiStore.sliderState` names - opened
+ *  explicitly via the cell menu's `Show slider` item, not on selection. */
 export function ValueSliderOverlay() {
-  const selectedNodeId = useUiStore((s) => s.selectedNodeId);
+  const sliderState = useUiStore((s) => s.sliderState);
   const node = useDocumentStore((s) =>
-    selectedNodeId ? s.document.nodes[selectedNodeId] : undefined,
+    sliderState ? s.document.nodes[sliderState.nodeId] : undefined,
   );
 
-  if (!selectedNodeId || !node || node.kind !== 'number') {
+  if (!sliderState || !node || node.kind !== 'number') {
     return null;
   }
   if (rawToSliderValue(node.raw) === null) {
@@ -346,7 +466,7 @@ export function ValueSliderOverlay() {
 
   return (
     <View style={styles.overlay} pointerEvents="box-none" testID="value-slider-overlay">
-      <ValueSlider nodeId={selectedNodeId} />
+      <ValueSlider nodeId={sliderState.nodeId} />
     </View>
   );
 }
@@ -411,5 +531,51 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#6B7280',
     textAlign: 'center',
+  },
+  connector: {
+    position: 'absolute',
+    // Below the popover / thumb chrome (zIndex 20 on the overlay), same layer as
+    // ConnectorLayer's document curves - a screen-space line, not a document one.
+    zIndex: 19,
+  },
+  dragHandle: {
+    alignItems: 'center',
+    paddingVertical: 6,
+    marginBottom: 4,
+  },
+  dragHandleBar: {
+    width: 32,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#D1D5DB',
+  },
+  pinRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  checkbox: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: '#9CA3AF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 6,
+  },
+  checkboxChecked: {
+    backgroundColor: rolePalette.number.fill,
+    borderColor: rolePalette.number.border,
+  },
+  checkboxMark: {
+    width: 8,
+    height: 8,
+    borderRadius: 2,
+    backgroundColor: '#FFFFFF',
+  },
+  pinLabel: {
+    fontSize: 12,
+    color: '#374151',
   },
 });

@@ -1,4 +1,4 @@
-// ValueSlider popover (§8.8 / P6b.3).
+// ValueSlider popover (§8.8 / P6b.3, plus the show/pin follow-up).
 import React from 'react';
 import { TextInput } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
@@ -8,9 +8,8 @@ import { useDocumentStore } from '../store/documentStore';
 import { useUiStore } from '../store/uiStore';
 import {
   addNumberNode,
-  editNumberNode,
   endValueScrub,
-  selectNode,
+  showValueSlider,
   _setScrubFrameSchedulerForTests,
 } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
@@ -20,7 +19,7 @@ jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
 
 type GestureBuilder = {
   __kind: string;
-  __handlers: Record<string, ((e?: { x: number }) => void) | undefined>;
+  __handlers: Record<string, ((e?: { x?: number; translationX?: number; translationY?: number }) => void) | undefined>;
 };
 
 function gestureApi(): {
@@ -41,7 +40,13 @@ function latestBuilder(kind: string): GestureBuilder {
 
 function resetStore() {
   useDocumentStore.setState({ document: createEmptyDocument(), undoStack: [], redoStack: [] });
-  useUiStore.setState({ selectedNodeId: null, editingNodeId: null });
+  useUiStore.setState({ selectedNodeId: null, editingNodeId: null, sliderState: null });
+}
+
+/** §8.8: the popover only renders while `uiStore.sliderState` names its node - the
+ *  direct-render tests below open it explicitly instead of relying on selection. */
+function openSlider(id: string) {
+  act(() => useUiStore.getState().openSlider(id));
 }
 
 beforeEach(() => {
@@ -64,6 +69,7 @@ afterEach(() => {
 describe('ValueSlider', () => {
   test('renders a popover with both range endpoints labelled', () => {
     const id = addNumberNode({ x: 40, y: 80 }, '42');
+    openSlider(id);
     const renderer = renderNode(<ValueSlider nodeId={id} />);
 
     expect(renderer.root.findByProps({ testID: `value-slider-${id}` })).toBeTruthy();
@@ -80,6 +86,7 @@ describe('ValueSlider', () => {
 
   test('zero opens with [0, 10]', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '0');
+    openSlider(id);
     const renderer = renderNode(<ValueSlider nodeId={id} />);
     expect(
       renderer.root.findAllByType(TextInput).find((n) => n.props.testID === `value-slider-min-${id}`)!
@@ -93,6 +100,7 @@ describe('ValueSlider', () => {
 
   test('negative value labels a symmetric range', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '-7');
+    openSlider(id);
     const renderer = renderNode(<ValueSlider nodeId={id} />);
     expect(
       renderer.root.findAllByType(TextInput).find((n) => n.props.testID === `value-slider-min-${id}`)!
@@ -106,6 +114,7 @@ describe('ValueSlider', () => {
 
   test('bounds inputs are editable', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '5');
+    openSlider(id);
     const renderer = renderNode(<ValueSlider nodeId={id} />);
     const minInput = renderer.root
       .findAllByType(TextInput)
@@ -125,16 +134,99 @@ describe('ValueSlider', () => {
 
   test('renders nothing for mid-typing raw', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '');
+    openSlider(id);
+    const renderer = renderNode(<ValueSlider nodeId={id} />);
+    expect(renderer.toJSON()).toBeNull();
+  });
+
+  test('renders nothing when sliderState names a different node', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '42');
+    const other = addNumberNode({ x: 40, y: 0 }, '1');
+    openSlider(other);
     const renderer = renderNode(<ValueSlider nodeId={id} />);
     expect(renderer.toJSON()).toBeNull();
   });
 
   test('track exposes accessibilityValue for the current range and value', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '42');
+    openSlider(id);
     const renderer = renderNode(<ValueSlider nodeId={id} />);
     const track = renderer.root.findByProps({ testID: `value-slider-track-${id}` });
     expect(track.props.accessibilityRole).toBe('adjustable');
     expect(track.props.accessibilityValue).toEqual({ min: 0, max: 100, now: 42 });
+  });
+});
+
+describe('ValueSlider "Keep open" checkbox (§8.8 pin/dismiss/drag follow-up)', () => {
+  test('opens unpinned, with no connector line and no drag handle', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '42');
+    openSlider(id);
+    const renderer = renderNode(<ValueSlider nodeId={id} />);
+
+    const pin = renderer.root.findByProps({ testID: `value-slider-pin-${id}` });
+    expect(pin.props.accessibilityState).toEqual({ checked: false });
+    expect(
+      renderer.root.findAll((n) => n.props?.testID === `value-slider-connector-${id}`),
+    ).toHaveLength(0);
+    expect(
+      renderer.root.findAll((n) => n.props?.testID === `value-slider-drag-handle-${id}`),
+    ).toHaveLength(0);
+  });
+
+  test('checking it pins the slider, drawing the connector line and the drag handle', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '42');
+    openSlider(id);
+    const renderer = renderNode(<ValueSlider nodeId={id} />);
+
+    act(() => {
+      renderer.root.findByProps({ testID: `value-slider-pin-${id}` }).props.onPress();
+    });
+
+    expect(useUiStore.getState().sliderState).toMatchObject({ nodeId: id, pinned: true });
+    expect(renderer.root.findByProps({ testID: `value-slider-pin-${id}` }).props.accessibilityState).toEqual(
+      { checked: true },
+    );
+    expect(renderer.root.findByProps({ testID: `value-slider-connector-${id}` })).toBeTruthy();
+    expect(renderer.root.findByProps({ testID: `value-slider-drag-handle-${id}` })).toBeTruthy();
+  });
+
+  test('unchecking it clears pinned and any accumulated drag offset', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '42');
+    openSlider(id);
+    act(() => {
+      useUiStore.getState().setSliderPinned(true);
+      useUiStore.getState().setSliderOffset({ x: 30, y: 12 });
+    });
+    const renderer = renderNode(<ValueSlider nodeId={id} />);
+
+    act(() => {
+      renderer.root.findByProps({ testID: `value-slider-pin-${id}` }).props.onPress();
+    });
+
+    expect(useUiStore.getState().sliderState).toEqual({
+      nodeId: id,
+      pinned: false,
+      offset: { x: 0, y: 0 },
+    });
+  });
+
+  test('dragging the handle moves the popover via sliderState.offset', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '42');
+    openSlider(id);
+    act(() => useUiStore.getState().setSliderPinned(true));
+    gestureApi().__resetBuilders();
+    renderNode(<ValueSlider nodeId={id} />);
+
+    const handlePan = gestureApi()
+      .__builders()
+      .filter((b) => b.__kind === 'Pan')[0]!; // the drag handle mounts first, before the track
+
+    act(() => {
+      handlePan.__handlers.onBegin?.();
+      handlePan.__handlers.onUpdate?.({ translationX: 15, translationY: -8 });
+    });
+
+    expect(useUiStore.getState().sliderState?.offset).toEqual({ x: 15, y: -8 });
   });
 });
 
@@ -143,6 +235,7 @@ describe('ValueSlider gesture wiring (§8.8 tap snap / drag continuous)', () => 
 
   function renderReadySlider(raw: string) {
     const id = addNumberNode({ x: 0, y: 0 }, raw);
+    openSlider(id);
     gestureApi().__resetBuilders();
     const renderer = renderNode(<ValueSlider nodeId={id} />);
     const track = renderer.root.findByProps({ testID: `value-slider-track-${id}` });
@@ -189,27 +282,42 @@ describe('ValueSlider gesture wiring (§8.8 tap snap / drag continuous)', () => 
 });
 
 describe('ValueSliderOverlay', () => {
-  test('mounts when a scrubbable number is selected', () => {
+  test('stays hidden until the slider is explicitly opened, even with a number selected', () => {
     const id = addNumberNode({ x: 10, y: 10 }, '3');
-    act(() => editNumberNode(id));
+    act(() => useUiStore.getState().setSelectedNode(id));
+    const renderer = renderNode(<ValueSliderOverlay />);
+    expect(renderer.toJSON()).toBeNull();
+  });
+
+  test('mounts when showValueSlider opens it', () => {
+    const id = addNumberNode({ x: 10, y: 10 }, '3');
+    act(() => showValueSlider(id));
     const renderer = renderNode(<ValueSliderOverlay />);
     expect(renderer.root.findByProps({ testID: 'value-slider-overlay' })).toBeTruthy();
     expect(renderer.root.findByProps({ testID: `value-slider-${id}` })).toBeTruthy();
   });
 
-  test('stays hidden when selection is not a number', () => {
-    const id = addNumberNode({ x: 0, y: 0 }, '3');
-    act(() => selectNode(id));
-    // selectNode clears editing but keeps selection — still a number, so shown.
-    // Switch to no selection:
-    act(() => useUiStore.getState().setSelectedNode(null));
+  test('stays hidden when the open node is not a number', () => {
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.nodes.op1 = {
+          id: 'op1',
+          kind: 'operator',
+          op: '+',
+          position: { x: 0, y: 0 },
+          chainId: null,
+          createdAt: 0,
+        };
+      });
+      useUiStore.getState().openSlider('op1');
+    });
     const renderer = renderNode(<ValueSliderOverlay />);
     expect(renderer.toJSON()).toBeNull();
   });
 
-  test('exposes bound TextInputs for the selected number', () => {
+  test('exposes bound TextInputs for the open number', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '100');
-    act(() => editNumberNode(id));
+    act(() => showValueSlider(id));
     const renderer = renderNode(<ValueSliderOverlay />);
     expect(renderer.root.findAllByType(TextInput).length).toBeGreaterThanOrEqual(2);
   });
