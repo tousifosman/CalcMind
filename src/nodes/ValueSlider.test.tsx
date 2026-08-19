@@ -3,6 +3,7 @@ import React from 'react';
 import { TextInput, Vibration } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
 import { Line } from 'react-native-svg';
+import CheckIcon from 'react-native-heroicons/solid/CheckIcon';
 import { act } from 'react-test-renderer';
 import { ValueSlider, ValueSliderOverlay } from './ValueSlider';
 import { useDocumentStore } from '../store/documentStore';
@@ -180,6 +181,8 @@ describe('ValueSlider "Keep open" checkbox (§8.8 pin/dismiss/drag follow-up)', 
     expect(
       renderer.root.findByProps({ testID: `value-slider-drag-handle-bar-${id}` }).props.style,
     ).toContainEqual({ opacity: 0 });
+    // No checkmark glyph while unchecked.
+    expect(renderer.root.findAllByType(CheckIcon)).toHaveLength(0);
   });
 
   test('checking it pins the slider, drawing the connector line and revealing the drag bar', () => {
@@ -205,6 +208,9 @@ describe('ValueSlider "Keep open" checkbox (§8.8 pin/dismiss/drag follow-up)', 
     expect(renderer.root.findByProps({ testID: `value-slider-drag-handle-${id}` }).props.style).toBe(
       handleStyleBefore,
     );
+    // A visible checkmark glyph, not just a colour change (§8.8 follow-up: the
+    // plain white square used before this didn't read as a check to a user).
+    expect(renderer.root.findAllByType(CheckIcon)).toHaveLength(1);
   });
 
   test('connector line colour matches the popover\'s own chrome, not the cell\'s identity hue', () => {

@@ -30,6 +30,7 @@ import {
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS } from 'react-native-reanimated';
 import Svg, { Line } from 'react-native-svg';
+import CheckIcon from 'react-native-heroicons/solid/CheckIcon';
 import { worldToScreen } from '../canvas/coords';
 import { widthOf } from '../chains/measure';
 import { NodeId, Vec2 } from '../model/types';
@@ -336,7 +337,7 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
           {...preventFocusSteal}
         >
           <View style={[styles.checkbox, pinned && styles.checkboxChecked]}>
-            {pinned ? <View style={styles.checkboxMark} /> : null}
+            {pinned ? <CheckIcon size={11} color="#FFFFFF" /> : null}
           </View>
           <Text style={styles.pinLabel}>Keep open</Text>
         </TouchableOpacity>
@@ -550,7 +551,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: POPOVER_BORDER_COLOR,
-    paddingVertical: 10,
+    // Top is tighter than bottom on purpose: the drag handle's own bar (below)
+    // already reads as the window's top affordance, so it shouldn't float in a
+    // second layer of padding on top of its own.
+    paddingTop: 4,
+    paddingBottom: 10,
     paddingHorizontal: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -649,12 +654,6 @@ const styles = StyleSheet.create({
   checkboxChecked: {
     backgroundColor: rolePalette.number.fill,
     borderColor: rolePalette.number.border,
-  },
-  checkboxMark: {
-    width: 8,
-    height: 8,
-    borderRadius: 2,
-    backgroundColor: '#FFFFFF',
   },
   pinLabel: {
     fontSize: 12,
