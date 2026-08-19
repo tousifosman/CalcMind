@@ -83,7 +83,15 @@ interface ValueSliderProps {
 
 export function ValueSlider({ nodeId }: ValueSliderProps) {
   const node = useDocumentStore((s) => s.document.nodes[nodeId]);
-  const viewport = useDocumentStore((s) => s.document.viewport);
+  // §7: the committed viewport lags a frame behind an active Canvas pan/pinch/wheel
+  // gesture by design (`commitViewport` only fires on release/debounce, so autosave
+  // isn't dirtied every frame). `liveViewport` is the same gesture's live Reanimated
+  // values, bridged in by `Canvas.tsx` - falling back to it here is what keeps the
+  // popover and its connector line glued to the cell while the canvas is moving,
+  // rather than visibly detaching until the gesture ends and the store catches up.
+  const committedViewport = useDocumentStore((s) => s.document.viewport);
+  const liveViewport = useUiStore((s) => s.liveViewport);
+  const viewport = liveViewport ?? committedViewport;
   const fontSize = usePreferencesStore((s) => s.numeralFontSize);
   const sliderState = useUiStore((s) => s.sliderState);
   const locale = getDeviceLocale();
@@ -95,6 +103,14 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
   const [step, setStep] = useState(DEFAULT_STEP);
   const [stepText, setStepText] = useState(String(DEFAULT_STEP));
   const [trackWidth, setTrackWidth] = useState(POPOVER_WIDTH - 32);
+  // The cell's own width at the moment the slider opened on it, frozen for the rest
+  // of that open - not read live from the node every render. The popover anchors
+  // horizontally off the cell's center, and the cell's width changes with its digit
+  // count, which live-scrubbing changes constantly (this is the very popover doing
+  // the scrubbing); anchoring off the live width made the popover visibly shift as
+  // the value gained or lost digits mid-drag. Reset alongside `range` whenever the
+  // slider (re)opens on a different node - same lifecycle, same reasoning.
+  const [anchorCellWidth, setAnchorCellWidth] = useState(0);
   // Re-infer bounds when the selected node changes, not on every scrub frame.
   const rangedForNode = useRef<NodeId | null>(null);
   // Ref so gesture callbacks always read the latest range / snap / step without
@@ -130,7 +146,8 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
     setStep(DEFAULT_STEP);
     setStepText(String(DEFAULT_STEP));
     lastQuantizedValueRef.current = parsed;
-  }, [node, nodeId]);
+    setAnchorCellWidth(widthOf(node, locale, fontSize));
+  }, [node, nodeId, locale, fontSize]);
 
   useEffect(() => {
     return () => {
@@ -161,13 +178,12 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
   const pinned = sliderState.pinned;
   const offset = sliderState.offset;
 
-  const cellWidth = widthOf(node, locale, fontSize);
   const screenTopLeft = worldToScreen(node.position, viewport);
   const screenBottom = worldToScreen(
     { x: node.position.x, y: node.position.y + nodeHeightFor(fontSize) },
     viewport,
   );
-  const screenCellWidth = cellWidth * viewport.zoom;
+  const screenCellWidth = anchorCellWidth * viewport.zoom;
   const left = screenTopLeft.x + screenCellWidth / 2 - POPOVER_WIDTH / 2 + offset.x;
   const top = screenBottom.y + ANCHOR_GAP + offset.y;
   // Endpoints for the pinned connector line: the cell's bottom-center (same point

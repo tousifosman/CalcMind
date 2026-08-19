@@ -121,6 +121,21 @@ export interface UiState {
   setDragSnap: (state: DragSnapState | null) => void;
 
   /**
+   * Live pan/zoom during an active `Canvas` gesture (§7). Canvas's own pan/pinch/wheel
+   * drive Reanimated shared values every frame and only commit into `documentStore`'s
+   * `document.viewport` on release or debounce - a commit calls `notifyDocumentDirty`,
+   * so committing on every frame would spam autosave the same way a per-frame document
+   * write would (§7's "commit only on release"). Screen-space UI that must track the
+   * canvas live *during* a gesture instead of lagging a frame behind reads this - same
+   * reasoning `ViewportContext.tsx` already documents for node-drag, applied to
+   * whatever can't read the shared values directly via that context because it isn't
+   * mounted inside `Canvas` (the §8.8 slider popover and its connector line, so far).
+   * Null when no gesture is active; callers fall back to the committed viewport then.
+   */
+  liveViewport: { pan: Vec2; zoom: number } | null;
+  setLiveViewport: (viewport: { pan: Vec2; zoom: number } | null) => void;
+
+  /**
    * The value-slider popover (§8.8, P6b.3). Opened explicitly from the cell context
    * menu's `Show slider` item — it no longer follows selection automatically. `pinned`
    * is the popover's own "keep open" checkbox: false (the default on open) means the
@@ -188,6 +203,9 @@ export const useUiStore = create<UiState>((set) => ({
 
   dragSnap: null,
   setDragSnap: (dragSnap) => set({ dragSnap }),
+
+  liveViewport: null,
+  setLiveViewport: (liveViewport) => set({ liveViewport }),
 
   sliderState: null,
   openSlider: (nodeId) => set({ sliderState: { nodeId, pinned: false, offset: { x: 0, y: 0 } } }),

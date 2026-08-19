@@ -565,6 +565,16 @@ world  = screen / zoom + pan
 - One-finger drag on empty canvas pans; pinch zooms about the pinch centroid; on web, wheel
   scrolls and ctrl/⌘+wheel zooms.
 - All snap thresholds are defined in **world units** so snapping feels identical at any zoom.
+- **Commit only on release**: `Canvas` drives pan/pinch/wheel through Reanimated shared values
+  every frame, and only writes the committed result into `documentStore`'s `document.viewport`
+  on release (or, for wheel, a debounce) — a commit calls `notifyDocumentDirty`, so committing
+  every frame would spam autosave. Screen-space UI mounted *inside* `Canvas` gets live tracking
+  for free from the shared-value-driven transform; anything that can't be (because it must render
+  outside that transform, as a fixed screen overlay — the §8.8 slider popover, so far) instead
+  reads `uiStore.liveViewport`, a lightweight bridge `Canvas` publishes every gesture frame and
+  clears on commit (cheap and side-effect-free, unlike the document store, since nothing besides
+  this class of consumer subscribes to it). Reading the committed viewport alone there would make
+  that UI visibly lag a gesture in progress and only "catch up" on release.
 
 ---
 
@@ -890,6 +900,15 @@ and should not be deferred to the far end of the plan.
   gesture's enabled state follow `pinned` — specifically so toggling the checkbox never resizes
   the popover. All of this is ephemeral `uiStore` state (`sliderState`) — never persisted, never
   undoable, same reasoning as selection and the context menu (§8.5's last bullet).
+- **Position tracking.** The popover anchors horizontally off the cell's own width, but that
+  width is captured once when the slider opens on a node and held fixed for the rest of that
+  open — not read live from the cell every render — because the cell's width tracks its digit
+  count, which the very act of scrubbing changes continuously; anchoring off the live width made
+  the popover visibly shift as the value gained or lost digits mid-drag. Separately, the popover
+  reads `uiStore.liveViewport` (§7) rather than the committed `document.viewport` alone, so it and
+  its connector line track an in-progress canvas pan/pinch/wheel gesture immediately rather than
+  lagging until the gesture ends and the store commits — without that, panning while pinned open
+  visibly detached the connector from the cell until the gesture's release.
 
 ---
 
@@ -1465,6 +1484,7 @@ it unclear which parts were claims about the present and which were intentions.
 | 20 | `nodeHeight` made a live function of the font size (`nodeHeightFor`, §12.5), not a fixed token; `numberPaddingX`/`mathAxisOffset` stay fixed. Settings row also renamed to "Canvas Number Font Size", given a non-editable "pt" unit label, and its value made directly typable alongside the existing +/− stepper | User noticed the cell stayed a fixed height across a font-size change while its width already tracked live (decision #19 had only wired width) — an inconsistency between the two axes of the same cell, not a new feature. `nodeHeightFor` is derived (`fontSize + 2 × numberPaddingY`), not a second independently-threaded parameter, so most call sites needed no new argument — only `caretAt` (`chains/layout.ts`) gained one, since it's the one site without `fontSize` already in scope. `numberPaddingX`/`mathAxisOffset` were left fixed, matching #19's reasoning: nothing asked for the cell's *proportions* to change, only for both axes of its *size* to agree | A future request wants the padding or maths-axis offset to also scale with the chosen size |
 | 21 | Value slider (§8.8) no longer opens automatically on selection; a `Show slider` context-menu item opens it, and a `Keep open` checkbox on the popover jointly gates three things — surviving a tap-elsewhere, drawing a connector line to the cell, and a drag handle to reposition the popover | User request: a popover on every selected number crowded the canvas. Made the trigger explicit (§8.6, same footing as `Label`/`Create link`) rather than tied to selection. The three pinned behaviours were specified separately (a checkbox that keeps it open; drawing a line; making it draggable) but read as one state, not three independent flags, once traced through: a slider worth keeping open across other taps is also one worth relocating away from the cell it's anchored under, and once it can be relocated a line back to that cell is what keeps the association legible — so one `pinned` boolean on `uiStore.sliderState` drives all three, rather than three separate checkboxes | A user wants the connector line or the drag handle without suppressing tap-elsewhere dismissal, or vice versa |
 | 22 | Decision #21's drag handle stays mounted at a fixed size always, toggling only its bar's opacity and its gesture's `enabled` state with `pinned`, rather than conditionally rendering the whole handle; the connector line takes the popover's own chrome colour, not the cell's identity hue; a Step field (default `0.1`, positive-only) sits between the range bounds and continuous dragging quantizes to it (`quantizeToStep`), vibrating once per step crossing | User-reported regression from #21's own first cut: conditionally mounting the drag handle only while pinned made the popover visibly grow on check and shrink on uncheck. Fixed by always mounting it and toggling only paint, not layout — the general fix for "a togglable affordance must not resize its container" wherever RN's default is to omit rather than hide. Separately requested in the same round: the connector should read as the popover's own edge rather than borrow the cell's identity hue (documents relate through hue per §11.1; this line isn't one of those relationships), and dragging should move in namable increments with tactile feedback rather than an arbitrary continuous value | A user wants the connector to carry identity hue after all (e.g. multiple pinned sliders open at once, needing to tell which line belongs to which cell) |
+| 23 | The slider popover's horizontal anchor uses the cell's width captured once at open time, not read live; a new `uiStore.liveViewport` bridge (§7) lets it track an in-progress Canvas pan/pinch/wheel gesture instead of only the committed, gesture-end-throttled `document.viewport` | Two user-reported bugs from real-device use, both structural rather than cosmetic: (1) the popover visibly shifted as the scrubbed value gained/lost digits, because its anchor read the cell's live (content-dependent) width every render — the same live value the popover's own scrubbing was changing; (2) the connector line visibly detached from the cell while panning and only reattached once the gesture ended, because the popover is a fixed screen overlay outside `Canvas`'s Reanimated-driven transform and so has no live view of an in-progress pan/pinch/wheel gesture, only of `documentStore`'s committed viewport, which §7's "commit only on release" rule deliberately keeps a gesture behind. `liveViewport` generalizes node-drag's existing solution to the same class of problem (`ViewportContext.tsx`) to a consumer that, unlike node-drag, isn't mounted inside `Canvas` and so can't read the shared values directly via that context | Another screen-space overlay needs the same live tracking — extend `liveViewport`'s consumers rather than inventing a second bridge |
 
 ## 17. Open questions
 

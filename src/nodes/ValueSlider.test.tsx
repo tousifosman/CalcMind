@@ -11,6 +11,7 @@ import { useUiStore } from '../store/uiStore';
 import {
   addNumberNode,
   endValueScrub,
+  setNodeRaw,
   showValueSlider,
   _setScrubFrameSchedulerForTests,
 } from '../store/commands';
@@ -42,13 +43,34 @@ function latestBuilder(kind: string): GestureBuilder {
 
 function resetStore() {
   useDocumentStore.setState({ document: createEmptyDocument(), undoStack: [], redoStack: [] });
-  useUiStore.setState({ selectedNodeId: null, editingNodeId: null, sliderState: null });
+  useUiStore.setState({
+    selectedNodeId: null,
+    editingNodeId: null,
+    sliderState: null,
+    liveViewport: null,
+  });
 }
 
 /** §8.8: the popover only renders while `uiStore.sliderState` names its node - the
  *  direct-render tests below open it explicitly instead of relying on selection. */
 function openSlider(id: string) {
   act(() => useUiStore.getState().openSlider(id));
+}
+
+/** Pulls the popover's own `{ left, top }` out of its style array - the second
+ *  entry is a plain positioning object, not a `StyleSheet.create` reference. */
+function popoverPosition(
+  renderer: ReturnType<typeof renderNode>,
+  id: string,
+): { left: number; top: number } {
+  const style = ([] as unknown[]).concat(
+    renderer.root.findByProps({ testID: `value-slider-${id}` }).props.style,
+  );
+  const pos = style.find(
+    (s): s is { left: number; top: number } => !!s && typeof s === 'object' && 'left' in s,
+  );
+  expect(pos).toBeDefined();
+  return pos!;
 }
 
 let vibrateSpy: jest.SpyInstance;
@@ -267,6 +289,39 @@ describe('ValueSlider "Keep open" checkbox (§8.8 pin/dismiss/drag follow-up)', 
     });
 
     expect(useUiStore.getState().sliderState?.offset).toEqual({ x: 15, y: -8 });
+  });
+});
+
+describe('ValueSlider position stability (§8.8 follow-up)', () => {
+  test('does not shift when the cell gains digits (anchor width frozen on open)', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '3');
+    openSlider(id);
+    const renderer = renderNode(<ValueSlider nodeId={id} />);
+    const before = popoverPosition(renderer, id);
+
+    // A much wider cell, same as scrubbing the value would produce mid-drag.
+    act(() => setNodeRaw(id, '3.123456789'));
+
+    expect(popoverPosition(renderer, id)).toEqual(before);
+  });
+
+  test('tracks uiStore.liveViewport during an active canvas gesture, not the lagging committed one', () => {
+    const id = addNumberNode({ x: 100, y: 100 }, '42');
+    openSlider(id);
+    const renderer = renderNode(<ValueSlider nodeId={id} />);
+    const beforePan = popoverPosition(renderer, id);
+
+    act(() => {
+      useUiStore.getState().setLiveViewport({ pan: { x: 500, y: 500 }, zoom: 1 });
+    });
+    const duringPan = popoverPosition(renderer, id);
+    expect(duringPan).not.toEqual(beforePan);
+
+    // Gesture end: Canvas clears liveViewport once the committed viewport catches up.
+    act(() => {
+      useUiStore.getState().setLiveViewport(null);
+    });
+    expect(popoverPosition(renderer, id)).toEqual(beforePan);
   });
 });
 
