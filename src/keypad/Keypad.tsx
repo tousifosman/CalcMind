@@ -129,6 +129,11 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     dataEntryLocked || groupMode || selectionBlocksNumberEditing;
   const operatorsEnabled =
     !dataEntryLocked && (!groupMode || groupContainsResult(groupSelectedIds, nodes));
+  // A selected result is derived, not user input — backspace disables rather than
+  // deleting it (§9), same rule `dispatchEditorCommand`'s own backspace guard carries.
+  // Only for the lone keypad target: group mode's backspace deletes the whole group as
+  // a unit regardless of what it contains (§8.6), a different, still-desired command.
+  const backspaceDisabled = dataEntryLocked || (!groupMode && selectedKind === 'result');
   // §8.6 `Create link` keypad button: enabled for a selected number, result, or *live*
   // reference — same eligibility as the context-menu action of the same name
   // (`createLinkToValue`) and as `dispatchEditorCommand`'s `createLink` handler. A
@@ -353,7 +358,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                 label="Backspace"
                 icon={<BackspaceIcon size={22} color="#333333" />}
                 onPress={() => press({ region: 'backspace' })}
-                disabled={dataEntryLocked}
+                disabled={backspaceDisabled}
                 testID="keypad-backspace"
               />
             </GestureDetector>

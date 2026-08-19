@@ -222,6 +222,19 @@ function focusNode(node: CalcNode): void {
   selectNode(node.id);
 }
 
+/** The chain member immediately to the left of `node`, or `null` when it's the chain's
+ *  first member (or free) — where backspace on an operator, or on an already-empty
+ *  number, lands the selection after deleting the cell (§8.5), the same neighbour
+ *  {@link moveSelectionAlongChain} (P7.2 arrows) already computes. */
+function leftChainNeighborId(node: CalcNode): NodeId | null {
+  if (node.chainId === null) return null;
+  const chain = useDocumentStore.getState().document.chains[node.chainId];
+  if (!chain) return null;
+  const index = chain.members.indexOf(node.id);
+  if (index <= 0) return null;
+  return chain.members[index - 1] ?? null;
+}
+
 function moveSelectionAlongChain(selectedId: NodeId | null, direction: 'left' | 'right'): void {
   if (!selectedId) return;
   const { document } = useDocumentStore.getState();
@@ -439,13 +452,45 @@ export function dispatchEditorCommand(command: EditorCommand): void {
   }
 
   if (command.region === 'backspace') {
-    if (editingNumber) {
-      if (editingNumber.raw === '') {
-        deselectNode(); // already empty - discards it (§8.6)
+    // A result is derived, not user input — backspace is disabled here (both this
+    // dispatch guard and the keypad's own `disabled` prop, `Keypad.tsx`), not just
+    // quietly no-op'd, so deleting a finished formula's answer takes a deliberate
+    // action (long-press → Delete) rather than the same key that erases every other
+    // cell one press at a time.
+    if (selectedNode?.kind === 'result') {
+      return;
+    }
+    // A number backspaces digit-by-digit, editing or not — tapping a (non-editing)
+    // number and pressing backspace used to delete the whole cell immediately, far
+    // more destructive than what backspace does everywhere else in this app (erase one
+    // character). `editingNumber`'s own raw *is* `selectedNode.raw` when they're the
+    // same node, so this reads directly off the selection either way; reaching '' via
+    // a trim keeps the empty cell selected (and editing, so a following digit lands in
+    // it) rather than auto-discarding — only a backspace on an *already*-empty number
+    // deletes it, landing on the left neighbour same as an operator does, below.
+    if (selectedNode?.kind === 'number') {
+      if (selectedNode.raw !== '') {
+        setNodeRaw(selectedNode.id, selectedNode.raw.slice(0, -1));
+        editNumberNode(selectedNode.id);
       } else {
-        setNodeRaw(editingNumber.id, editingNumber.raw.slice(0, -1));
+        const leftId = leftChainNeighborId(selectedNode);
+        deleteNode(selectedNode.id);
+        if (leftId) selectNode(leftId);
+        else deselectNode();
       }
-    } else if (selectedNode) {
+      return;
+    }
+    // An operator deletes and lands the selection on its left neighbour (§8.5) rather
+    // than fully deselecting, so backspacing along a chain reads as "keep going"
+    // instead of losing the selection's place after every cell removed.
+    if (selectedNode?.kind === 'operator') {
+      const leftId = leftChainNeighborId(selectedNode);
+      deleteNode(selectedNode.id);
+      if (leftId) selectNode(leftId);
+      else deselectNode();
+      return;
+    }
+    if (selectedNode) {
       deleteNode(selectedNode.id);
       // Prefer deselectNode so a leftover Select-group highlight clears with the
       // primary selection (same contract as Escape / tap-elsewhere).

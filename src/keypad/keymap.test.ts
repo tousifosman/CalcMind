@@ -10,6 +10,7 @@ import {
   setNodeRaw,
   deleteNode,
   appendEqualsNode,
+  appendNumberNode,
   appendOperatorAndNumber,
   createLinkToValue,
   selectAll,
@@ -709,7 +710,7 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(after.chains[chainId]!.members.filter((id) => after.nodes[id]?.kind === 'equals')).toHaveLength(1);
   });
 
-  test('backspace still deletes a selected result', () => {
+  test('backspace on a selected result is disabled — a derived value, not user input (§9)', () => {
     const resultId = 'n_result_test2';
     useDocumentStore.getState().applyCommand((draft) => {
       draft.nodes[resultId] = {
@@ -722,11 +723,13 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
       };
     });
     selectNode(resultId);
+    const before = useDocumentStore.getState().undoStack.length;
 
     dispatchEditorCommand({ region: 'backspace' });
 
-    expect(nodes()[resultId]).toBeUndefined();
-    expect(useUiStore.getState().selectedNodeId).toBeNull();
+    expect(nodes()[resultId]).toBeDefined();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(useUiStore.getState().selectedNodeId).toBe(resultId);
   });
 
   test('full keystroke path: continue, type operand, = uses live reference value', () => {
@@ -871,6 +874,83 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(doc.nodes[members[4]!]).toMatchObject({ kind: 'number', raw: '' });
     // The original trailing `3` is still last, just pushed one slot further right.
     expect(doc.nodes[members[6]!]).toMatchObject({ kind: 'number', raw: '3' });
+  });
+});
+
+describe('dispatchEditorCommand: backspace on a selected (not editing) number trims a digit (§8.5)', () => {
+  test('trims one digit at a time, staying selected and editing, before the cell empties', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '12');
+    selectNode(a); // tap-selected, not editing — the reported gap.
+
+    dispatchEditorCommand({ region: 'backspace' });
+
+    expect(nodes()[a]).toMatchObject({ raw: '1' });
+    expect(useUiStore.getState().selectedNodeId).toBe(a);
+    expect(useUiStore.getState().editingNodeId).toBe(a);
+  });
+
+  test('reaching an empty cell keeps it selected instead of auto-discarding', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '5');
+    selectNode(a);
+
+    dispatchEditorCommand({ region: 'backspace' });
+
+    expect(nodes()[a]).toMatchObject({ raw: '' });
+    expect(useUiStore.getState().selectedNodeId).toBe(a);
+  });
+
+  test('a second backspace on an already-empty number deletes it and selects its left neighbour', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const built = appendOperatorAndNumber(a, '+');
+    setNodeRaw(built.numberId, '9');
+    selectNode(built.numberId);
+    dispatchEditorCommand({ region: 'backspace' }); // '9' -> ''
+    expect(nodes()[built.numberId]).toMatchObject({ raw: '' });
+
+    dispatchEditorCommand({ region: 'backspace' }); // '' -> deleted, land on '+'
+
+    expect(nodes()[built.numberId]).toBeUndefined();
+    expect(useUiStore.getState().selectedNodeId).toBe(built.operatorId);
+  });
+
+  test('a free (chainless) empty number falls back to full deselect, same as before', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '9');
+    selectNode(a);
+    dispatchEditorCommand({ region: 'backspace' }); // '9' -> ''
+
+    dispatchEditorCommand({ region: 'backspace' }); // '' -> deleted, no neighbour
+
+    expect(nodes()[a]).toBeUndefined();
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
+});
+
+describe('dispatchEditorCommand: backspace on a selected operator lands on its left neighbour (§8.5)', () => {
+  test('deletes the operator and selects the chain member to its left', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const built = appendOperatorAndNumber(a, '+');
+    setNodeRaw(built.numberId, '2');
+    selectNode(built.operatorId);
+
+    dispatchEditorCommand({ region: 'backspace' });
+
+    expect(nodes()[built.operatorId]).toBeUndefined();
+    expect(useUiStore.getState().selectedNodeId).toBe(a);
+    // The chain still holds together — '2' just lost its operator, not its chain.
+    const doc = useDocumentStore.getState().document;
+    expect(doc.chains[doc.nodes[a]!.chainId!]!.members).toEqual([a, built.numberId]);
+  });
+
+  test('an operator with nothing to its left falls back to full deselect', () => {
+    const a = addOperatorNode({ x: 0, y: 0 }, '+');
+    const numberId = appendNumberNode(a, '2');
+    selectNode(a);
+
+    dispatchEditorCommand({ region: 'backspace' });
+
+    expect(nodes()[a]).toBeUndefined();
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+    expect(nodes()[numberId]).toBeDefined();
   });
 });
 

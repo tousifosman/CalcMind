@@ -839,6 +839,70 @@ describe('selecting = only leaves the operator keys active (§9)', () => {
   });
 });
 
+describe('backspace disables on a selected result (§9)', () => {
+  test('a single selected result disables keypad-backspace', () => {
+    const resultChain = 'c_backspace_result';
+    const resultId = 'n_backspace_result';
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.chains[resultChain] = { id: resultChain, members: [], anchor: { x: 0, y: 0 } };
+        draft.nodes[resultId] = {
+          id: resultId,
+          kind: 'result',
+          position: { x: 0, y: 0 },
+          chainId: null,
+          createdAt: Date.now(),
+          sourceChainId: resultChain,
+        };
+      });
+      selectNode(resultId);
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBe(true);
+  });
+
+  test('a selected number or nothing selected leaves keypad-backspace enabled', () => {
+    let a!: string;
+    act(() => {
+      a = addNumberNode({ x: 0, y: 0 }, '3');
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBeFalsy();
+
+    act(() => {
+      selectNode(a);
+    });
+    expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBeFalsy();
+  });
+
+  test('a Select-group containing a result still enables backspace — deletes the whole group', () => {
+    let op!: string;
+    act(() => {
+      const a = addNumberNode({ x: 0, y: 0 }, '1');
+      const built = appendOperatorAndNumber(a, '+');
+      op = built.operatorId;
+      setNodeRaw(built.numberId, '2');
+      appendEqualsNode(built.numberId);
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+      selectGroup(op);
+    });
+
+    expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBeFalsy();
+  });
+});
+
 describe('Select all locks data-entry keys (§8.6)', () => {
   test('digits, operators, editing and grouping keys disable; mode strip stays live', () => {
     const presses: KeypadKey[] = [];
