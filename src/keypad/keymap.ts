@@ -15,6 +15,8 @@ import {
   appendEqualsNode,
   appendOperatorAndNumber,
   continueFromValue,
+  continueFromValueWithParens,
+  convertEqualsToOperator,
   createLinkToValue,
   setNodeRaw,
   setOperatorSymbol,
@@ -452,15 +454,26 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     return;
   }
 
-  // §9: a chain's `=` is terminal — nothing can be appended after it. Continuation
-  // (§8.7) happens from the *result*, never from the `=` symbol itself, so every
-  // command is inert while the equals cell is the selected target — backspace already
-  // returned above and still deletes it like any other cell. Without this, selecting
-  // `=` directly and pressing a digit/operator/paren/`=` would splice a new member
-  // right after it (`appendMembersToChain` inserts after whatever node is targeted),
-  // i.e. exactly "a cell after the equals" — a chain's result (added below `=` by
-  // `finalizeChain`) is what should follow it, never user input.
+  // §9: a chain's `=` is terminal — nothing can be *appended* after it. Continuation
+  // (§8.7) happens from the *result*, never from the `=` symbol itself, so digit /
+  // decimal / sign / paren / `=` are all inert while the equals cell is the selected
+  // target — backspace already returned above and still deletes it like any other cell.
+  // Without this, selecting `=` directly and pressing one of those would splice a new
+  // member right after it (`appendMembersToChain` inserts after whatever node is
+  // targeted), i.e. exactly "a cell after the equals" — a chain's result (added below
+  // `=` by `finalizeChain`) is what should follow it, never user input.
+  //
+  // An operator is the one key that *does* something here, and it isn't an append: it
+  // converts `=` into that operator in place (`convertEqualsToOperator`), the same
+  // "replace in place" the keypad already does for a selected operator
+  // (`setOperatorSymbol`, in the generic switch below) — `1 + 2 = 3`, select `=`, press
+  // `+` builds `1 + 2 + _`, focused for the next digits, same as any other operator
+  // press seeds and focuses its fresh operand.
   if (selectedNode?.kind === 'equals') {
+    if (command.region === 'operator') {
+      const converted = convertEqualsToOperator(selectedNode.id, command.op);
+      if (converted) editNumberNode(converted.numberId);
+    }
     return;
   }
 
@@ -491,6 +504,14 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     if (command.region === 'operator') {
       const { numberId } = continueFromValue(selectedNode.id, command.op);
       editNumberNode(numberId);
+    } else if (command.region === 'paren') {
+      // §8.7 continuation, wrapped: `()` on a selected result used to no-op (read-only,
+      // same as digits) — now it starts a new chain the same way an operator does, just
+      // grouped: `( ref )` instead of `ref ⊕ _`. Select (not edit — there's no operand to
+      // type into yet) the close paren, so a following operator or `=` extends this new
+      // chain in place, same as any other selected structural cell.
+      const { closeParenId } = continueFromValueWithParens(selectedNode.id);
+      selectNode(closeParenId);
     }
     return;
   }

@@ -8,13 +8,15 @@ import {
   appendEqualsNode,
   appendOperatorAndNumber,
   continueFromValue,
+  createLinkToValue,
+  editNumberNode,
   selectAll,
   selectGroup,
   selectNode,
   setNodeRaw,
 } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
-import { rolePalette } from '../ui/tokens';
+import { identityHues, rolePalette } from '../ui/tokens';
 import { findHostByTestID } from '../nodes/testUtils';
 
 beforeEach(() => {
@@ -803,6 +805,40 @@ describe('= key disables once its chain already has an equals (§9)', () => {
   });
 });
 
+describe('selecting = only leaves the operator keys active (§9)', () => {
+  test('digits, decimal/+/-, (), Create link, and = itself all disable; operators stay enabled', () => {
+    let equalsId!: string;
+    act(() => {
+      const a = addNumberNode({ x: 0, y: 0 }, '1');
+      const built = appendOperatorAndNumber(a, '+');
+      setNodeRaw(built.numberId, '2');
+      equalsId = appendEqualsNode(built.numberId);
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+      selectNode(equalsId);
+    });
+
+    expect(findByTestID(renderer, 'keypad-digit-7').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBe(true);
+    // The one exception: an operator converts = in place (§9), so the operator column
+    // stays active rather than joining the rest of the keypad in disabling.
+    expect(findByTestID(renderer, 'keypad-op-add').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-op-multiply').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-op-subtract').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-op-divide').props.disabled).toBeFalsy();
+    // Backspace/undo/redo stay live, same as every other locked-data-entry state.
+    expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-undo').props.disabled).toBeFalsy();
+  });
+});
+
 describe('Select all locks data-entry keys (§8.6)', () => {
   test('digits, operators, editing and grouping keys disable; mode strip stays live', () => {
     const presses: KeypadKey[] = [];
@@ -841,5 +877,146 @@ describe('Select all locks data-entry keys (§8.6)', () => {
       findByTestID(renderer, 'keypad-op-add').props.onPress?.();
     });
     expect(presses).toEqual([]);
+  });
+});
+
+describe('operator/() keys tint to Create link\'s blue when a press creates a new link (§8.7)', () => {
+  function operatorKeys(renderer: ReactTestRenderer) {
+    return ['keypad-op-divide', 'keypad-op-multiply', 'keypad-op-subtract', 'keypad-op-add'].map(
+      (id) => findHostByTestID(renderer.root, id),
+    );
+  }
+
+  test('a selected result tints every operator key and ()', () => {
+    const resultChain = 'c_link_tint_result';
+    const resultId = 'n_link_tint_result';
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.chains[resultChain] = { id: resultChain, members: [], anchor: { x: 0, y: 0 } };
+        draft.nodes[resultId] = {
+          id: resultId,
+          kind: 'result',
+          position: { x: 0, y: 0 },
+          chainId: null,
+          createdAt: Date.now(),
+          sourceChainId: resultChain,
+        };
+      });
+      selectNode(resultId);
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    for (const key of operatorKeys(renderer)) {
+      expect(key.props.style).toMatchObject({ backgroundColor: identityHues[0] });
+    }
+    expect(findHostByTestID(renderer.root, 'keypad-paren').props.style).toMatchObject({
+      backgroundColor: identityHues[0],
+    });
+  });
+
+  test('a selected free (unedited) number tints the operator keys but not ()', () => {
+    let a!: string;
+    act(() => {
+      a = addNumberNode({ x: 0, y: 0 }, '5');
+      selectNode(a);
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    for (const key of operatorKeys(renderer)) {
+      expect(key.props.style).toMatchObject({ backgroundColor: identityHues[0] });
+    }
+    // `()` on a free number groups within its own new chain, not a link — stays amber.
+    expect(findHostByTestID(renderer.root, 'keypad-paren').props.style).toMatchObject({
+      backgroundColor: rolePalette.operator.fill,
+    });
+  });
+
+  test('a number being edited is not a link target — operator keys stay amber', () => {
+    let a!: string;
+    act(() => {
+      a = addNumberNode({ x: 0, y: 0 }, '5');
+      editNumberNode(a);
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    for (const key of operatorKeys(renderer)) {
+      expect(key.props.style).toMatchObject({ backgroundColor: rolePalette.operator.fill });
+    }
+  });
+
+  test('a number already in a chain extends in place — operator keys stay amber', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      const a = addNumberNode({ x: 0, y: 0 }, '1');
+      const built = appendOperatorAndNumber(a, '+');
+      setNodeRaw(built.numberId, '2');
+      selectNode(a); // '1' is a chain member, not a free value.
+      renderer = create(<Keypad />);
+    });
+
+    for (const key of operatorKeys(renderer)) {
+      expect(key.props.style).toMatchObject({ backgroundColor: rolePalette.operator.fill });
+    }
+  });
+
+  test('a selected live reference extends in place — operator keys stay amber', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      const a = addNumberNode({ x: 0, y: 0 }, '5');
+      const refId = createLinkToValue(a);
+      selectNode(refId);
+      renderer = create(<Keypad />);
+    });
+
+    for (const key of operatorKeys(renderer)) {
+      expect(key.props.style).toMatchObject({ backgroundColor: rolePalette.operator.fill });
+    }
+  });
+
+  test('group mode with a result present tints the operator keys too', () => {
+    let op!: string;
+    act(() => {
+      const a = addNumberNode({ x: 0, y: 0 }, '1');
+      const built = appendOperatorAndNumber(a, '+');
+      op = built.operatorId;
+      setNodeRaw(built.numberId, '2');
+      appendEqualsNode(built.numberId);
+    });
+
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+      selectGroup(op);
+    });
+
+    for (const key of operatorKeys(renderer)) {
+      expect(key.props.style).toMatchObject({ backgroundColor: identityHues[0] });
+    }
+  });
+
+  test('nothing selected — operator keys and () stay the ordinary amber', () => {
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    for (const key of operatorKeys(renderer)) {
+      expect(key.props.style).toMatchObject({ backgroundColor: rolePalette.operator.fill });
+    }
+    expect(findHostByTestID(renderer.root, 'keypad-paren').props.style).toMatchObject({
+      backgroundColor: rolePalette.operator.fill,
+    });
   });
 });

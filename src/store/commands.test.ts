@@ -12,6 +12,8 @@ import {
   appendOperatorAndNumber,
   continueFromResult,
   continueFromValue,
+  continueFromValueWithParens,
+  convertEqualsToOperator,
   createLinkToValue,
   setOperatorSymbol,
   continuationAnchor,
@@ -1592,6 +1594,121 @@ describe('continueFromValue (P4.9, §8.7)', () => {
       x: source.anchor.x,
       y: blockerY + CONTINUATION_OFFSET.y,
     });
+  });
+});
+
+describe('continueFromValueWithParens (§8.7, keypad () on a selected result/number/reference)', () => {
+  test("builds [(, reference→R, )] under the source group's first cell in one undo entry", () => {
+    const a = addNumberNode({ x: 10, y: 20 }, '7');
+    appendEqualsNode(a);
+    const docBefore = useDocumentStore.getState().document;
+    const result = Object.values(docBefore.nodes).find((n) => n.kind === 'result')!;
+    const sourceChain = docBefore.chains[result.chainId!]!;
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    const { chainId, referenceId, openParenId, closeParenId } = continueFromValueWithParens(
+      result.id,
+    );
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.chains[chainId]!.members).toEqual([openParenId, referenceId, closeParenId]);
+    expect(doc.nodes[openParenId]).toMatchObject({ kind: 'paren', side: 'open', chainId });
+    expect(doc.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      targetNodeId: result.id,
+      chainId,
+    });
+    expect(doc.nodes[closeParenId]).toMatchObject({ kind: 'paren', side: 'close', chainId });
+    expect(doc.chains[chainId]!.anchor).toEqual({
+      x: sourceChain.anchor.x,
+      y: sourceChain.anchor.y + CONTINUATION_OFFSET.y,
+    });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+
+    useDocumentStore.getState().undo();
+    expect(useDocumentStore.getState().document.nodes[referenceId]).toBeUndefined();
+    expect(useDocumentStore.getState().document.chains[chainId]).toBeUndefined();
+  });
+
+  test('builds from a number value (no equals required)', () => {
+    const n = addNumberNode({ x: 40, y: 80 }, '12');
+
+    const { chainId, referenceId } = continueFromValueWithParens(n);
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.nodes[referenceId]).toMatchObject({ kind: 'reference', targetNodeId: n, chainId });
+    // Source number is untouched — still free, still '12'.
+    expect(doc.nodes[n]).toMatchObject({ kind: 'number', raw: '12', chainId: null });
+  });
+
+  test('rejects a non-value target', () => {
+    const op = addOperatorNode({ x: 0, y: 0 }, '+');
+    expect(() => continueFromValueWithParens(op)).toThrow(
+      /not a number, result, or live reference/,
+    );
+  });
+});
+
+describe('convertEqualsToOperator (§9, keypad operator on a selected =)', () => {
+  test('replaces = (and its result) with ⊕ + empty number, in place, in one undo entry', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const built = appendOperatorAndNumber(a, '+');
+    setNodeRaw(built.numberId, '2');
+    const equalsId = appendEqualsNode(built.numberId);
+    const before = useDocumentStore.getState().document;
+    const chainId = before.nodes[equalsId]!.chainId!;
+    const resultId = before.chains[chainId]!.members.find(
+      (id) => before.nodes[id]?.kind === 'result',
+    )!;
+    useDocumentStore.setState({ undoStack: [], redoStack: [] });
+
+    const converted = convertEqualsToOperator(equalsId, '×');
+
+    expect(converted).not.toBeNull();
+    const { operatorId, numberId } = converted!;
+    const doc = useDocumentStore.getState().document;
+    expect(doc.nodes[equalsId]).toBeUndefined();
+    expect(doc.nodes[resultId]).toBeUndefined();
+    expect(doc.chains[chainId]!.members).toEqual([a, built.operatorId, built.numberId, operatorId, numberId]);
+    expect(doc.nodes[operatorId]).toMatchObject({ kind: 'operator', op: '×', chainId });
+    expect(doc.nodes[numberId]).toMatchObject({ kind: 'number', raw: '', chainId });
+    expect(useDocumentStore.getState().undoStack).toHaveLength(1);
+
+    useDocumentStore.getState().undo();
+    const undone = useDocumentStore.getState().document;
+    expect(undone.nodes[equalsId]).toMatchObject({ kind: 'equals' });
+    expect(undone.nodes[resultId]).toMatchObject({ kind: 'result' });
+    expect(undone.nodes[operatorId]).toBeUndefined();
+  });
+
+  test('a downstream reference to the old result keeps its last known value (§11.2)', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const built = appendOperatorAndNumber(a, '+');
+    setNodeRaw(built.numberId, '2');
+    const equalsId = appendEqualsNode(built.numberId);
+    const doc0 = useDocumentStore.getState().document;
+    const resultId = doc0.chains[doc0.nodes[equalsId]!.chainId!]!.members.find(
+      (id) => doc0.nodes[id]?.kind === 'result',
+    )!;
+    const { referenceId } = continueFromValue(resultId, '+');
+
+    convertEqualsToOperator(equalsId, '-');
+
+    const doc = useDocumentStore.getState().document;
+    expect(doc.nodes[referenceId]).toMatchObject({
+      kind: 'reference',
+      lastKnownDisplay: '3',
+    });
+  });
+
+  test('rejects a non-equals target', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    expect(convertEqualsToOperator(a, '+')).toBeNull();
+  });
+
+  test('a free equals node (no chain) is rejected', () => {
+    const freeEquals = addEqualsNode({ x: 0, y: 0 });
+    expect(convertEqualsToOperator(freeEquals, '+')).toBeNull();
   });
 });
 

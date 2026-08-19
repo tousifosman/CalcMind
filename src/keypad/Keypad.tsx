@@ -87,18 +87,27 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   // would otherwise no-op silently (results) or append at chain end (operators /
   // references). Operators on a result/reference/number still continue (§8.7).
   const selectedNodeId = useUiStore((state) => state.selectedNodeId);
+  const editingNodeId = useUiStore((state) => state.editingNodeId);
   const selectedKind = useDocumentStore((state) =>
     selectedNodeId ? state.document.nodes[selectedNodeId]?.kind : undefined,
   );
+  // §9: a selected `=` also blocks digits/paren below, same as a result — its whole
+  // keypad surface (beyond an operator, which converts it in place, and history) is
+  // inert, matching `dispatchEditorCommand`'s own hard stop for a selected equals cell.
+  // Without this, digits/decimal/sign/paren rendered enabled even though pressing them
+  // was already a no-op — a real reported gap between what the keys looked like and
+  // what they did.
   const selectionBlocksDigits =
     selectedKind === 'reference' ||
     selectedKind === 'result' ||
-    selectedKind === 'operator';
-  // `()` is for operands; disable it while an operator is selected (operator keys still
-  // replace the symbol). Decimal and `+/-` used to share this rule too, but they're number
+    selectedKind === 'operator' ||
+    selectedKind === 'equals';
+  // `()` is for operands; disable it while an operator or equals is selected (operator
+  // keys still replace the symbol; equals converts to the pressed operator — neither is
+  // a paren target). Decimal and `+/-` used to share this rule too, but they're number
   // buttons now (`numberKeysDisabled`, below) — a selected result/reference disables them
   // right alongside the digits, not just a selected operator.
-  const selectionBlocksNumberEditing = selectedKind === 'operator';
+  const selectionBlocksNumberEditing = selectedKind === 'operator' || selectedKind === 'equals';
   // §9: the selected node's own chain already has an `=` — a second would splice in
   // front of the existing equals+result pair (`chainHasEquals`, shared with
   // `dispatchEditorCommand`'s own `equals` guard so the button and the hardware
@@ -131,6 +140,26 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
     !dataEntryLocked &&
     !groupMode &&
     (selectedKind === 'number' || selectedKind === 'result' || selectedIsLiveReference);
+  // §8.7: an operator here is about to *create a new linked cell* (a fresh reference,
+  // via `continueFromValue`) rather than extend the current chain in place — true for a
+  // selected result, or a selected *free* number that isn't being edited (chainId ===
+  // null; a number already in a chain, or one being typed into, extends that chain
+  // instead — the same distinction `dispatchEditorCommand` itself makes). Group mode
+  // with a result present takes the identical `continueFromValue` path for every
+  // operator too. Tinted to `Create link`'s own blue so the outcome is visible before
+  // the press, not just after.
+  const operatorCreatesLink =
+    !dataEntryLocked &&
+    (groupMode
+      ? groupContainsResult(groupSelectedIds, nodes)
+      : selectedKind === 'result' ||
+        (selectedKind === 'number' &&
+          selectedNode?.chainId === null &&
+          editingNodeId !== selectedNodeId));
+  // `()` only creates a link today for a selected result (§8.7, wrapped in parens,
+  // dispatchEditorCommand's own `paren` branch there) — a free number's `()` groups
+  // within its own new chain instead of linking, so it keeps the ordinary operator fill.
+  const parenCreatesLink = !dataEntryLocked && !groupMode && selectedKind === 'result';
 
   function press(key: KeypadKey) {
     if (dataEntryLocked) return;
@@ -337,24 +366,28 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
             onPress={() => press({ region: 'operator', op: '÷' })}
             testID="keypad-op-divide"
             disabled={!operatorsEnabled}
+            highlighted={operatorCreatesLink}
           />
           <OperatorKey
             label="×"
             onPress={() => press({ region: 'operator', op: '×' })}
             testID="keypad-op-multiply"
             disabled={!operatorsEnabled}
+            highlighted={operatorCreatesLink}
           />
           <OperatorKey
             label="−"
             onPress={() => press({ region: 'operator', op: '-' })}
             testID="keypad-op-subtract"
             disabled={!operatorsEnabled}
+            highlighted={operatorCreatesLink}
           />
           <OperatorKey
             label="+"
             onPress={() => press({ region: 'operator', op: '+' })}
             testID="keypad-op-add"
             disabled={!operatorsEnabled}
+            highlighted={operatorCreatesLink}
           />
           {/* `()` (§8.5): moved underneath `+` into the accent column, styled as an
               `OperatorKey` — same amber fill and white label as `÷ × − +`. Side is resolved
@@ -365,6 +398,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
             onPress={() => press({ region: 'paren' })}
             disabled={numberEditingKeysDisabled}
             testID="keypad-paren"
+            highlighted={parenCreatesLink}
           />
           <EqualsKey
             onPress={() => press({ region: 'equals' })}
@@ -456,10 +490,26 @@ function DigitKey({
   );
 }
 
-function OperatorKey({ label, onPress, testID, disabled }: KeyProps) {
+function OperatorKey({
+  label,
+  onPress,
+  testID,
+  disabled,
+  highlighted,
+}: KeyProps & {
+  /** §8.7: this press is about to create a new linked cell (a fresh reference) rather
+   *  than extend the current chain in place — tint to `Create link`'s blue instead of
+   *  the ordinary amber so that outcome is visible before the tap, not just after. */
+  highlighted?: boolean;
+}) {
   return (
     <TouchableOpacity
-      style={[styles.key, styles.accentKey, disabled && styles.keyDisabled]}
+      style={[
+        styles.key,
+        styles.accentKey,
+        highlighted && !disabled && styles.accentKeyLink,
+        disabled && styles.keyDisabled,
+      ]}
       onPress={onPress}
       disabled={disabled}
       testID={testID}
@@ -650,6 +700,12 @@ const styles = StyleSheet.create({
     marginHorizontal: 0,
     marginBottom: KEY_GAP,
     backgroundColor: rolePalette.operator.fill,
+  },
+  // §8.7: overrides `accentKey`'s amber when a press is about to create a new linked
+  // cell — same blue as `linkKey`/`Create link`, not a new colour, so the two chrome
+  // pieces read as the same signal ("this makes a link") rather than two.
+  accentKeyLink: {
+    backgroundColor: identityHues[0],
   },
   accentKeyLabel: {
     color: glyphColor,

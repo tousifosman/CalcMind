@@ -553,7 +553,7 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     });
   });
 
-  test('digit / paren / equals with a result selected still no-op (result is read-only)', () => {
+  test('digit / equals with a result selected still no-op (result is read-only)', () => {
     const chainId = 'c_result_test';
     const resultId = 'n_result_test';
     useDocumentStore.getState().applyCommand((draft) => {
@@ -571,14 +571,46 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     const before = useDocumentStore.getState().undoStack.length;
 
     dispatchEditorCommand({ region: 'digit', value: '1' });
-    dispatchEditorCommand({ region: 'paren', side: 'open' });
     dispatchEditorCommand({ region: 'equals' });
 
     expect(useDocumentStore.getState().undoStack).toHaveLength(before);
     expect(useUiStore.getState().selectedNodeId).toBe(resultId);
   });
 
-  test('selecting the = cell itself rejects digit/paren/operator/equals — nothing appends after it', () => {
+  test('paren with a result selected wraps a new link in ( ) instead of no-op (§8.7)', () => {
+    const chainId = 'c_result_paren_test';
+    const resultId = 'n_result_paren_test';
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains[chainId] = { id: chainId, members: [], anchor: { x: 0, y: 0 } };
+      draft.nodes[resultId] = {
+        id: resultId,
+        kind: 'result',
+        position: { x: 0, y: 0 },
+        chainId: null,
+        createdAt: Date.now(),
+        sourceChainId: chainId,
+      };
+    });
+    selectNode(resultId);
+
+    dispatchEditorCommand({ region: 'paren', side: 'open' });
+
+    const doc = useDocumentStore.getState().document;
+    const ref = Object.values(doc.nodes).find(
+      (n) => n.kind === 'reference' && n.targetNodeId === resultId,
+    )!;
+    expect(ref).toBeDefined();
+    const chain = doc.chains[ref.chainId!]!;
+    const kinds = chain.members.map((id) => doc.nodes[id]?.kind);
+    expect(kinds).toEqual(['paren', 'reference', 'paren']);
+    // Close paren selected (not editing — nothing to type into yet), so a following
+    // operator or `=` extends this new chain in place like any other selected paren.
+    const closeParenId = chain.members[2]!;
+    expect(useUiStore.getState().selectedNodeId).toBe(closeParenId);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+  });
+
+  test('selecting the = cell rejects digit/paren/equals — nothing appends after it', () => {
     dispatchEditorCommand({ region: 'digit', value: '1' });
     dispatchEditorCommand({ region: 'operator', op: '+' });
     dispatchEditorCommand({ region: 'digit', value: '2' });
@@ -592,12 +624,70 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     selectNode(equalsNode.id);
     dispatchEditorCommand({ region: 'digit', value: '9' });
     dispatchEditorCommand({ region: 'paren', side: 'open' });
-    dispatchEditorCommand({ region: 'operator', op: '+' });
     dispatchEditorCommand({ region: 'equals' });
 
     expect(useDocumentStore.getState().document.chains[chainId]!.members).toEqual(membersBefore);
     // Still selected — every command above was a no-op, not a deselect.
     expect(useUiStore.getState().selectedNodeId).toBe(equalsNode.id);
+  });
+
+  test('an operator on a selected = converts it to that operator in place (§9)', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const before = useDocumentStore.getState().document;
+    const equalsNode = Object.values(before.nodes).find((n) => n.kind === 'equals')!;
+    const chainId = equalsNode.chainId!;
+    const resultId = before.chains[chainId]!.members.find(
+      (id) => before.nodes[id]?.kind === 'result',
+    )!;
+
+    selectNode(equalsNode.id);
+    dispatchEditorCommand({ region: 'operator', op: '×' });
+
+    const after = useDocumentStore.getState().document;
+    // The old = (and the result it had) are gone; the chain now reads 1 + 2 × _.
+    expect(after.nodes[equalsNode.id]).toBeUndefined();
+    expect(after.nodes[resultId]).toBeUndefined();
+    const chain = after.chains[chainId]!;
+    const kinds = chain.members.map((id) => after.nodes[id]?.kind);
+    expect(kinds).toEqual(['number', 'operator', 'number', 'operator', 'number']);
+    const newOperator = after.nodes[chain.members[3]!];
+    expect(newOperator).toMatchObject({ kind: 'operator', op: '×' });
+    // The fresh empty operand is what's now selected and being edited, same as any
+    // other operator press seeds and focuses its operand.
+    const newNumberId = chain.members[4]!;
+    expect(useUiStore.getState().selectedNodeId).toBe(newNumberId);
+    expect(useUiStore.getState().editingNodeId).toBe(newNumberId);
+    expect(after.nodes[newNumberId]).toMatchObject({ kind: 'number', raw: '' });
+  });
+
+  test('an operator on a selected = with no other chain history still leaves undo intact', () => {
+    // Guards convertEqualsToOperator's own no-op guard (missing predecessor) rather than
+    // a thrown error corrupting the undo stack — not reachable through the UI for a real
+    // equals node (always has a preceding operand), but dispatch shouldn't crash if one
+    // ever is selected with a malformed chain underneath it.
+    const chainId = 'c_malformed';
+    const equalsId = 'n_malformed_equals';
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains[chainId] = { id: chainId, members: [equalsId], anchor: { x: 0, y: 0 } };
+      draft.nodes[equalsId] = {
+        id: equalsId,
+        kind: 'equals',
+        position: { x: 0, y: 0 },
+        chainId,
+        createdAt: Date.now(),
+      };
+    });
+    selectNode(equalsId);
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(useDocumentStore.getState().document.nodes[equalsId]).toBeDefined();
   });
 
   test('= is rejected on any other member once the chain already has one — no second equals', () => {
