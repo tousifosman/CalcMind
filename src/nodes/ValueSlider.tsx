@@ -1,17 +1,21 @@
-// Value slider popover (§8.8 / P6b.3–P6b.4, plus the show/pin follow-up).
+// Value slider popover (§8.8 / P6b.3–P6b.4, plus the show/pin/step follow-up).
 //
 // Raised explicitly from the cell menu's `Show slider` item (`commands.ts`'s
 // `showValueSlider`) rather than automatically on selection — `ValueSliderOverlay`
 // below reads `uiStore.sliderState`, not `selectedNodeId`. Dragging the thumb
 // rewrites the number through `scrubNodeValue` (one undo entry for the whole
 // gesture, autosave suppressed, dirty-subgraph recompute throttled to the frame
-// budget). Tap toggles integer snap; drag returns to continuous values.
+// budget). Tap toggles integer snap (whole numbers); drag quantizes to the Step
+// field's grid instead (default 0.1, `quantizeToStep` in `inferSliderRange.ts`),
+// vibrating once per step crossing rather than continuously.
 //
 // The popover opens unpinned: `AppShell`'s canvas tap/long-press handlers close it
 // the moment something else is tapped, the same as any other momentary prompt. The
 // `Keep open` checkbox pins it - suppressing that dismissal - and while pinned also
 // draws a connector line back to the cell and lets the popover itself be dragged via
-// its handle, independent of the anchored position under the cell.
+// its handle, independent of the anchored position under the cell. The handle is
+// always mounted, at a fixed height, so pinning never resizes the popover - only its
+// bar's opacity and its own gesture's `enabled` state track `pinned`.
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   LayoutChangeEvent,
@@ -20,6 +24,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  Vibration,
   View,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -41,6 +46,7 @@ import { getDeviceLocale } from '../ui/locale';
 import { rolePalette, nodeHeightFor } from '../ui/tokens';
 import {
   inferSliderRange,
+  quantizeToStep,
   rawToSliderValue,
   sliderValueToRaw,
   valueAtTrackFraction,
@@ -52,6 +58,16 @@ const TRACK_HEIGHT = 28;
 const THUMB_SIZE = 20;
 /** Gap between the cell's bottom edge and the popover top, in screen px. */
 const ANCHOR_GAP = 8;
+/** Default Step field value (§8.8 follow-up) - continuous dragging's grid size. */
+const DEFAULT_STEP = 0.1;
+/** Short tick rather than `Vibration.vibrate()`'s 400ms default - one per step
+ *  crossing during a drag, not one long buzz. */
+const STEP_VIBRATION_MS = 10;
+/** The popover's own chrome gray (already `boundInput`/`dragHandleBar`'s border),
+ *  reused for the popover's border and the pinned connector line so the line reads
+ *  as this window's own edge rather than a document-graph connector in the cell's
+ *  identity hue. */
+const POPOVER_BORDER_COLOR = '#D1D5DB';
 
 // Same trade as Keypad keys: a mousedown on the slider must not blur the
 // number's TextInput (which would deselect and dismiss this popover).
@@ -75,15 +91,26 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
   const [integerSnap, setIntegerSnap] = useState(false);
   const [minText, setMinText] = useState('0');
   const [maxText, setMaxText] = useState('10');
+  const [step, setStep] = useState(DEFAULT_STEP);
+  const [stepText, setStepText] = useState(String(DEFAULT_STEP));
   const [trackWidth, setTrackWidth] = useState(POPOVER_WIDTH - 32);
   // Re-infer bounds when the selected node changes, not on every scrub frame.
   const rangedForNode = useRef<NodeId | null>(null);
-  // Ref so gesture callbacks always read the latest range / snap without
+  // Ref so gesture callbacks always read the latest range / snap / step without
   // rebuilding the gesture object every render.
   const rangeRef = useRef(range);
   rangeRef.current = range;
   const integerSnapRef = useRef(integerSnap);
   integerSnapRef.current = integerSnap;
+  const stepRef = useRef(step);
+  stepRef.current = step;
+  // Last value actually written by a drag, compared against the next quantized
+  // value to tell a real step crossing (vibrate) apart from sub-step pointer
+  // jitter that quantizes to the same grid point (don't). A ref, not state or the
+  // `value` prop, for the same reason `rangeRef`/`integerSnapRef` are: it must be
+  // read and written synchronously inside the gesture callback itself, not depend
+  // on a re-render having landed between two fast onUpdate calls.
+  const lastQuantizedValueRef = useRef<number | null>(null);
 
   const value =
     node && node.kind === 'number' ? rawToSliderValue(node.raw) : null;
@@ -99,6 +126,9 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
     setMinText(String(next.min));
     setMaxText(String(next.max));
     setIntegerSnap(false);
+    setStep(DEFAULT_STEP);
+    setStepText(String(DEFAULT_STEP));
+    lastQuantizedValueRef.current = parsed;
   }, [node, nodeId]);
 
   useEffect(() => {
@@ -145,7 +175,16 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
   const popoverAnchor: Vec2 = { x: left + POPOVER_WIDTH / 2, y: top };
 
   function writeFraction(fraction: number, snap: boolean): void {
-    const next = valueAtTrackFraction(fraction, rangeRef.current, snap);
+    let next = valueAtTrackFraction(fraction, rangeRef.current, snap);
+    if (!snap) {
+      // Continuous dragging (tap's integer snap is a separate, coarser mode -
+      // §8.8) lands on the Step field's grid rather than an arbitrary fraction.
+      next = quantizeToStep(next, stepRef.current, rangeRef.current);
+      if (next !== lastQuantizedValueRef.current) {
+        Vibration.vibrate(STEP_VIBRATION_MS);
+      }
+    }
+    lastQuantizedValueRef.current = next;
     scrubNodeValue(nodeId, sliderValueToRaw(next));
   }
 
@@ -192,6 +231,16 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
     setMaxText(String(next.max));
   }
 
+  function commitStep(text: string): void {
+    const parsed = Number(text);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      setStepText(String(step));
+      return;
+    }
+    setStep(parsed);
+    setStepText(String(parsed));
+  }
+
   const span = range.max - range.min;
   const thumbFraction = span === 0 ? 0 : (value - range.min) / span;
   const thumbLeft =
@@ -222,7 +271,7 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
             y1={cellAnchor.y}
             x2={popoverAnchor.x}
             y2={popoverAnchor.y}
-            stroke={rolePalette.number.border}
+            stroke={POPOVER_BORDER_COLOR}
             strokeWidth={2}
           />
         </Svg>
@@ -232,7 +281,7 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
         style={[styles.popover, { left, top, width: POPOVER_WIDTH }]}
         {...preventFocusSteal}
       >
-        {pinned ? <DragHandle nodeId={nodeId} offset={offset} /> : null}
+        <DragHandle nodeId={nodeId} offset={offset} pinned={pinned} />
         <View style={styles.boundsRow}>
           <BoundInput
             testID={`value-slider-min-${nodeId}`}
@@ -240,7 +289,15 @@ export function ValueSlider({ nodeId }: ValueSliderProps) {
             onChangeText={setMinText}
             onCommit={(text) => commitBound('min', text)}
           />
-          <View style={styles.boundsSpacer} />
+          <View style={styles.stepGroup}>
+            <Text style={styles.stepLabel}>Step</Text>
+            <BoundInput
+              testID={`value-slider-step-${nodeId}`}
+              value={stepText}
+              onChangeText={setStepText}
+              onCommit={commitStep}
+            />
+          </View>
           <BoundInput
             testID={`value-slider-max-${nodeId}`}
             value={maxText}
@@ -409,12 +466,16 @@ interface DragHandleProps {
   /** The offset as of this render, captured on gesture start so drag deltas
    *  compose onto wherever the popover already was rather than resetting it. */
   offset: Vec2;
+  pinned: boolean;
 }
 
-/** Grip strip at the top of a pinned popover (§8.8): dragging it moves the whole
+/** Grip strip at the top of the popover (§8.8): dragging it moves the whole
  *  window via `uiStore.setSliderOffset`, independent of the cell it's anchored to.
- *  Only rendered while pinned - see the `pinned ?` guard at the call site. */
-function DragHandle({ nodeId, offset }: DragHandleProps) {
+ *  Always mounted, at a fixed height, so pinning never resizes the popover - only
+ *  the bar's own opacity toggles with `pinned`, and the gesture is disabled while
+ *  unpinned (dragging only makes sense once the popover can outlive a tap
+ *  elsewhere). */
+function DragHandle({ nodeId, offset, pinned }: DragHandleProps) {
   const offsetRef = useRef(offset);
   offsetRef.current = offset;
   // Captured once per gesture on `onBegin` so `onUpdate`'s per-frame translation
@@ -433,6 +494,7 @@ function DragHandle({ nodeId, offset }: DragHandleProps) {
   }
 
   const pan = Gesture.Pan()
+    .enabled(pinned)
     .onBegin(() => {
       runOnJS(onDragBegin)();
     })
@@ -443,7 +505,13 @@ function DragHandle({ nodeId, offset }: DragHandleProps) {
   return (
     <GestureDetector gesture={pan}>
       <View testID={`value-slider-drag-handle-${nodeId}`} style={styles.dragHandle} {...preventFocusSteal}>
-        <View style={styles.dragHandleBar} />
+        <View
+          testID={`value-slider-drag-handle-bar-${nodeId}`}
+          style={[
+            styles.dragHandleBar,
+            pinned ? styles.dragHandleBarVisible : styles.dragHandleBarHidden,
+          ]}
+        />
       </View>
     </GestureDetector>
   );
@@ -480,6 +548,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     backgroundColor: '#FFFFFF',
     borderRadius: 10,
+    borderWidth: 1,
+    borderColor: POPOVER_BORDER_COLOR,
     paddingVertical: 10,
     paddingHorizontal: 12,
     shadowColor: '#000',
@@ -493,8 +563,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 8,
   },
-  boundsSpacer: {
+  stepGroup: {
     flex: 1,
+    alignItems: 'center',
+  },
+  stepLabel: {
+    fontSize: 10,
+    color: '#6B7280',
+    marginBottom: 2,
   },
   boundInput: {
     width: 52,
@@ -540,14 +616,20 @@ const styles = StyleSheet.create({
   },
   dragHandle: {
     alignItems: 'center',
-    paddingVertical: 6,
-    marginBottom: 4,
+    paddingVertical: 3,
+    marginBottom: 2,
   },
   dragHandleBar: {
     width: 32,
     height: 4,
     borderRadius: 2,
     backgroundColor: '#D1D5DB',
+  },
+  dragHandleBarVisible: {
+    opacity: 1,
+  },
+  dragHandleBarHidden: {
+    opacity: 0,
   },
   pinRow: {
     flexDirection: 'row',

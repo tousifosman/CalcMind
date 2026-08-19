@@ -867,8 +867,13 @@ and should not be deferred to the far end of the plan.
 
 - **Range** is inferred from the current value: `[0, 10^ceil(log10(|v|))]` for positive values,
   symmetric about zero when the value is negative, `[0, 10]` when the value is zero. The user can
-  edit the bounds.
-- **Tap the slider to snap** to integers; drag again for continuous values.
+  edit the bounds. Between them, a **Step** field (default `0.1`, editable, must be positive)
+  sets continuous dragging's grid size.
+- **Tap the slider to snap to a whole integer** — a separate, coarser mode from Step. **Drag
+  quantizes to the Step field's grid** instead of landing on an arbitrary fraction
+  (`quantizeToStep` in `inferSliderRange.ts`, `Decimal`-based so the grid arithmetic doesn't drift
+  like `0.1 + 0.2`) — a device vibrates once per step crossing, not continuously, so a step feels
+  like a step rather than a raw pointer readout.
 - **Scrubbing is a drag, not a commit.** The whole gesture coalesces into a single undo entry, and
   autosave is suppressed until release — otherwise one scrub writes hundreds of documents.
 - Recompute during scrub runs on the dirty subgraph only (§11) and must hold 60fps; if a subgraph
@@ -876,13 +881,15 @@ and should not be deferred to the far end of the plan.
 - **Dismissal and pinning.** The popover opens unpinned: the next canvas tap or long-press
   anywhere but its own cell closes it, the same as any other momentary prompt (§8.6's context
   menu, the dangling-recovery sheet). A `Keep open` checkbox on the popover pins it — this
-  suppresses that dismissal, draws a connector line from the cell to the popover (in the cell's
-  identity hue's border color, same visual family as §11.1/§11.3's connectors, but screen-space
-  chrome rather than a document one — it does not participate in `ConnectorLayer`'s scene), and
-  reveals a drag handle that repositions the popover independent of the cell, via an offset from
-  its anchored position. Unpinning snaps the offset back to zero. All of this is ephemeral
-  `uiStore` state (`sliderState`) — never persisted, never undoable, same reasoning as selection
-  and the context menu (§8.5's last bullet).
+  suppresses that dismissal, draws a connector line from the cell to the popover (in the popover's
+  own chrome colour, not the cell's identity hue — the line reads as this window's edge, not a
+  document-graph connector; it is screen-space chrome and does not participate in
+  `ConnectorLayer`'s scene), and reveals a drag handle that repositions the popover independent of
+  the cell, via an offset from its anchored position. Unpinning snaps the offset back to zero. The
+  handle's own container is always mounted at a fixed height — only its bar's opacity and its
+  gesture's enabled state follow `pinned` — specifically so toggling the checkbox never resizes
+  the popover. All of this is ephemeral `uiStore` state (`sliderState`) — never persisted, never
+  undoable, same reasoning as selection and the context menu (§8.5's last bullet).
 
 ---
 
@@ -1457,6 +1464,7 @@ it unclear which parts were claims about the present and which were intentions.
 | 19 | Numeral font size made a live, persisted user preference (§12.5) rather than staying a fixed token; `nodeHeight`/`numberPaddingX`/`mathAxisOffset` stay fixed | Direct follow-on from decision #18's thread: the user asked to be able to change it themselves rather than keep asking for a different fixed value. Only the glyph size needed to be adjustable to satisfy the request; moving the padding/height tokens too would have meant re-deriving `measure.ts`'s glyph-width table and the tap-target floor on every change, for no requested benefit | Users want padding/height to visually track a much larger or smaller chosen size too — **fired**, see decision #20 |
 | 20 | `nodeHeight` made a live function of the font size (`nodeHeightFor`, §12.5), not a fixed token; `numberPaddingX`/`mathAxisOffset` stay fixed. Settings row also renamed to "Canvas Number Font Size", given a non-editable "pt" unit label, and its value made directly typable alongside the existing +/− stepper | User noticed the cell stayed a fixed height across a font-size change while its width already tracked live (decision #19 had only wired width) — an inconsistency between the two axes of the same cell, not a new feature. `nodeHeightFor` is derived (`fontSize + 2 × numberPaddingY`), not a second independently-threaded parameter, so most call sites needed no new argument — only `caretAt` (`chains/layout.ts`) gained one, since it's the one site without `fontSize` already in scope. `numberPaddingX`/`mathAxisOffset` were left fixed, matching #19's reasoning: nothing asked for the cell's *proportions* to change, only for both axes of its *size* to agree | A future request wants the padding or maths-axis offset to also scale with the chosen size |
 | 21 | Value slider (§8.8) no longer opens automatically on selection; a `Show slider` context-menu item opens it, and a `Keep open` checkbox on the popover jointly gates three things — surviving a tap-elsewhere, drawing a connector line to the cell, and a drag handle to reposition the popover | User request: a popover on every selected number crowded the canvas. Made the trigger explicit (§8.6, same footing as `Label`/`Create link`) rather than tied to selection. The three pinned behaviours were specified separately (a checkbox that keeps it open; drawing a line; making it draggable) but read as one state, not three independent flags, once traced through: a slider worth keeping open across other taps is also one worth relocating away from the cell it's anchored under, and once it can be relocated a line back to that cell is what keeps the association legible — so one `pinned` boolean on `uiStore.sliderState` drives all three, rather than three separate checkboxes | A user wants the connector line or the drag handle without suppressing tap-elsewhere dismissal, or vice versa |
+| 22 | Decision #21's drag handle stays mounted at a fixed size always, toggling only its bar's opacity and its gesture's `enabled` state with `pinned`, rather than conditionally rendering the whole handle; the connector line takes the popover's own chrome colour, not the cell's identity hue; a Step field (default `0.1`, positive-only) sits between the range bounds and continuous dragging quantizes to it (`quantizeToStep`), vibrating once per step crossing | User-reported regression from #21's own first cut: conditionally mounting the drag handle only while pinned made the popover visibly grow on check and shrink on uncheck. Fixed by always mounting it and toggling only paint, not layout — the general fix for "a togglable affordance must not resize its container" wherever RN's default is to omit rather than hide. Separately requested in the same round: the connector should read as the popover's own edge rather than borrow the cell's identity hue (documents relate through hue per §11.1; this line isn't one of those relationships), and dragging should move in namable increments with tactile feedback rather than an arbitrary continuous value | A user wants the connector to carry identity hue after all (e.g. multiple pinned sliders open at once, needing to tell which line belongs to which cell) |
 
 ## 17. Open questions
 

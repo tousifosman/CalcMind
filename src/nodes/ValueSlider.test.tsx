@@ -1,7 +1,8 @@
-// ValueSlider popover (§8.8 / P6b.3, plus the show/pin follow-up).
+// ValueSlider popover (§8.8 / P6b.3, plus the show/pin/step follow-up).
 import React from 'react';
-import { TextInput } from 'react-native';
+import { TextInput, Vibration } from 'react-native';
 import { Gesture } from 'react-native-gesture-handler';
+import { Line } from 'react-native-svg';
 import { act } from 'react-test-renderer';
 import { ValueSlider, ValueSliderOverlay } from './ValueSlider';
 import { useDocumentStore } from '../store/documentStore';
@@ -49,6 +50,8 @@ function openSlider(id: string) {
   act(() => useUiStore.getState().openSlider(id));
 }
 
+let vibrateSpy: jest.SpyInstance;
+
 beforeEach(() => {
   resetStore();
   gestureApi().__resetBuilders();
@@ -59,10 +62,12 @@ beforeEach(() => {
     },
     cancel: () => undefined,
   });
+  vibrateSpy = jest.spyOn(Vibration, 'vibrate').mockImplementation(() => undefined);
 });
 afterEach(() => {
   endValueScrub();
   _setScrubFrameSchedulerForTests(null);
+  vibrateSpy.mockRestore();
   unmountAll();
 });
 
@@ -158,7 +163,7 @@ describe('ValueSlider', () => {
 });
 
 describe('ValueSlider "Keep open" checkbox (§8.8 pin/dismiss/drag follow-up)', () => {
-  test('opens unpinned, with no connector line and no drag handle', () => {
+  test('opens unpinned, with no connector line and the drag bar hidden (not unmounted)', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '42');
     openSlider(id);
     const renderer = renderNode(<ValueSlider nodeId={id} />);
@@ -168,15 +173,21 @@ describe('ValueSlider "Keep open" checkbox (§8.8 pin/dismiss/drag follow-up)', 
     expect(
       renderer.root.findAll((n) => n.props?.testID === `value-slider-connector-${id}`),
     ).toHaveLength(0);
+    // The handle container stays mounted at a fixed size whether pinned or not -
+    // only the bar's own opacity changes - so toggling pinned can't resize the
+    // popover. Asserted here via the container's presence and the bar's opacity.
+    expect(renderer.root.findByProps({ testID: `value-slider-drag-handle-${id}` })).toBeTruthy();
     expect(
-      renderer.root.findAll((n) => n.props?.testID === `value-slider-drag-handle-${id}`),
-    ).toHaveLength(0);
+      renderer.root.findByProps({ testID: `value-slider-drag-handle-bar-${id}` }).props.style,
+    ).toContainEqual({ opacity: 0 });
   });
 
-  test('checking it pins the slider, drawing the connector line and the drag handle', () => {
+  test('checking it pins the slider, drawing the connector line and revealing the drag bar', () => {
     const id = addNumberNode({ x: 0, y: 0 }, '42');
     openSlider(id);
     const renderer = renderNode(<ValueSlider nodeId={id} />);
+    const handleStyleBefore = renderer.root.findByProps({ testID: `value-slider-drag-handle-${id}` }).props
+      .style;
 
     act(() => {
       renderer.root.findByProps({ testID: `value-slider-pin-${id}` }).props.onPress();
@@ -187,7 +198,30 @@ describe('ValueSlider "Keep open" checkbox (§8.8 pin/dismiss/drag follow-up)', 
       { checked: true },
     );
     expect(renderer.root.findByProps({ testID: `value-slider-connector-${id}` })).toBeTruthy();
-    expect(renderer.root.findByProps({ testID: `value-slider-drag-handle-${id}` })).toBeTruthy();
+    expect(
+      renderer.root.findByProps({ testID: `value-slider-drag-handle-bar-${id}` }).props.style,
+    ).toContainEqual({ opacity: 1 });
+    // The handle container's own style (padding/margin) doesn't change with pinned.
+    expect(renderer.root.findByProps({ testID: `value-slider-drag-handle-${id}` }).props.style).toBe(
+      handleStyleBefore,
+    );
+  });
+
+  test('connector line colour matches the popover\'s own chrome, not the cell\'s identity hue', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '42');
+    openSlider(id);
+    act(() => useUiStore.getState().setSliderPinned(true));
+    const renderer = renderNode(<ValueSlider nodeId={id} />);
+
+    const line = renderer.root.findByType(Line);
+    const popoverStyle = ([] as unknown[]).concat(
+      renderer.root.findByProps({ testID: `value-slider-${id}` }).props.style,
+    );
+    const popoverChrome = popoverStyle.find(
+      (s): s is { borderColor: string } => !!s && typeof s === 'object' && 'borderColor' in s,
+    );
+    expect(popoverChrome).toBeDefined();
+    expect(line.props.stroke).toBe(popoverChrome!.borderColor);
   });
 
   test('unchecking it clears pinned and any accumulated drag offset', () => {
@@ -230,24 +264,26 @@ describe('ValueSlider "Keep open" checkbox (§8.8 pin/dismiss/drag follow-up)', 
   });
 });
 
-describe('ValueSlider gesture wiring (§8.8 tap snap / drag continuous)', () => {
-  const TRACK_WIDTH = 200;
+const TRACK_WIDTH = 200;
 
-  function renderReadySlider(raw: string) {
-    const id = addNumberNode({ x: 0, y: 0 }, raw);
-    openSlider(id);
-    gestureApi().__resetBuilders();
-    const renderer = renderNode(<ValueSlider nodeId={id} />);
-    const track = renderer.root.findByProps({ testID: `value-slider-track-${id}` });
-    act(() => {
-      track.props.onLayout({
-        nativeEvent: { layout: { x: 0, y: 0, width: TRACK_WIDTH, height: 28 } },
-      });
+/** Renders a slider with a laid-out track, ready to drive its Pan/Tap gestures
+ *  directly. Shared by the gesture-wiring and Step-field describe blocks below. */
+function renderReadySlider(raw: string) {
+  const id = addNumberNode({ x: 0, y: 0 }, raw);
+  openSlider(id);
+  gestureApi().__resetBuilders();
+  const renderer = renderNode(<ValueSlider nodeId={id} />);
+  const track = renderer.root.findByProps({ testID: `value-slider-track-${id}` });
+  act(() => {
+    track.props.onLayout({
+      nativeEvent: { layout: { x: 0, y: 0, width: TRACK_WIDTH, height: 28 } },
     });
-    // Layout update re-creates gestures; read the latest builders after it.
-    return { id, renderer, pan: latestBuilder('Pan'), tap: latestBuilder('Tap') };
-  }
+  });
+  // Layout update re-creates gestures; read the latest builders after it.
+  return { id, renderer, pan: latestBuilder('Pan'), tap: latestBuilder('Tap') };
+}
 
+describe('ValueSlider gesture wiring (§8.8 tap snap / drag continuous)', () => {
   test('tap snaps to the nearest integer and shows the integer-snap hint', () => {
     // Mid-track on [0, 10] → 5; a tap just off centre still rounds.
     const { id, renderer, tap } = renderReadySlider('3');
@@ -278,6 +314,116 @@ describe('ValueSlider gesture wiring (§8.8 tap snap / drag continuous)', () => 
     expect(
       renderer.root.findAll((n) => n.props?.testID === `value-slider-snap-hint-${id}`),
     ).toHaveLength(0);
+  });
+});
+
+describe('ValueSlider Step field (§8.8 follow-up)', () => {
+  test('defaults to 0.1, positioned between the bound inputs', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '42');
+    openSlider(id);
+    const renderer = renderNode(<ValueSlider nodeId={id} />);
+    expect(
+      renderer.root.findAllByType(TextInput).find((n) => n.props.testID === `value-slider-step-${id}`)!
+        .props.value,
+    ).toBe('0.1');
+  });
+
+  test('is editable and commits a positive number', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '42');
+    openSlider(id);
+    const renderer = renderNode(<ValueSlider nodeId={id} />);
+    const stepInput = renderer.root
+      .findAllByType(TextInput)
+      .find((n) => n.props.testID === `value-slider-step-${id}`)!;
+
+    act(() => {
+      stepInput.props.onChangeText('0.5');
+      stepInput.props.onBlur();
+    });
+
+    expect(
+      renderer.root.findAllByType(TextInput).find((n) => n.props.testID === `value-slider-step-${id}`)!
+        .props.value,
+    ).toBe('0.5');
+  });
+
+  test('an invalid or non-positive commit reverts to the last valid step', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '42');
+    openSlider(id);
+    const renderer = renderNode(<ValueSlider nodeId={id} />);
+    const stepInput = renderer.root
+      .findAllByType(TextInput)
+      .find((n) => n.props.testID === `value-slider-step-${id}`)!;
+
+    act(() => {
+      stepInput.props.onChangeText('0');
+      stepInput.props.onBlur();
+    });
+    expect(
+      renderer.root.findAllByType(TextInput).find((n) => n.props.testID === `value-slider-step-${id}`)!
+        .props.value,
+    ).toBe('0.1');
+
+    act(() => {
+      stepInput.props.onChangeText('abc');
+      stepInput.props.onBlur();
+    });
+    expect(
+      renderer.root.findAllByType(TextInput).find((n) => n.props.testID === `value-slider-step-${id}`)!
+        .props.value,
+    ).toBe('0.1');
+  });
+
+  test('continuous dragging quantizes to the default 0.1 grid, not an arbitrary fraction', () => {
+    const { id, pan } = renderReadySlider('3');
+    act(() => {
+      pan.__handlers.onBegin?.({ x: TRACK_WIDTH * 0.234 }); // raw fraction → 2.34...
+      pan.__handlers.onFinalize?.();
+    });
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '2.3' });
+  });
+
+  test('editing the step to 1 makes dragging land on whole numbers', () => {
+    const { id, renderer, pan } = renderReadySlider('3');
+    const stepInput = renderer.root
+      .findAllByType(TextInput)
+      .find((n) => n.props.testID === `value-slider-step-${id}`)!;
+    act(() => {
+      stepInput.props.onChangeText('1');
+      stepInput.props.onBlur();
+    });
+
+    act(() => {
+      pan.__handlers.onBegin?.({ x: TRACK_WIDTH * 0.27 }); // raw fraction → 2.7
+      pan.__handlers.onFinalize?.();
+    });
+    expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '3' });
+  });
+
+  test('vibrates once per step crossing during a drag, not on every pointer move', () => {
+    const { pan } = renderReadySlider('3');
+    act(() => {
+      pan.__handlers.onBegin?.({ x: TRACK_WIDTH * 0.23 }); // 3 → 2.3: crosses a step
+    });
+    expect(vibrateSpy).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      pan.__handlers.onUpdate?.({ x: TRACK_WIDTH * 0.232 }); // still quantizes to 2.3
+    });
+    expect(vibrateSpy).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      pan.__handlers.onUpdate?.({ x: TRACK_WIDTH * 0.236 }); // 2.3 → 2.4: crosses a step
+    });
+    expect(vibrateSpy).toHaveBeenCalledTimes(2);
+  });
+
+  test('a tap (integer snap) does not vibrate - only a step-quantized drag does', () => {
+    const { tap } = renderReadySlider('3');
+    act(() => {
+      tap.__handlers.onEnd?.({ x: TRACK_WIDTH * 0.5 });
+    });
+    expect(vibrateSpy).not.toHaveBeenCalled();
   });
 });
 
