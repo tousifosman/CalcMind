@@ -34,6 +34,7 @@ import {
   repointReference,
   editNodeLabel,
   createLinkToValue,
+  showValueSlider,
 } from '../store/commands';
 import { isDanglingReference, isRepointTarget } from '../engine/reference';
 import { getDeviceLocale } from '../ui/locale';
@@ -123,6 +124,7 @@ export function AppShell() {
       getDeviceLocale(),
       usePreferencesStore.getState().numeralFontSize,
     );
+    dismissUnpinnedSlider(hit?.id ?? null);
 
     // Re-point mode (§11.2): the next valid value becomes the new target; empty /
     // invalid taps cancel without creating a node.
@@ -168,6 +170,16 @@ export function AppShell() {
     useUiStore.getState().showKeypad();
   }
 
+  // §8.8: a canvas tap or long-press anywhere but the slider's own cell closes an
+  // unpinned popover, the same as any other momentary prompt this file dismisses on
+  // tap-elsewhere. Pinning (the popover's own checkbox) suppresses this.
+  function dismissUnpinnedSlider(hitNodeId: string | null): void {
+    const slider = useUiStore.getState().sliderState;
+    if (slider && !slider.pinned && slider.nodeId !== hitNodeId) {
+      useUiStore.getState().closeSlider();
+    }
+  }
+
   // Long-press dispatches the §8.6 context menu. `screenPoint` is in absolute screen
   // coordinates so the floating sheet can be positioned without the viewport transform.
   function handleCanvasLongPress(worldPoint: Vec2, screenPoint: Vec2): void {
@@ -178,6 +190,7 @@ export function AppShell() {
       getDeviceLocale(),
       usePreferencesStore.getState().numeralFontSize,
     );
+    dismissUnpinnedSlider(hit?.id ?? null);
     if (hit) {
       useUiStore.getState().openContextMenu({ kind: 'node', nodeId: hit.id, anchor: screenPoint });
     } else {
@@ -201,6 +214,7 @@ export function AppShell() {
           onUnlinkFromParent={unlinkFromParent}
           onLabelNode={editNodeLabel}
           onCreateLink={createLinkToValue}
+          onShowSlider={showValueSlider}
         />
         <DanglingRecoveryOverlay />
         <SettingsOverlay />

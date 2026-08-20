@@ -99,3 +99,25 @@ export function valueAtTrackFraction(
   const value = range.min + t * (range.max - range.min);
   return clampSliderValue(value, range, integerSnap);
 }
+
+/**
+ * Quantize `value` to the nearest multiple of `step` measured from `range.min`
+ * (the popover's Step field, defaulting to 0.1 - §8.8). Continuous dragging lands
+ * on this grid instead of an arbitrary fraction, so `ValueSlider` can tell a real
+ * step crossing apart from sub-step jitter and vibrate only on the former.
+ * `Decimal` keeps the grid arithmetic exact rather than drifting like `0.1 + 0.2`.
+ * A non-positive or non-finite step (an in-progress edit of the field) disables
+ * quantization rather than breaking the drag - same fallback the field's own
+ * commit handler uses when the typed text doesn't parse.
+ */
+export function quantizeToStep(value: number, step: number, range: SliderRange): number {
+  if (!Number.isFinite(step) || step <= 0) {
+    return clampSliderValue(value, range, false);
+  }
+  const stepsFromMin = new Decimal(value)
+    .minus(range.min)
+    .dividedBy(step)
+    .toDecimalPlaces(0, Decimal.ROUND_HALF_UP);
+  const quantized = new Decimal(range.min).plus(stepsFromMin.times(step)).toNumber();
+  return clampSliderValue(quantized, range, false);
+}

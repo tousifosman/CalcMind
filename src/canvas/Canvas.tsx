@@ -11,6 +11,13 @@
 // write the result back into the Zustand store (via setViewport, which - per
 // §7 - never touches undo history) when the gesture ends. Wheel input on web
 // has no natural "end", so it debounces its store commit instead.
+//
+// Every frame in between also publishes to `uiStore.liveViewport` (cheap - unlike
+// `document.viewport`, nothing subscribes to it that would fan out into a bigger
+// re-render, and it never calls `notifyDocumentDirty`) so screen-space UI that can't
+// read the shared values directly via `ViewportContext` - because it isn't mounted
+// inside this component, like the §8.8 slider popover - can still track the canvas
+// live during a gesture instead of visibly lagging a frame behind until release.
 import { ReactNode, useEffect, useRef } from 'react';
 import { Platform, StyleSheet, View, ViewStyle } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -20,6 +27,7 @@ import Animated, {
   runOnJS,
 } from 'react-native-reanimated';
 import { useDocumentStore } from '../store/documentStore';
+import { useUiStore } from '../store/uiStore';
 import { Vec2, ZOOM_MIN, ZOOM_MAX } from '../model/types';
 import { CanvasViewportContext } from './ViewportContext';
 
@@ -64,6 +72,14 @@ export function Canvas({ children, style, onTap, onLongPress }: CanvasProps) {
 
   function commitViewport() {
     setViewport({ pan: { x: panX.value, y: panY.value }, zoom: zoom.value });
+    // The committed value now matches what liveViewport was standing in for -
+    // clear it so late-mounting readers fall back to the (now current) document
+    // viewport rather than a gesture snapshot that will never update again.
+    useUiStore.getState().setLiveViewport(null);
+  }
+
+  function publishLiveViewport(x: number, y: number, z: number) {
+    useUiStore.getState().setLiveViewport({ pan: { x, y }, zoom: z });
   }
 
   const pan = Gesture.Pan()
@@ -78,6 +94,7 @@ export function Canvas({ children, style, onTap, onLongPress }: CanvasProps) {
       'worklet';
       panX.value = gestureStartPanX.value - e.translationX / zoom.value;
       panY.value = gestureStartPanY.value - e.translationY / zoom.value;
+      runOnJS(publishLiveViewport)(panX.value, panY.value, zoom.value);
     })
     .onEnd(() => {
       'worklet';
@@ -97,6 +114,7 @@ export function Canvas({ children, style, onTap, onLongPress }: CanvasProps) {
       zoom.value = nextZoom;
       panX.value = pinchFocalWorldX.value - e.focalX / nextZoom;
       panY.value = pinchFocalWorldY.value - e.focalY / nextZoom;
+      runOnJS(publishLiveViewport)(panX.value, panY.value, zoom.value);
     })
     .onEnd(() => {
       'worklet';
@@ -169,6 +187,8 @@ export function Canvas({ children, style, onTap, onLongPress }: CanvasProps) {
       panX.value += deltaX / zoom.value;
       panY.value += deltaY / zoom.value;
     }
+    // Already on the JS thread here (a plain DOM event handler) - no runOnJS needed.
+    publishLiveViewport(panX.value, panY.value, zoom.value);
     scheduleWheelCommit();
   }
 

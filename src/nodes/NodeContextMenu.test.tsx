@@ -40,6 +40,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -72,6 +73,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -101,6 +103,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -124,6 +127,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -160,6 +164,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={onUnlink}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -187,6 +192,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={onLabel}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -225,6 +231,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -256,6 +263,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -292,6 +300,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -313,6 +322,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={onCreateLink}
+        onShowSlider={jest.fn()}
         onDismiss={onDismiss}
       />,
     );
@@ -351,6 +361,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -382,6 +393,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -413,6 +425,7 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
     );
@@ -420,6 +433,87 @@ describe('NodeContextMenu', () => {
       renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Create link')
         .length,
     ).toBeGreaterThanOrEqual(1);
+  });
+
+  test('Show slider is present for a scrubbable number and invokes the handler (§8.8)', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '10');
+    const onShowSlider = jest.fn();
+    const onDismiss = jest.fn();
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId={id}
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
+        onShowSlider={onShowSlider}
+        onDismiss={onDismiss}
+      />,
+    );
+    const showSliderBtn = renderer.root
+      .findAll((node) => node.props.testID === 'context-menu-item-Show slider')
+      .find((node) => node.props.onPress !== undefined);
+    expect(showSliderBtn).toBeDefined();
+    act(() => {
+      showSliderBtn!.props.onPress();
+    });
+    expect(onShowSlider).toHaveBeenCalledWith(id);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  test('Show slider is absent for a mid-typing number (nothing to scrub yet)', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '-');
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId={id}
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
+        onDismiss={jest.fn()}
+      />,
+    );
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Show slider'),
+    ).toHaveLength(0);
+  });
+
+  test('Show slider is absent for operators', () => {
+    let opId = '';
+    act(() => {
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.nodes.op3 = {
+          id: 'op3',
+          kind: 'operator',
+          op: '+',
+          position: { x: 0, y: 0 },
+          chainId: null,
+          createdAt: 0,
+        };
+        opId = 'op3';
+      });
+    });
+    const renderer = renderNode(
+      <NodeContextMenu
+        nodeId={opId}
+        anchor={ANCHOR}
+        onDelete={jest.fn()}
+        onSelectGroup={jest.fn()}
+        onUnlinkFromParent={jest.fn()}
+        onLabel={jest.fn()}
+        onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
+        onDismiss={jest.fn()}
+      />,
+    );
+    expect(
+      renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Show slider'),
+    ).toHaveLength(0);
   });
 });
 
@@ -478,6 +572,7 @@ describe('ContextMenuOverlay', () => {
         onUnlinkFromParent={jest.fn()}
         onLabelNode={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
       />,
     );
     expect(renderer.toJSON()).toBeNull();
@@ -497,6 +592,7 @@ describe('ContextMenuOverlay', () => {
         onUnlinkFromParent={jest.fn()}
         onLabelNode={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
       />,
     );
 
@@ -519,6 +615,7 @@ describe('ContextMenuOverlay', () => {
         onUnlinkFromParent={jest.fn()}
         onLabelNode={jest.fn()}
         onCreateLink={jest.fn()}
+        onShowSlider={jest.fn()}
       />,
     );
 

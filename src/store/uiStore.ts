@@ -11,6 +11,13 @@ export type ContextMenu =
   | { kind: 'node'; nodeId: NodeId; anchor: Vec2 }
   | { kind: 'canvas'; anchor: Vec2 };
 
+/** §8.8 value-slider popover state — see `sliderState` below. */
+export interface SliderState {
+  nodeId: NodeId;
+  pinned: boolean;
+  offset: Vec2;
+}
+
 /** Live drag feedback for P3.5 / P3.6. Ephemeral: recomputed every frame from shared
  *  values, never written into the document or undo history (§11.4, §13). */
 export interface DragSnapState {
@@ -113,6 +120,38 @@ export interface UiState {
   dragSnap: DragSnapState | null;
   setDragSnap: (state: DragSnapState | null) => void;
 
+  /**
+   * Live pan/zoom during an active `Canvas` gesture (§7). Canvas's own pan/pinch/wheel
+   * drive Reanimated shared values every frame and only commit into `documentStore`'s
+   * `document.viewport` on release or debounce - a commit calls `notifyDocumentDirty`,
+   * so committing on every frame would spam autosave the same way a per-frame document
+   * write would (§7's "commit only on release"). Screen-space UI that must track the
+   * canvas live *during* a gesture instead of lagging a frame behind reads this - same
+   * reasoning `ViewportContext.tsx` already documents for node-drag, applied to
+   * whatever can't read the shared values directly via that context because it isn't
+   * mounted inside `Canvas` (the §8.8 slider popover and its connector line, so far).
+   * Null when no gesture is active; callers fall back to the committed viewport then.
+   */
+  liveViewport: { pan: Vec2; zoom: number } | null;
+  setLiveViewport: (viewport: { pan: Vec2; zoom: number } | null) => void;
+
+  /**
+   * The value-slider popover (§8.8, P6b.3). Opened explicitly from the cell context
+   * menu's `Show slider` item — it no longer follows selection automatically. `pinned`
+   * is the popover's own "keep open" checkbox: false (the default on open) means the
+   * next canvas tap elsewhere closes it, same as any other momentary prompt in this
+   * store; true suppresses that dismissal, and is also what gates the connector line
+   * back to the cell and the popover's own drag handle (`ValueSlider.tsx` reads
+   * `pinned` for both). `offset` is the popover's drag delta from its anchored
+   * position; it only moves while pinned, and is reset whenever the slider opens fresh
+   * or `pinned` is toggled.
+   */
+  sliderState: SliderState | null;
+  openSlider: (nodeId: NodeId) => void;
+  closeSlider: () => void;
+  setSliderPinned: (pinned: boolean) => void;
+  setSliderOffset: (offset: Vec2) => void;
+
   /** Settings sheet (§8.5, mode-strip cog). Ephemeral, same reasoning as every other
    *  prompt in this store: opening it is not a document edit, so it sits outside undo
    *  history rather than on `document`. */
@@ -164,6 +203,21 @@ export const useUiStore = create<UiState>((set) => ({
 
   dragSnap: null,
   setDragSnap: (dragSnap) => set({ dragSnap }),
+
+  liveViewport: null,
+  setLiveViewport: (liveViewport) => set({ liveViewport }),
+
+  sliderState: null,
+  openSlider: (nodeId) => set({ sliderState: { nodeId, pinned: false, offset: { x: 0, y: 0 } } }),
+  closeSlider: () => set({ sliderState: null }),
+  setSliderPinned: (pinned) =>
+    set((state) =>
+      state.sliderState
+        ? { sliderState: { ...state.sliderState, pinned, offset: { x: 0, y: 0 } } }
+        : state,
+    ),
+  setSliderOffset: (offset) =>
+    set((state) => (state.sliderState ? { sliderState: { ...state.sliderState, offset } } : state)),
 
   settingsVisible: false,
   openSettings: () => set({ settingsVisible: true }),
