@@ -35,6 +35,10 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
   const identityHue = useSourceIdentityHue(id);
   const groupPosition = useGroupPosition(id, node?.chainId ?? null);
   const inputRef = useRef<TextInput>(null);
+  // Set for the duration of the auto-pan effect's own programmatic blur (below), so
+  // `onBlur`'s `deselectNode` (a *real* blur - the user tapped away, or similar) can tell
+  // the difference and skip itself for this one. See that effect for why this exists.
+  const suppressBlurDeselect = useRef(false);
 
   // Web only, same trade as Canvas.tsx's onWheel and AppShell's keydown listener (no DOM lib
   // in this project's tsconfig). react-native-gesture-handler's web backend treats a bubbling
@@ -126,6 +130,15 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
     // this input's focus state — only a hardware key pressed mid-pan would be missed, and
     // even then only in a JS-side `pointerEvents="none"` field like this one, not by having
     // no visible caret.
+    //
+    // `suppressBlurDeselect` guards against a second regression this same blur call caused,
+    // also only reproducible on a real device: `.blur()` synchronously fires this input's own
+    // `onBlur={deselectNode}` below, which clears `editingNodeId`/`selectedNodeId` and — for
+    // an already-non-empty cell — commits and fully exits edit mode, same as a genuine blur
+    // (tapping away) would. The *next* keystroke then lands with nothing selected, which
+    // `dispatchEditorCommand`'s digit case reads as "start a fresh cell" (`addNumberNode`) —
+    // reported live as an extra stray cell appearing mid-type. `deselectNode` is exactly
+    // right for a real blur; it must not fire for this purely-cosmetic, DOM-only one.
     const inputNode: any =
       Platform.OS === 'web' && inputRef.current ? (inputRef.current as any) : null;
     const canBlurFocus =
@@ -141,8 +154,14 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
       },
       canBlurFocus
         ? {
-            onWillPan: () => inputNode.blur(),
-            onSettled: () => inputNode.focus({ preventScroll: true }),
+            onWillPan: () => {
+              suppressBlurDeselect.current = true;
+              inputNode.blur();
+            },
+            onSettled: () => {
+              inputNode.focus({ preventScroll: true });
+              suppressBlurDeselect.current = false;
+            },
           }
         : undefined,
     );
@@ -233,7 +252,12 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
           value={display}
           onChangeText={handleChangeText}
           onKeyPress={handleKeyPress}
-          onBlur={deselectNode}
+          onBlur={() => {
+            // See the auto-pan effect above: a blur it triggers itself (purely to dodge a
+            // WebKit scroll heuristic) must not also exit edit mode the way a real one does.
+            if (suppressBlurDeselect.current) return;
+            deselectNode();
+          }}
           // Native has no browser to scroll — RN's own `autoFocus` is fine there. Web
           // focuses itself instead, via the effect above, specifically so it can pass
           // `preventScroll: true` (no such option on this prop) and keep the keypad from

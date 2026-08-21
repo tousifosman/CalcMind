@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text, TextInput } from 'react-native';
+import { Platform, Text, TextInput } from 'react-native';
 import { act } from 'react-test-renderer';
 import { useSharedValue } from 'react-native-reanimated';
 import { NumberNode } from './NumberNode';
@@ -306,5 +306,53 @@ describe('NumberNode auto-pan-to-edited-cell (§7 P7 follow-up)', () => {
       }),
       undefined,
     );
+  });
+
+  test('a real blur exits edit mode as before; the auto-pan\'s own blur during a pan does not', () => {
+    // Regression test: `.blur()` called for the pan (below) fires this input's own
+    // `onBlur={deselectNode}` just like a genuine blur would - without the suppression this
+    // guards, panning while editing exited edit mode outright, and the *next* digit press
+    // landed with nothing selected, which `dispatchEditorCommand` reads as "start a fresh
+    // cell" - reported live as a stray extra cell appearing mid-type.
+    const originalOS = Platform.OS;
+    (Platform as { OS: string }).OS = 'web';
+    try {
+      const id = addNumberNode({ x: 0, y: 0 }, '5');
+      act(() => editNumberNode(id));
+
+      let capturedCallbacks: { onWillPan?: () => void; onSettled?: () => void } | undefined;
+      const panIntoView = jest.fn(
+        (
+          _rect: unknown,
+          callbacks?: { onWillPan?: () => void; onSettled?: () => void },
+        ) => {
+          capturedCallbacks = callbacks;
+        },
+      );
+      const renderer = renderNode(
+        <ViewportStub panIntoView={panIntoView}>
+          <NumberNode id={id} />
+        </ViewportStub>,
+      );
+      expect(capturedCallbacks?.onWillPan).toBeDefined();
+      expect(capturedCallbacks?.onSettled).toBeDefined();
+
+      // Pan starts: NumberNode's own onWillPan arms the guard and calls the (under Jest,
+      // inert - there's no real DOM event system here) `.blur()`.
+      act(() => capturedCallbacks!.onWillPan!());
+      // A blur landing mid-pan (what `.blur()` above would trigger on a real device) must
+      // not exit edit mode.
+      act(() => renderer.root.findByType(TextInput).props.onBlur());
+      expect(useUiStore.getState().editingNodeId).toBe(id);
+      expect(useDocumentStore.getState().document.nodes[id]).toBeDefined();
+
+      // Pan settles: refocuses, disarms the guard.
+      act(() => capturedCallbacks!.onSettled!());
+      // A blur after settling is a real one again.
+      act(() => renderer.root.findByType(TextInput).props.onBlur());
+      expect(useUiStore.getState().editingNodeId).toBeNull();
+    } finally {
+      (Platform as { OS: string }).OS = originalOS;
+    }
   });
 });

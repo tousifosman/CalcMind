@@ -8,12 +8,12 @@
 // dimmed rather than flashing empty; engine errors render as explanations from
 // `explainEngineError`, never as a bare glyph (§11.2). `CircularReference` names the cycle and
 // offers Unlink on the DFS closing edge (P6.3).
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
 import { unlinkReference, finishEditingLabel, setNodeLabel } from '../store/commands';
-import { rolePalette, glyphColor } from '../ui/tokens';
+import { rolePalette, glyphColor, nodeHeightFor } from '../ui/tokens';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
 import {
@@ -29,6 +29,7 @@ import { useUiStore } from '../store/uiStore';
 import { useNodeSelected, useNodeGroupSelected } from './useNodeSelected';
 import { useGroupPosition } from './useGroupPosition';
 import { usePreferencesStore } from '../store/preferencesStore';
+import { useCanvasViewportOptional } from '../canvas/ViewportContext';
 
 /** Opacity for a §9 Stale result — previous value stays readable but clearly not current. */
 export const STALE_RESULT_OPACITY = 0.45;
@@ -46,6 +47,29 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
   const groupPosition = useGroupPosition(id, node?.chainId ?? null);
   const glyphTextStyle = useGlyphTextStyle();
   const fontSize = usePreferencesStore((s) => s.numeralFontSize);
+
+  // §7 auto-pan (P7 follow-up, §12.5 opt-out): `dispatchEditorCommand`'s `equals` case
+  // selects a chain's freshly-computed result the moment it exists (§8.7 - the natural next
+  // action is continuation from it), the same way an added/typed-into number becomes the
+  // edit target in `NumberNode`'s own auto-pan effect. A result can't enter edit mode (it has
+  // none), so `selected` is this kind's analogous trigger — without it, a long chain's result
+  // could compute already past the visible edge with nothing bringing it into view, reported
+  // live (`123 × 33 × 1,000 × 33,333 =` landing off-screen). No blur/focus concerns here,
+  // unlike `NumberNode`'s version of this effect: a result has no `TextInput` to protect.
+  const canvasViewport = useCanvasViewportOptional();
+  const autoPanEnabled = usePreferencesStore((s) => s.autoPanToEditedCell);
+  useEffect(() => {
+    if (!selected || !autoPanEnabled || !canvasViewport || !node || node.kind !== 'result') {
+      return;
+    }
+    canvasViewport.panIntoView({
+      x: node.position.x,
+      y: node.position.y,
+      width: widthOf(node, getDeviceLocale(), fontSize),
+      height: nodeHeightFor(fontSize),
+    });
+  }, [selected, autoPanEnabled, canvasViewport, node, fontSize]);
+
   if (!node || node.kind !== 'result') return null;
 
   const locale = getDeviceLocale();
