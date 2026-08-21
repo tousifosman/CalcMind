@@ -30,7 +30,7 @@ import Animated, {
 import { useDocumentStore } from '../store/documentStore';
 import { useUiStore } from '../store/uiStore';
 import { Vec2, ZOOM_MIN, ZOOM_MAX } from '../model/types';
-import { CanvasViewportContext } from './ViewportContext';
+import { CanvasViewportContext, type AutoPanCallbacks } from './ViewportContext';
 import { computeAutoPanTarget, type WorldRect } from './autoPan';
 
 const WHEEL_COMMIT_DEBOUNCE_MS = 200;
@@ -99,18 +99,29 @@ export function Canvas({ children, style, onTap, onLongPress }: CanvasProps) {
   // ViewportContext.tsx. Not a gesture, so it doesn't fit the pan/pinch handlers' worklet
   // shape above; reads the shared values from the JS thread (fine, just not reactive) and
   // animates toward the computed target the same "commit only on release" way a real
-  // gesture does, via the `finished` callback rather than a fixed delay.
-  function panIntoView(rect: WorldRect) {
+  // gesture does, via the `finished` callback rather than a fixed delay. `callbacks` fires
+  // only around an actual pan - never for a rect that already fit, so the common case (a
+  // cell already comfortably in view) never pays for whatever the caller's `onWillPan`/
+  // `onSettled` do.
+  function panIntoView(rect: WorldRect, callbacks?: AutoPanCallbacks) {
     const target = computeAutoPanTarget(
       rect,
       { pan: { x: panX.value, y: panY.value }, zoom: zoom.value },
       canvasSize.current,
     );
-    if (!target) return;
+    const onSettled = callbacks?.onSettled;
+    if (!target) {
+      onSettled?.();
+      return;
+    }
+    callbacks?.onWillPan?.();
     panX.value = withTiming(target.x, { duration: AUTO_PAN_DURATION_MS });
     panY.value = withTiming(target.y, { duration: AUTO_PAN_DURATION_MS }, (finished) => {
       'worklet';
-      if (finished) runOnJS(commitViewport)();
+      if (finished) {
+        runOnJS(commitViewport)();
+        if (onSettled) runOnJS(onSettled)();
+      }
     });
   }
 

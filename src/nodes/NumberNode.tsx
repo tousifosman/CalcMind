@@ -114,12 +114,38 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
     if (!isEditing || !autoPanEnabled || !canvasViewport || !node || node.kind !== 'number') {
       return;
     }
-    canvasViewport.panIntoView({
-      x: node.position.x,
-      y: node.position.y,
-      width: widthOf(node, getDeviceLocale(), fontSize),
-      height: nodeHeightFor(fontSize),
-    });
+    // Web only: blur this input for the pan's duration, refocusing (still `preventScroll`,
+    // same as the effect above) once it settles. Reported live on a real device: the pan
+    // itself was enough to bring the keyboard-drags-the-page bug back, even though nothing
+    // here calls `.focus()` or `scrollIntoView()` again - WebKit can re-trigger its own
+    // "scroll the focused control into view" heuristic purely from a *focused* element's
+    // bounding rect changing, including via a CSS transform, independent of any new focus
+    // call (this is a different trigger than the one-time `autoFocus` HTML-attribute case
+    // the effect above already covers). Losing DOM focus for ~`AUTO_PAN_DURATION_MS` costs
+    // nothing the on-screen keypad needs — it dispatches through `onKeyPress` regardless of
+    // this input's focus state — only a hardware key pressed mid-pan would be missed, and
+    // even then only in a JS-side `pointerEvents="none"` field like this one, not by having
+    // no visible caret.
+    const inputNode: any =
+      Platform.OS === 'web' && inputRef.current ? (inputRef.current as any) : null;
+    const canBlurFocus =
+      inputNode &&
+      typeof inputNode.blur === 'function' &&
+      typeof inputNode.focus === 'function';
+    canvasViewport.panIntoView(
+      {
+        x: node.position.x,
+        y: node.position.y,
+        width: widthOf(node, getDeviceLocale(), fontSize),
+        height: nodeHeightFor(fontSize),
+      },
+      canBlurFocus
+        ? {
+            onWillPan: () => inputNode.blur(),
+            onSettled: () => inputNode.focus({ preventScroll: true }),
+          }
+        : undefined,
+    );
   }, [isEditing, autoPanEnabled, canvasViewport, node, fontSize]);
 
   if (!node || node.kind !== 'number') return null;

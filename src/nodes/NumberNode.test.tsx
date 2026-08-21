@@ -244,12 +244,19 @@ describe('NumberNode auto-pan-to-edited-cell (§7 P7 follow-up)', () => {
     );
 
     const node = useDocumentStore.getState().document.nodes[id]!;
-    expect(panIntoView).toHaveBeenCalledWith({
-      x: 40,
-      y: 60,
-      width: widthOf(node, 'en-US', usePreferencesStore.getState().numeralFontSize),
-      height: nodeHeightFor(usePreferencesStore.getState().numeralFontSize),
-    });
+    // Second arg (the blur/refocus callbacks - see NumberNode.tsx's own comment) is only
+    // ever populated on a real web DOM ref, which react-test-renderer's TextInput mock
+    // doesn't provide - `undefined` here is the correct, expected value under Jest, not a
+    // gap in this test.
+    expect(panIntoView).toHaveBeenCalledWith(
+      {
+        x: 40,
+        y: 60,
+        width: widthOf(node, 'en-US', usePreferencesStore.getState().numeralFontSize),
+        height: nodeHeightFor(usePreferencesStore.getState().numeralFontSize),
+      },
+      undefined,
+    );
   });
 
   test('does not call panIntoView for a cell that is not the edit target', () => {
@@ -297,6 +304,7 @@ describe('NumberNode auto-pan-to-edited-cell (§7 P7 follow-up)', () => {
       expect.objectContaining({
         width: widthOf(node, 'en-US', usePreferencesStore.getState().numeralFontSize),
       }),
+      undefined,
     );
   });
 });
