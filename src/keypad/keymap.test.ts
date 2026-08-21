@@ -1019,6 +1019,45 @@ describe('dispatchEditorCommand: Select-group mode (§8.5)', () => {
     expect(nodes()[contChain.members[1]!]).toMatchObject({ kind: 'operator', op: '×' });
     expect(contChain.members[2]).toBe(selectedId);
   });
+
+  test('createLink on a group with a result links that result', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '10');
+    const { operatorId: op, numberId: b } = appendOperatorAndNumber(a, '+');
+    setNodeRaw(b, '5');
+    appendEqualsNode(b);
+    const result = Object.values(nodes()).find((n) => n.kind === 'result')!;
+    selectGroup(op);
+
+    dispatchEditorCommand({ region: 'createLink' });
+
+    // Group selection is cleared by the reference's own selection, same as the
+    // operator-continuation case above.
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(0);
+    const selectedId = useUiStore.getState().selectedNodeId!;
+    const selected = nodes()[selectedId];
+    expect(selected).toMatchObject({ kind: 'reference', targetNodeId: result.id });
+    // Unlike continuation, the new reference isn't attached to any chain.
+    expect(selected!.chainId).toBeNull();
+  });
+
+  test('createLink on a group without a result is a no-op', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const op = addOperatorNode({ x: 50, y: 0 }, '+');
+    const b = addNumberNode({ x: 84, y: 0 }, '2');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains.ch = { id: 'ch', members: [a, op, b], anchor: { x: 0, y: 0 } };
+      draft.nodes[a].chainId = 'ch';
+      draft.nodes[op].chainId = 'ch';
+      draft.nodes[b].chainId = 'ch';
+    });
+    selectGroup(op);
+    const before = Object.keys(nodes()).length;
+
+    dispatchEditorCommand({ region: 'createLink' });
+
+    expect(Object.keys(nodes())).toHaveLength(before);
+    expect(useUiStore.getState().groupSelectedIds.size).toBe(3);
+  });
 });
 
 describe('dispatchEditorCommand: undo / redo and Escape dismiss (P7.2)', () => {

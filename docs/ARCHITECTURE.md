@@ -706,9 +706,12 @@ operators are visually separated from digits.
   for a selected **number**, **result**, or **live reference** — same eligibility as the
   `Create link` context-menu item (§8.6), so chaining a link off an existing link works from
   the keypad too; a **dangling** reference (target gone) stays disabled, same as every other
-  data-entry key. Disabled during Select group and Select all regardless. Pressing it calls the
-  same `createLinkToValue` the context-menu item uses — a free reference near the selected
-  value, with no bundled operator or empty number.
+  data-entry key. Disabled during Select all. During Select group it follows the same §8.7
+  carve-out as the operator column: enabled when the group contains a **result**, so a
+  selected chain-with-result can be linked without first collapsing the group down to just the
+  result cell; disabled for a resultless group. Pressing it calls the same `createLinkToValue`
+  the context-menu item uses — a free reference near the selected value (or, in group mode, the
+  group's result), with no bundled operator or empty number.
 - **`Add components`** (squares-plus glyph) and **`Notes`** (pencil-square glyph) fill out the
   rest of the number-editing row, sharing `Create link`'s blue fill. Declared but not yet
   functional — same "affordance before behaviour" pattern as the context menu's `Copy` or the

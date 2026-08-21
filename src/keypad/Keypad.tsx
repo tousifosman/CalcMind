@@ -117,13 +117,16 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   // reference — same eligibility as the context-menu action of the same name
   // (`createLinkToValue`) and as `dispatchEditorCommand`'s `createLink` handler. A
   // dangling reference (target gone) does not count: there is nothing live to re-link.
+  // In group mode it follows `operatorsEnabled`'s rule: a group containing a result
+  // can link that result, same as it can continue from it (§8.7).
   const selectedNode = selectedNodeId ? nodes[selectedNodeId] : undefined;
   const selectedIsLiveReference =
     selectedNode?.kind === 'reference' && nodes[selectedNode.targetNodeId] !== undefined;
   const canCreateLink =
     !dataEntryLocked &&
-    !groupMode &&
-    (selectedKind === 'number' || selectedKind === 'result' || selectedIsLiveReference);
+    (groupMode
+      ? groupContainsResult(groupSelectedIds, nodes)
+      : selectedKind === 'number' || selectedKind === 'result' || selectedIsLiveReference);
 
   function press(key: KeypadKey) {
     if (dataEntryLocked) return;

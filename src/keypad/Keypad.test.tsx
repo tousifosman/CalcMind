@@ -757,9 +757,9 @@ describe('group-mode keypad (§8.5)', () => {
     expect(findByTestID(renderer, 'keypad-equals').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-digit-1').props.disabled).toBe(true);
     expect(findByTestID(renderer, 'keypad-backspace').props.disabled).toBeFalsy();
-    // `Create link` is not part of the §8.7-continuation carve-out that keeps
-    // operators enabled here — a group selection is not a single number/result.
-    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBe(true);
+    // `Create link` follows the same §8.7-continuation carve-out as operators — a
+    // group containing a result can link that result (§8.6).
+    expect(findByTestID(renderer, 'keypad-link').props.disabled).toBeFalsy();
   });
 });
 
