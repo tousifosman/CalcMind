@@ -701,9 +701,9 @@ operators are visually separated from digits.
   value, with no bundled operator or empty number.
 - **`Add components`** (squares-plus glyph) and **`Notes`** (pencil-square glyph) fill out the
   rest of the number-editing row, sharing `Create link`'s blue fill. Declared but not yet
-  functional — same "affordance before behaviour" pattern as the context menu's `Copy` or the
-  canvas menu's `Add number` / `Add graph` (§8.6): always rendered disabled, with no `onPress`,
-  until their behaviour is specified.
+  functional — same "affordance before behaviour" pattern as the canvas menu's `Add number` /
+  `Add graph` (§8.6): always rendered disabled, with no `onPress`, until their behaviour is
+  specified. The context menu's `Copy` used to be a third example here — it no longer is (§8.6).
 - The history row exposes **undo** and **redo** next to backspace — the same commands as
   `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` (or `Y`).
 - **Backspace on a single selection is kind-specific, not a blanket delete-the-cell.**
@@ -724,6 +724,16 @@ operators are visually separated from digits.
     back to a full deselect when there's no left neighbour (first member, or free).
   - Every other kind (paren, equals, reference) keeps the original behaviour: delete the cell,
     fully deselect.
+- **Digit / decimal / `+/-` on a selected operator target the operand to its right**, rather
+  than staying disabled (§8.5). A number there is edited in place — same as tapping that number
+  then typing, appending to whatever `raw` it already has. Nothing there yet (a bare trailing
+  operator, e.g. one backspace just emptied and deleted its own operand's cell, above; or an
+  operator directly before a paren group, implicit multiplication §10.2) inserts a fresh number
+  right there instead (`appendNumberNode`, which splices after any given member, not just at a
+  chain's end). A **linked cell** or a **result** to the right stays inert — neither is editable,
+  and splicing a fresh operand in front of one isn't grammatical — the keypad's own digit/decimal/
+  sign keys greying out (`rightChainNeighborId`, shared with `dispatchEditorCommand`) matches that
+  exactly. `()` and `=` are unaffected by this — an operator was never a target for either.
 - Pressing `=` on a chain selects the new **result** (not the `=` glyph) so the next operator
   is ready for continuation without an extra tap.
 - **`=` disables once its chain already has one** (§9: at most one `=` per chain). Selecting
@@ -802,11 +812,39 @@ operators are visually separated from digits.
   hue still reads from the caption and connectors.
 - `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
   nothing typed) discards it rather than leaving a blank cell on the canvas.
+- **Entering edit mode never scrolls the page on web.** A number cell's `TextInput` used RN's
+  own `autoFocus` prop, which on web becomes a literal HTML `autofocus` attribute — the browser's
+  own autofocus algorithm then scrolls its nearest scrollable ancestor to bring the newly-focused
+  input into view. That ancestor is the whole app's root container (`body`/`#root`,
+  `web/index.html`), so a cell added or edited near the canvas edge dragged the *entire* screen,
+  keypad included, along with it — reported live as "the keyboard moves." `NumberNode.tsx` now
+  focuses the input itself on web, via `.focus({ preventScroll: true })` in an effect (native
+  keeps the plain `autoFocus` prop — no browser to scroll there) — the one thing that suppresses
+  that browser-native scroll, since `autoFocus` itself takes no options. Only the canvas's own
+  pan (a deliberate gesture, or none at all here) should ever move where a cell sits on screen.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` and `Create link` on values
   (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
   `Create link` drops a free reference to the value near it — no operator, not attached to a
   chain — for a link the user wants to place and drag elsewhere rather than keep computing from
   immediately (§8.7's third path, alongside continuation and drag-to-link).
+- **`Copy` writes a cell's own value to the system clipboard** (`copyTextForNode`,
+  `engine/copyText.ts`) — the same display text its own component renders: a number's raw, a
+  result's (or stale result's) display, a live or dangling reference's resolved text. Disabled
+  for a kind with no value of its own (operator / paren / equals) or one not yet in a copyable
+  state (an empty or errored result). No undo entry — reading and writing the clipboard is not a
+  document mutation.
+- **`Copy As` → `Copy without result`** appears alongside `Copy` once the long-pressed cell is
+  part of the active group selection (`Select group` / `Select all`, below) — a lone cell has
+  nothing else worth copying "as." Tapping (or, on web, hovering) `Copy As` reveals the one item
+  as a nested row rather than opening a separate flyout sheet; both tap and hover only ever
+  *reveal*, never toggle back closed — a toggle let a mouse user's own hover-then-click sequence
+  collapse the row right as they went to tap the item underneath it (caught live). `Copy without
+  result` (`copyGroupWithoutResult`, `store/commands.ts`) copies every chain and free node in the
+  group selection, one per line: each chain renders as its formula with `=` and the result
+  dropped (`chainTextWithoutResult`) — `12 + 5 = 17` copies as `12 + 5`, not a dangling trailing
+  `=`. A lone free result contributes nothing, since results are never actually chainless in
+  practice (§9: a result's own `chainId` is its source chain), so this branch is defensive rather
+  than reachable through the ordinary command set today.
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`, `Select all`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
   Double-tap / double-click any cell is the fast path to the same command (dwell-free, no
@@ -1534,6 +1572,9 @@ it unclear which parts were claims about the present and which were intentions.
 | 23 | `Select group`/`Select all` merges the selection focus ring across interior seams (new `useNodeGroupSelected`, reusing the band's own `sideBorderWidths(groupPosition, …)` mask) rather than every member drawing a complete ring around itself | User asked for exactly this: a selected group should read as one big cell, not N individually-outlined ones. Each group member already drew its own full 4-sided ring (`selected` is true for every id in `groupSelectedIds`), so two flush, both-selected cells doubled up a border on the shared seam between them. Reusing the *band's* own group-position mask was the direct fix, but it had to be gated on group membership specifically (`useNodeGroupSelected`, not the general `useNodeSelected`) — an ordinary single selection (the lone keypad target, `selectedNodeId`) must keep its full ring even on a structurally mid-chain cell, since its neighbours are not selected and there is nothing to merge across; conflating the two would have silently broken every existing single-selection ring | Never — this is now the same code path the band uses, so it inherits whatever `sideBorderWidths` does |
 | 24 | Operator (and, on a selected result, `()`) keys tint to `Create link`'s blue whenever the press creates a new linked cell; selecting `=` leaves only the operator column active, with an operator now converting `=` into itself in place (`convertEqualsToOperator`) instead of no-op; `()` on a selected result wraps a new link in parens (`continueFromValueWithParens`) instead of no-op | Three related gaps the user named from using the keypad: (1) nothing signalled that an operator press on a selected result/free-number was about to spin off a link rather than extend in place — same blue as the existing `Create link` button, not a new colour, so it reads as the same promise; (2) `=`'s own P7.2 hard-stop (decision #22) only ever blocked every key uniformly, so the digit/paren/`Create link`/`=` keys still rendered enabled even though pressing them already no-op'd — a real UI/behaviour mismatch, not just a missing feature, since `dispatchEditorCommand` already rejected them; fixed by extending `Keypad.tsx`'s existing `selectionBlocksDigits`/`selectionBlocksNumberEditing` gates to also cover a selected equals kind, and by giving the one live exception (operator) real behaviour instead of leaving it disabled too — converting `=` in place mirrors `setOperatorSymbol`'s existing "replace an operator in place" rule, just for the terminator; (3) `()` on a selected result was a pure no-op inherited from the `result` block's blanket `return`, when by the same logic that already lets an operator continuation-link from a result, `()` should too — wrapped in parens specifically because that is what distinguishes the paren key from an operator key, not because parens were the only sensible choice | Never for the tint/hard-stop rules; revisit `()`-creates-a-link if a future request wants it to also apply to a selected free number or a `Select group` result the way operator continuation already does |
 | 25 | Backspace becomes kind-specific rather than a blanket delete-the-cell: disabled on a selected result; a number trims one digit at a time (editing or not) and only deletes once already empty; an operator deletes and selects its left chain neighbour instead of fully deselecting | User named all three from using the keypad. A result is derived, not user input, so backspace joins `=`'s own P7.2 hard-stop philosophy (decision #22) rather than deleting a finished formula's answer on the same key that erases every other cell — long-press → `Delete` remains for a deliberate removal. A number's old behaviour (tap-select, one backspace, whole cell gone) was a uniquely destructive interpretation of a key that erases one character everywhere else in the app, including this same number while it's actively being edited — unified the two paths (`selectedNode.raw` reads the same whether or not `editingNodeId` matches, so editing vs. tap-selected no longer need different branches) and made reaching `''` a resting state instead of an auto-discard, so committing a truly empty cell costs one more deliberate backspace. An operator landing on its left neighbour (new `leftChainNeighborId`, mirroring the neighbour `moveSelectionAlongChain`/P7.2 arrows already compute) turns backspacing along a chain into "keep going" instead of losing the selection after every cell | Never — paren/equals/reference intentionally keep the original delete-and-deselect behaviour since nobody has asked for those to change too |
+| 26 | A number cell entering edit mode on web focuses itself explicitly (`.focus({ preventScroll: true })`), instead of relying on RN's `autoFocus` prop | User reported the keypad visibly moving whenever a cell was added or edited near the canvas edge. Root cause: `autoFocus` becomes a literal HTML `autofocus` attribute on web, and the browser's own autofocus-scroll algorithm was scrolling the app's root container (`body`/`#root`) to bring the newly-focused input into view — dragging the *entire* screen, keypad included, since there was no code doing that on purpose. `preventScroll: true` has no equivalent prop on `autoFocus` itself, so the fix takes over the focus call rather than configuring the existing one; native keeps the plain prop, since there's no browser there to scroll. Verified live both ways: reverting the fix and re-running the same script reproduced a real 29px scroll on the exact repro; the fix took it to zero | Never — this is a bug fix, not a design trade-off; revisit only if RN's `autoFocus` itself ever grows a `preventScroll` option worth switching to |
+| 27 | Digit / decimal / `+/-` on a selected operator now target the chain member to its right (edit it if it's a number, insert one if there's nothing there) instead of staying disabled, except when that neighbour is a linked cell or a result | User named the exact three cases. The empty-operand deletion path decision #25 just shipped left a genuinely reachable state — a bare trailing operator with nothing after it — that digits still refused to do anything with; treating "no number cell to the right" as "make one" and "already a number cell there" as "edit it" covers that gap with the same `appendNumberNode` §8.5 already uses elsewhere for mid-chain insertion (it splices after any given member, not just at a chain's end, so no new plumbing was needed). The linked-cell/result exclusion mirrors every other place those two kinds are already treated as non-editable, non-target cells | Never for the two exclusions; revisit if a future request wants the same right-neighbour targeting for `()` or `=` on a selected operator too |
+| 28 | `Copy` writes a cell's own display text to the clipboard; `Copy As` → `Copy without result` (offered once the cell is part of a group selection) copies every chain/free node in that selection with `=` and the answer dropped, one per line | User asked for `Copy` (previously a permanently-disabled placeholder, per decision-adjacent §8.5/§8.6 prose) to actually work, plus a `Copy As` submenu on a group selection with one item for now. Reused each kind's own display-content function (`resultCellContent`, `referenceCellContent`, `formatForDisplay`) rather than re-deriving text, so the clipboard always matches what's on screen. `Copy As` reveals its one nested item on tap *or* hover (both requested explicitly) via `MenuItem.indent`/`onHoverIn` rather than a separate flyout sheet — simplest structure for exactly one item; both handlers only ever reveal, never toggle closed, after live testing showed a toggle let a mouse user's own hover-then-click collapse the row they were about to tap into. `Clipboard` comes from `'react-native'` directly (deprecated in RN core but still functional, and aliased to `react-native-web`'s own implementation for the web build via the existing `react-native$` webpack alias) rather than adding `@react-native-clipboard/clipboard` — no new native dependency for one string write | Migrate off RN core's `Clipboard` if it is ever actually removed rather than merely deprecated; revisit `Copy As`'s one-item menu if a second variant is requested |
 
 ## 17. Open questions
 

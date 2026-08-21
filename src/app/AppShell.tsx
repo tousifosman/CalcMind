@@ -34,6 +34,8 @@ import {
   repointReference,
   editNodeLabel,
   createLinkToValue,
+  copyNodeValue,
+  copyGroupWithoutResult,
 } from '../store/commands';
 import { isDanglingReference, isRepointTarget } from '../engine/reference';
 import { getDeviceLocale } from '../ui/locale';
@@ -201,6 +203,8 @@ export function AppShell() {
           onUnlinkFromParent={unlinkFromParent}
           onLabelNode={editNodeLabel}
           onCreateLink={createLinkToValue}
+          onCopy={copyNodeValue}
+          onCopyWithoutResult={copyGroupWithoutResult}
         />
         <DanglingRecoveryOverlay />
         <SettingsOverlay />

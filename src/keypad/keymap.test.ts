@@ -493,28 +493,6 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(useUiStore.getState().selectedNodeId).toBe(op.id);
   });
 
-  test('digit with an operator selected no-ops (does not append at chain end)', () => {
-    dispatchEditorCommand({ region: 'digit', value: '5' });
-    dispatchEditorCommand({ region: 'operator', op: '+' });
-    // Selection is on the empty number after `+`; move focus onto the operator
-    // (selectNode discards that empty placeholder — re-read members after).
-    const op = Object.values(useDocumentStore.getState().document.nodes).find(
-      (n) => n.kind === 'operator',
-    )!;
-    selectNode(op.id);
-    const before = useDocumentStore.getState().undoStack.length;
-    const membersBefore =
-      useDocumentStore.getState().document.chains[op.chainId!]!.members.length;
-
-    dispatchEditorCommand({ region: 'digit', value: '9' });
-
-    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
-    expect(
-      useDocumentStore.getState().document.chains[op.chainId!]!.members,
-    ).toHaveLength(membersBefore);
-    expect(useUiStore.getState().selectedNodeId).toBe(op.id);
-  });
-
   test('digit with a linked cell selected no-ops (does not append at chain end)', () => {
     dispatchEditorCommand({ region: 'digit', value: '3' });
     const numberId = useUiStore.getState().selectedNodeId!;
@@ -951,6 +929,122 @@ describe('dispatchEditorCommand: backspace on a selected operator lands on its l
     expect(nodes()[a]).toBeUndefined();
     expect(useUiStore.getState().selectedNodeId).toBeNull();
     expect(nodes()[numberId]).toBeDefined();
+  });
+});
+
+describe('dispatchEditorCommand: digit on a selected operator targets its right operand (§8.5)', () => {
+  test('no number cell to the right: inserts a fresh one with the typed digit', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const built = appendOperatorAndNumber(a, '+');
+    deleteNode(built.numberId); // same state a backspace-emptied-then-deleted operand leaves
+    selectNode(built.operatorId);
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+
+    const doc = useDocumentStore.getState().document;
+    const chain = doc.chains[doc.nodes[a]!.chainId!]!;
+    expect(chain.members).toHaveLength(3);
+    const newId = chain.members[2]!;
+    expect(doc.nodes[newId]).toMatchObject({ kind: 'number', raw: '9' });
+    expect(useUiStore.getState().selectedNodeId).toBe(newId);
+    expect(useUiStore.getState().editingNodeId).toBe(newId);
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before + 1);
+  });
+
+  test('a number cell to the right: edits it in place, appending rather than duplicating', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const built = appendOperatorAndNumber(a, '+');
+    setNodeRaw(built.numberId, '2');
+    selectNode(built.operatorId);
+    const membersBefore =
+      useDocumentStore.getState().document.chains[nodes()[a]!.chainId!]!.members.length;
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+
+    expect(nodes()[built.numberId]).toMatchObject({ kind: 'number', raw: '29' });
+    expect(useUiStore.getState().selectedNodeId).toBe(built.numberId);
+    expect(useUiStore.getState().editingNodeId).toBe(built.numberId);
+    const doc = useDocumentStore.getState().document;
+    expect(doc.chains[doc.nodes[a]!.chainId!]!.members).toHaveLength(membersBefore);
+  });
+
+  test('decimal and sign on the right neighbour follow the same one-separator / toggle rules as editing it directly', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const built = appendOperatorAndNumber(a, '+');
+    setNodeRaw(built.numberId, '2.5');
+    selectNode(built.operatorId);
+
+    dispatchEditorCommand({ region: 'decimal' }); // already has one — ignored
+    dispatchEditorCommand({ region: 'sign' });
+
+    expect(nodes()[built.numberId]).toMatchObject({ kind: 'number', raw: '-2.5' });
+  });
+
+  test('the cell to the right is a linked cell: digit no-ops', () => {
+    const chainId = 'c_op_ref_test';
+    const opId = 'n_op_ref_test_op';
+    const refId = 'n_op_ref_test_ref';
+    const source = addNumberNode({ x: 0, y: 0 }, '7');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains[chainId] = { id: chainId, members: [opId, refId], anchor: { x: 0, y: 0 } };
+      draft.nodes[opId] = {
+        id: opId,
+        kind: 'operator',
+        op: '+',
+        position: { x: 0, y: 0 },
+        chainId,
+        createdAt: Date.now(),
+      };
+      draft.nodes[refId] = {
+        id: refId,
+        kind: 'reference',
+        position: { x: 40, y: 0 },
+        chainId,
+        createdAt: Date.now(),
+        targetNodeId: source,
+      };
+    });
+    selectNode(opId);
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(useUiStore.getState().selectedNodeId).toBe(opId);
+    expect(useDocumentStore.getState().document.chains[chainId]!.members).toEqual([opId, refId]);
+  });
+
+  test('the cell to the right is a result: digit no-ops', () => {
+    const chainId = 'c_op_result_test';
+    const opId = 'n_op_result_test_op';
+    const resultId = 'n_op_result_test_result';
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains[chainId] = { id: chainId, members: [opId, resultId], anchor: { x: 0, y: 0 } };
+      draft.nodes[opId] = {
+        id: opId,
+        kind: 'operator',
+        op: '+',
+        position: { x: 0, y: 0 },
+        chainId,
+        createdAt: Date.now(),
+      };
+      draft.nodes[resultId] = {
+        id: resultId,
+        kind: 'result',
+        position: { x: 40, y: 0 },
+        chainId,
+        createdAt: Date.now(),
+        sourceChainId: chainId,
+      };
+    });
+    selectNode(opId);
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(useUiStore.getState().selectedNodeId).toBe(opId);
   });
 });
 

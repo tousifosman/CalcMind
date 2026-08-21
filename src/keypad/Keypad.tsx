@@ -23,7 +23,7 @@ import { glyphColor, identityHues, rolePalette } from '../ui/tokens';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
 import { clearDocument } from '../store/commands';
-import { Digit, KeypadKey, groupContainsResult, chainHasEquals } from './keymap';
+import { Digit, KeypadKey, groupContainsResult, chainHasEquals, rightChainNeighborId } from './keymap';
 
 export type { Digit, KeypadKey } from './keymap';
 export { groupContainsResult, chainHasEquals } from './keymap';
@@ -83,14 +83,25 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   // Select all (§8.6): data-entry keys have no single target — gray them out.
   // Mode strip (and hardware undo/redo) stay available.
   const dataEntryLocked = allSelected;
-  // Results, operators, and linked cells are not number-edit targets — digit keys
-  // would otherwise no-op silently (results) or append at chain end (operators /
-  // references). Operators on a result/reference/number still continue (§8.7).
+  // Results and linked cells are not number-edit targets — digit keys would otherwise
+  // no-op silently (results) or append at chain end (references). Operators on a
+  // result/reference/number still continue (§8.7).
   const selectedNodeId = useUiStore((state) => state.selectedNodeId);
   const editingNodeId = useUiStore((state) => state.editingNodeId);
-  const selectedKind = useDocumentStore((state) =>
-    selectedNodeId ? state.document.nodes[selectedNodeId]?.kind : undefined,
-  );
+  const selectedNode = selectedNodeId ? nodes[selectedNodeId] : undefined;
+  const selectedKind = selectedNode?.kind;
+  // §8.5: a selected operator now targets the operand to its *right* (typing edits that
+  // number cell, or creates one if there isn't one yet, `dispatchEditorCommand`'s own
+  // digit/decimal/sign case) — enabled, except when that right neighbour is a linked
+  // cell or a result, neither of which is editable or grammatical to splice a fresh
+  // operand in front of. `rightChainNeighborId` is the same lookup the dispatch function
+  // uses, so the two can't disagree about which state blocks the keys.
+  const operatorRightId =
+    selectedKind === 'operator' && selectedNode ? rightChainNeighborId(selectedNode) : null;
+  const operatorRightNeighborKind = operatorRightId ? nodes[operatorRightId]?.kind : undefined;
+  const operatorBlocksDigits =
+    selectedKind === 'operator' &&
+    (operatorRightNeighborKind === 'reference' || operatorRightNeighborKind === 'result');
   // §9: a selected `=` also blocks digits/paren below, same as a result — its whole
   // keypad surface (beyond an operator, which converts it in place, and history) is
   // inert, matching `dispatchEditorCommand`'s own hard stop for a selected equals cell.
@@ -100,8 +111,8 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   const selectionBlocksDigits =
     selectedKind === 'reference' ||
     selectedKind === 'result' ||
-    selectedKind === 'operator' ||
-    selectedKind === 'equals';
+    selectedKind === 'equals' ||
+    operatorBlocksDigits;
   // `()` is for operands; disable it while an operator or equals is selected (operator
   // keys still replace the symbol; equals converts to the pressed operator — neither is
   // a paren target). Decimal and `+/-` used to share this rule too, but they're number
@@ -138,7 +149,6 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   // reference — same eligibility as the context-menu action of the same name
   // (`createLinkToValue`) and as `dispatchEditorCommand`'s `createLink` handler. A
   // dangling reference (target gone) does not count: there is nothing live to re-link.
-  const selectedNode = selectedNodeId ? nodes[selectedNodeId] : undefined;
   const selectedIsLiveReference =
     selectedNode?.kind === 'reference' && nodes[selectedNode.targetNodeId] !== undefined;
   const canCreateLink =
@@ -321,8 +331,8 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
               style={styles.linkKey}
             />
             {/* Declared, not yet functional — same "affordance before behaviour" pattern as
-                the context menu's `Copy` / canvas menu's `Add number` / `Add graph`. Shares
-                `Create link`'s blue fill; behaviour to follow. */}
+                the canvas menu's `Add number` / `Add graph`. Shares `Create link`'s blue
+                fill; behaviour to follow. */}
             <Key
               label="Add components"
               icon={<SquaresPlusIcon size={20} color={glyphColor} />}

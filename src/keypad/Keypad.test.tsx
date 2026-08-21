@@ -127,7 +127,7 @@ describe('Keypad', () => {
     expect(useUiStore.getState().settingsVisible).toBe(true);
   });
 
-  test('digit keys disable while a linked cell, result, or operator is selected', () => {
+  test('digit keys disable while a linked cell or result is selected; an operator depends on its right neighbour', () => {
     const presses: KeypadKey[] = [];
     const n = addNumberNode({ x: 0, y: 0 }, '3');
     appendEqualsNode(n);
@@ -165,16 +165,21 @@ describe('Keypad', () => {
     act(() => {
       selectNode(operatorId);
     });
-    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
-    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
-    expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
+    // §8.5: this operator's right neighbour is `continueFromValue`'s own empty operand —
+    // a number cell, so digits now target it instead of disabling. `()` stays disabled;
+    // an operator is never a paren target.
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBeFalsy();
     expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBe(true);
 
     act(() => {
       selectNode(freeOp);
     });
-    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
-    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
+    // A free (chainless) operator has no right neighbour to speak of — same "add one"
+    // case, so digits stay enabled here too.
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBeFalsy();
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBeFalsy();
 
     act(() => {
       selectNode(n);
@@ -183,6 +188,66 @@ describe('Keypad', () => {
     expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBeFalsy();
     expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBeFalsy();
     expect(findByTestID(renderer, 'keypad-paren').props.disabled).toBeFalsy();
+  });
+
+  test('digit keys disable on a selected operator whose right neighbour is a linked cell or a result (§8.5)', () => {
+    const source = addNumberNode({ x: 0, y: 0 }, '7');
+    let opId!: string;
+    let refId!: string;
+    act(() => {
+      opId = addOperatorNode({ x: 0, y: 0 }, '+');
+      refId = 'ref_right_of_op';
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.chains.ch_op_ref = { id: 'ch_op_ref', members: [opId, refId], anchor: { x: 0, y: 0 } };
+        draft.nodes[opId]!.chainId = 'ch_op_ref';
+        draft.nodes[refId] = {
+          id: refId,
+          kind: 'reference',
+          position: { x: 40, y: 0 },
+          chainId: 'ch_op_ref',
+          createdAt: 0,
+          targetNodeId: source,
+        };
+      });
+      selectNode(opId);
+    });
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-decimal').props.disabled).toBe(true);
+    expect(findByTestID(renderer, 'keypad-sign').props.disabled).toBe(true);
+
+    let resultOpId!: string;
+    act(() => {
+      resultOpId = 'op_right_of_result';
+      useDocumentStore.getState().applyCommand((draft) => {
+        draft.chains.ch_op_result = {
+          id: 'ch_op_result',
+          members: [resultOpId, 'result_right_of_op'],
+          anchor: { x: 0, y: 0 },
+        };
+        draft.nodes[resultOpId] = {
+          id: resultOpId,
+          kind: 'operator',
+          op: '+',
+          position: { x: 0, y: 0 },
+          chainId: 'ch_op_result',
+          createdAt: 0,
+        };
+        draft.nodes.result_right_of_op = {
+          id: 'result_right_of_op',
+          kind: 'result',
+          position: { x: 40, y: 0 },
+          chainId: 'ch_op_result',
+          createdAt: 0,
+          sourceChainId: 'ch_op_result',
+        };
+      });
+      selectNode(resultOpId);
+    });
+    expect(findByTestID(renderer, 'keypad-digit-5').props.disabled).toBe(true);
   });
 
   test('dismissing via the mode strip hides the keypad, outside undo history', () => {

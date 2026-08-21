@@ -6,6 +6,7 @@
 // reflowChain / finalizeChain. Typing still builds chains through appendMembersToChain
 // (P2.8, decision #16); drag-snap commits go through the P3.4 commands below, which
 // share the same §8.3 bookkeeping (dissolve / empty-delete / drop result with `=`).
+import { Clipboard } from 'react-native';
 import { setAutosaveSuppressed, useDocumentStore } from './documentStore';
 import { historyTop, type HistoryEntry } from './undo';
 import { useUiStore } from './uiStore';
@@ -34,6 +35,7 @@ import {
 } from '../engine/reference';
 import { parseComputedDisplay } from '../engine/format';
 import { identitySourceId } from '../engine/identity';
+import { copyTextForNode, chainTextWithoutResult } from '../engine/copyText';
 
 export function renameDocument(name: string): void {
   useDocumentStore.getState().applyCommand((draft) => {
@@ -881,6 +883,54 @@ export function deleteGroup(ids: Iterable<NodeId>): void {
       finalizeChain(draft, chainId);
     }
   });
+}
+
+/** §8.6 `Copy`: writes this cell's own value to the system clipboard. No document
+ *  mutation, so no undo entry — a no-op (and no clipboard write) for a kind with no
+ *  value of its own, or a value not yet in a copyable state, same guard the context
+ *  menu's own `disabled` state already applies (checked again here so a stale press,
+ *  e.g. a hardware-triggered one, can't slip a write through regardless). */
+export function copyNodeValue(nodeId: NodeId): void {
+  const { nodes } = useDocumentStore.getState().document;
+  const text = copyTextForNode(nodeId, nodes, getDeviceLocale());
+  if (text !== null) Clipboard.setString(text);
+}
+
+/** §8.6 `Copy As` → `Copy without result`: every chain and free node in the current
+ *  Select-group / Select-all set, each chain rendered as its formula minus `=` and the
+ *  answer ({@link chainTextWithoutResult}), free values rendered the same as a lone
+ *  `Copy` — one per line, so a multi-chain Select-all selection copies as one block. A
+ *  lone free result contributes nothing (there is no "without result" version of just
+ *  the result itself) rather than a stray empty line. Reads the current group selection
+ *  itself, same as `selectAll`, so the context menu can wire this with no adapter. */
+export function copyGroupWithoutResult(): void {
+  const { nodes, chains } = useDocumentStore.getState().document;
+  const groupSelectedIds = useUiStore.getState().groupSelectedIds;
+  const locale = getDeviceLocale();
+
+  const chainIds = new Set<ChainId>();
+  const freeNodeIds: NodeId[] = [];
+  for (const id of groupSelectedIds) {
+    const node = nodes[id];
+    if (!node) continue;
+    if (node.chainId !== null) chainIds.add(node.chainId);
+    else freeNodeIds.push(id);
+  }
+
+  const lines: string[] = [];
+  for (const chainId of chainIds) {
+    const chain = chains[chainId];
+    if (!chain) continue;
+    const text = chainTextWithoutResult(chain, nodes, locale);
+    if (text !== '') lines.push(text);
+  }
+  for (const id of freeNodeIds) {
+    if (nodes[id]?.kind === 'result') continue;
+    const text = copyTextForNode(id, nodes, locale);
+    if (text !== null) lines.push(text);
+  }
+
+  if (lines.length > 0) Clipboard.setString(lines.join('\n'));
 }
 
 /**

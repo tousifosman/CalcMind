@@ -235,6 +235,21 @@ function leftChainNeighborId(node: CalcNode): NodeId | null {
   return chain.members[index - 1] ?? null;
 }
 
+/** The chain member immediately to the right of `node`, or `null` when there isn't one
+ *  (chain's last member, or the node isn't chained). Exported — shared by
+ *  {@link dispatchEditorCommand}'s own operator-digit handling below (§8.5: typing while
+ *  an operator is selected targets the operand to its right) and `Keypad.tsx`'s
+ *  disabled-state computation for the same rule, so the on-screen key and the dispatch
+ *  function can't disagree about which cell a digit lands in. */
+export function rightChainNeighborId(node: CalcNode): NodeId | null {
+  if (node.chainId === null) return null;
+  const chain = useDocumentStore.getState().document.chains[node.chainId];
+  if (!chain) return null;
+  const index = chain.members.indexOf(node.id);
+  if (index === -1) return null;
+  return chain.members[index + 1] ?? null;
+}
+
 function moveSelectionAlongChain(selectedId: NodeId | null, direction: 'left' | 'right'): void {
   if (!selectedId) return;
   const { document } = useDocumentStore.getState();
@@ -600,11 +615,39 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     case 'digit':
     case 'decimal':
     case 'sign': {
-      // Operator cells are not number-edit targets (keypad digits are disabled);
-      // do not append a fresh number at the chain end.
-      if (selectedNode?.kind === 'operator') return;
-
       const char = command.region === 'digit' ? command.value : command.region === 'decimal' ? '.' : '-';
+
+      // An operator itself never takes text input, but §8.5 wants its *right* operand
+      // reachable from here rather than silently no-opping: typing while an operator is
+      // selected edits the number cell right of it, same as tapping that number then
+      // typing (below). Nothing there yet — a bare trailing operator, e.g. one backspace
+      // just emptied and deleted its operand's cell, or an operator directly before a
+      // paren group (implicit multiplication, §10.2) — inserts a fresh number with the
+      // typed value instead, same `appendNumberNode` any other selected node uses further
+      // down. A linked cell or a result to the right can't be edited and isn't
+      // grammatical to splice a fresh operand in front of, so digits stay inert there,
+      // same as every other key a result itself already rejects (`Keypad.tsx`'s own
+      // disabled computation mirrors this via the same `rightChainNeighborId`).
+      if (selectedNode?.kind === 'operator') {
+        const rightId = rightChainNeighborId(selectedNode);
+        const rightNode = rightId ? useDocumentStore.getState().document.nodes[rightId] : undefined;
+        if (rightNode?.kind === 'reference' || rightNode?.kind === 'result') return;
+        if (rightNode?.kind === 'number') {
+          editNumberNode(rightNode.id);
+          if (command.region === 'decimal' && rightNode.raw.includes('.')) return;
+          if (command.region === 'sign') {
+            setNodeRaw(
+              rightNode.id,
+              rightNode.raw.startsWith('-') ? rightNode.raw.slice(1) : `-${rightNode.raw}`,
+            );
+          } else {
+            setNodeRaw(rightNode.id, rightNode.raw + char);
+          }
+          return;
+        }
+        editNumberNode(appendNumberNode(selectedNode.id, char));
+        return;
+      }
 
       if (editingNumber) {
         if (command.region === 'decimal' && editingNumber.raw.includes('.')) return; // one separator only

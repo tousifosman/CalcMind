@@ -57,6 +57,19 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
     const inputNode: any = inputRef.current;
     if (!inputNode || typeof inputNode.addEventListener !== 'function') return;
 
+    // `autoFocus` (below) becomes a literal HTML `autofocus` attribute on web, and the
+    // browser's own autofocus algorithm scrolls its nearest scrollable ancestor to bring
+    // the newly-focused input into view — here, that's the whole app's root container
+    // (`body`/`#root`, `web/index.html`), so a cell added near the canvas edge dragged
+    // the *entire* screen, keypad included, rather than leaving the keypad fixed and
+    // letting only the canvas itself account for the cell's position. Reported live: the
+    // keypad visibly shifted on every off-screen add/edit. Calling `.focus()` ourselves
+    // with `preventScroll: true` is the one thing that suppresses that browser-native
+    // scroll — there's no prop for it, `autoFocus` itself doesn't take options.
+    if (typeof inputNode.focus === 'function') {
+      inputNode.focus({ preventScroll: true });
+    }
+
     function onNativeKeyDown(e: any): void {
       if (e.key === 'Enter' || e.key === ' ') {
         e.stopPropagation();
@@ -168,7 +181,12 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
           onChangeText={handleChangeText}
           onKeyPress={handleKeyPress}
           onBlur={deselectNode}
-          autoFocus
+          // Native has no browser to scroll — RN's own `autoFocus` is fine there. Web
+          // focuses itself instead, via the effect above, specifically so it can pass
+          // `preventScroll: true` (no such option on this prop) and keep the keypad from
+          // sliding along with a cell added near the canvas edge — see that effect for
+          // the full story.
+          autoFocus={Platform.OS !== 'web'}
           // Custom keypad is the soft-input surface (§8.5); keep the TextInput focused for
           // caret + hardware keys, but do not raise the OS keyboard on top of ours.
           // `showSoftInputOnFocus={false}` alone is not enough on mobile web: RN-web only

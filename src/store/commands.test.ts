@@ -1,3 +1,4 @@
+import { Clipboard } from 'react-native';
 import { MAX_HISTORY, useDocumentStore } from './documentStore';
 import { useUiStore } from './uiStore';
 import {
@@ -15,6 +16,8 @@ import {
   continueFromValueWithParens,
   convertEqualsToOperator,
   createLinkToValue,
+  copyNodeValue,
+  copyGroupWithoutResult,
   setOperatorSymbol,
   continuationAnchor,
   CONTINUATION_OFFSET,
@@ -1796,6 +1799,122 @@ describe('createLinkToValue (§8.6 "Create link" context-menu action)', () => {
       x: source.anchor.x,
       y: blockerY + CONTINUATION_OFFSET.y,
     });
+  });
+});
+
+describe('copyNodeValue (§8.6 Copy)', () => {
+  let setStringSpy: jest.SpyInstance;
+  beforeEach(() => {
+    setStringSpy = jest.spyOn(Clipboard, 'setString').mockImplementation(() => {});
+  });
+  afterEach(() => setStringSpy.mockRestore());
+
+  test('writes a number’s locale-formatted value to the clipboard', () => {
+    const n = addNumberNode({ x: 0, y: 0 }, '1234.5');
+    copyNodeValue(n);
+    expect(setStringSpy).toHaveBeenCalledWith('1,234.5');
+  });
+
+  test('writes a computed result’s display', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '7');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (node) => node.kind === 'result',
+    )!;
+    copyNodeValue(result.id);
+    expect(setStringSpy).toHaveBeenCalledWith('7');
+  });
+
+  test('does not touch the clipboard for a kind with no value of its own', () => {
+    const op = addOperatorNode({ x: 0, y: 0 }, '+');
+    copyNodeValue(op);
+    expect(setStringSpy).not.toHaveBeenCalled();
+  });
+
+  test('is a read-only action — no undo entry', () => {
+    const n = addNumberNode({ x: 0, y: 0 }, '3');
+    const before = useDocumentStore.getState().undoStack.length;
+    copyNodeValue(n);
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+  });
+});
+
+describe('copyGroupWithoutResult (§8.6 Copy As → Copy without result)', () => {
+  let setStringSpy: jest.SpyInstance;
+  beforeEach(() => {
+    setStringSpy = jest.spyOn(Clipboard, 'setString').mockImplementation(() => {});
+  });
+  afterEach(() => setStringSpy.mockRestore());
+
+  test('a selected chain copies its formula without = or the result', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '12');
+    const { numberId } = appendOperatorAndNumber(a, '+');
+    setNodeRaw(numberId, '5');
+    appendEqualsNode(numberId);
+    selectGroup(a);
+
+    copyGroupWithoutResult();
+
+    expect(setStringSpy).toHaveBeenCalledWith('12 + 5');
+  });
+
+  test('a chain and a free number in the same group selection copy one per line', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '12');
+    appendOperatorAndNumber(a, '+');
+    const free = addNumberNode({ x: 200, y: 0 }, '9');
+    useUiStore.getState().setGroupSelected(new Set([a, free]));
+
+    copyGroupWithoutResult();
+
+    expect(setStringSpy).toHaveBeenCalledWith('12 +\n9');
+  });
+
+  test('a chained result copies through its own chain (equals + result still dropped)', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '7');
+    appendEqualsNode(a);
+    const result = Object.values(useDocumentStore.getState().document.nodes).find(
+      (node) => node.kind === 'result',
+    )!;
+    // A result's own `chainId` is its source chain (never null — §9), so selecting just
+    // the result still resolves to the whole chain via `chainIds`, not `freeNodeIds`.
+    useUiStore.getState().setGroupSelected(new Set([result.id]));
+
+    copyGroupWithoutResult();
+
+    expect(setStringSpy).toHaveBeenCalledWith('7');
+  });
+
+  test('a stray chainless result contributes nothing (defensive — not normally reachable, §9)', () => {
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.nodes.stray_result = {
+        id: 'stray_result',
+        kind: 'result',
+        position: { x: 0, y: 0 },
+        chainId: null,
+        createdAt: 0,
+        sourceChainId: 'nonexistent',
+        derived: { display: '7', computedAt: '2026-08-21T00:00:00.000Z' },
+      };
+    });
+    useUiStore.getState().setGroupSelected(new Set(['stray_result']));
+
+    copyGroupWithoutResult();
+
+    expect(setStringSpy).not.toHaveBeenCalled();
+  });
+
+  test('an empty group selection touches the clipboard for nothing', () => {
+    useUiStore.getState().setGroupSelected(new Set());
+    copyGroupWithoutResult();
+    expect(setStringSpy).not.toHaveBeenCalled();
+  });
+
+  test('is a read-only action — no undo entry', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '4');
+    selectGroup(a);
+    const before = useDocumentStore.getState().undoStack.length;
+    copyGroupWithoutResult();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
   });
 });
 

@@ -27,6 +27,8 @@ import {
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
 import { NodeId, Vec2 } from '../model/types';
+import { copyTextForNode } from '../engine/copyText';
+import { getDeviceLocale } from '../ui/locale';
 
 // ─── Item shape ──────────────────────────────────────────────────────────────
 
@@ -34,19 +36,30 @@ interface MenuItem {
   label: string;
   disabled?: boolean;
   onPress?: () => void;
+  /** Renders as a nested row under its parent — the `Copy As` submenu's own item. */
+  indent?: boolean;
+  /** Web hover reveal for a submenu parent (`Copy As`), alongside tap-to-toggle —
+   *  a no-op prop on native, where `TouchableOpacity` has no hover concept. */
+  onHoverIn?: () => void;
 }
 
 // ─── Single row ──────────────────────────────────────────────────────────────
 
 function MenuRow({ item }: { item: MenuItem }) {
+  // `onMouseEnter` isn't in TouchableOpacityProps's types (no DOM lib in this project's
+  // tsconfig, per AGENTS.md) but react-native-web's TouchableOpacity forwards unknown
+  // props straight to the underlying host View, which does understand it — same trade
+  // Keypad.tsx's `skipTabOrder` already makes for a web-only extra prop.
+  const hoverProp = item.onHoverIn ? ({ onMouseEnter: item.onHoverIn } as object) : {};
   return (
     <TouchableOpacity
       testID={`context-menu-item-${item.label}`}
-      style={[styles.row, item.disabled && styles.rowDisabled]}
+      style={[styles.row, item.indent && styles.rowIndent, item.disabled && styles.rowDisabled]}
       onPress={item.disabled ? undefined : item.onPress}
       disabled={item.disabled}
       accessibilityLabel={item.label}
       accessibilityState={{ disabled: item.disabled ?? false }}
+      {...hoverProp}
     >
       <Text style={[styles.rowText, item.disabled && styles.rowTextDisabled]}>{item.label}</Text>
     </TouchableOpacity>
@@ -90,6 +103,8 @@ interface NodeContextMenuProps {
   onUnlinkFromParent: (nodeId: NodeId) => void;
   onLabel: (nodeId: NodeId) => void;
   onCreateLink: (nodeId: NodeId) => void;
+  onCopy: (nodeId: NodeId) => void;
+  onCopyWithoutResult: () => void;
   onDismiss: () => void;
 }
 
@@ -101,16 +116,62 @@ export function NodeContextMenu({
   onUnlinkFromParent,
   onLabel,
   onCreateLink,
+  onCopy,
+  onCopyWithoutResult,
   onDismiss,
 }: NodeContextMenuProps) {
   const nodes = useDocumentStore((s) => s.document.nodes);
   const node = nodes[nodeId];
+  // §8.6 `Copy`: enabled only for a kind that actually carries a value (number,
+  // result, live/dangling reference) and only once that value is in a copyable state
+  // (not an empty or errored result) — `copyTextForNode` is the one place both this
+  // enablement check and the actual clipboard write (`copyNodeValue`) agree on that.
+  const copyValue = copyTextForNode(nodeId, nodes, getDeviceLocale());
+  // §8.6 `Copy As`: only offered once this cell is part of the active group selection
+  // (Select group / Select all) — a lone cell has nothing else worth copying "as".
+  const groupSelected = useUiStore((s) => s.groupSelectedIds.has(nodeId));
+  const [copyAsExpanded, setCopyAsExpanded] = React.useState(false);
+
   const items: MenuItem[] = [
     {
       label: 'Copy',
-      // Copy is future work — declared per §8.6 but not yet functional.
-      disabled: true,
+      disabled: copyValue === null,
+      onPress:
+        copyValue === null
+          ? undefined
+          : () => {
+              onCopy(nodeId);
+              onDismiss();
+            },
     },
+  ];
+
+  if (groupSelected) {
+    // One item for now (§8.6): `Copy without result`. Tapping (or, on web, hovering)
+    // `Copy As` reveals it as a nested row rather than opening a separate flyout —
+    // simplest thing that satisfies both "tap" and "hover" for one item. Both handlers
+    // only ever *reveal* (never toggle back closed) — a toggle would let a mouse user's
+    // own hover-then-click sequence collapse the row it just opened, right as they went
+    // to tap the item underneath it (found live: hover revealed it, the click that
+    // followed flipped it straight back off).
+    items.push({
+      label: 'Copy As',
+      onPress: () => setCopyAsExpanded(true),
+      onHoverIn: () => setCopyAsExpanded(true),
+    });
+    if (copyAsExpanded) {
+      items.push({
+        label: 'Copy without result',
+        indent: true,
+        onPress: () => {
+          onCopyWithoutResult();
+          onDismiss();
+        },
+      });
+    }
+  }
+
+  items.push(
     {
       label: 'Delete',
       onPress: () => {
@@ -125,7 +186,7 @@ export function NodeContextMenu({
         onDismiss();
       },
     },
-  ];
+  );
 
   // §11.1 / P6b.1: numbers, results, and live references can carry an identity caption.
   // Dangling refs have no source to write to — omit the affordance.
@@ -222,6 +283,8 @@ interface ContextMenuOverlayProps {
   onUnlinkFromParent: (nodeId: NodeId) => void;
   onLabelNode: (nodeId: NodeId) => void;
   onCreateLink: (nodeId: NodeId) => void;
+  onCopy: (nodeId: NodeId) => void;
+  onCopyWithoutResult: () => void;
 }
 
 export function ContextMenuOverlay({
@@ -231,6 +294,8 @@ export function ContextMenuOverlay({
   onUnlinkFromParent,
   onLabelNode,
   onCreateLink,
+  onCopy,
+  onCopyWithoutResult,
 }: ContextMenuOverlayProps) {
   const contextMenu = useUiStore((state) => state.contextMenu);
   const closeContextMenu = useUiStore((state) => state.closeContextMenu);
@@ -247,6 +312,8 @@ export function ContextMenuOverlay({
         onUnlinkFromParent={onUnlinkFromParent}
         onLabel={onLabelNode}
         onCreateLink={onCreateLink}
+        onCopy={onCopy}
+        onCopyWithoutResult={onCopyWithoutResult}
         onDismiss={closeContextMenu}
       />
     );
@@ -282,6 +349,11 @@ const styles = StyleSheet.create({
   row: {
     paddingVertical: 12,
     paddingHorizontal: 18,
+  },
+  // The `Copy As` → `Copy without result` nested row (§8.6) — extra left padding
+  // reads as "belongs to the item above" without a separate flyout sheet.
+  rowIndent: {
+    paddingLeft: 34,
   },
   rowDisabled: {
     opacity: 0.35,
