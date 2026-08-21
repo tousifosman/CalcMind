@@ -44,6 +44,7 @@ import {
   setNodeLabel,
   editNodeLabel,
   finishEditingLabel,
+  showValueSlider,
   beginValueScrub,
   scrubNodeValue,
   endValueScrub,
@@ -72,6 +73,7 @@ function resetStore() {
     editingNodeId: null,
     editingLabelNodeId: null,
     groupSelectedIds: new Set(),
+    sliderState: null,
   });
 }
 
@@ -1915,6 +1917,37 @@ describe('copyGroupWithoutResult (§8.6 Copy As → Copy without result)', () =>
     const before = useDocumentStore.getState().undoStack.length;
     copyGroupWithoutResult();
     expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+  });
+});
+
+describe('showValueSlider (§8.8 "Show slider" context-menu action)', () => {
+  test('selects the node and opens its slider, unpinned with no offset', () => {
+    const n = addNumberNode({ x: 0, y: 0 }, '42');
+
+    showValueSlider(n);
+
+    expect(useUiStore.getState().selectedNodeId).toBe(n);
+    expect(useUiStore.getState().sliderState).toEqual({
+      nodeId: n,
+      pinned: false,
+      offset: { x: 0, y: 0 },
+    });
+  });
+
+  test('opening a second slider replaces the first, even if it was pinned', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const b = addNumberNode({ x: 40, y: 0 }, '2');
+
+    showValueSlider(a);
+    useUiStore.getState().setSliderPinned(true);
+    expect(useUiStore.getState().sliderState).toMatchObject({ nodeId: a, pinned: true });
+
+    showValueSlider(b);
+    expect(useUiStore.getState().sliderState).toEqual({
+      nodeId: b,
+      pinned: false,
+      offset: { x: 0, y: 0 },
+    });
   });
 });
 

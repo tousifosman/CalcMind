@@ -1,4 +1,10 @@
-import { inferSliderRange, rawToSliderValue, sliderValueToRaw, valueAtTrackFraction } from './inferSliderRange';
+import {
+  inferSliderRange,
+  quantizeToStep,
+  rawToSliderValue,
+  sliderValueToRaw,
+  valueAtTrackFraction,
+} from './inferSliderRange';
 
 describe('inferSliderRange (§8.8)', () => {
   test('zero → [0, 10]', () => {
@@ -75,5 +81,42 @@ describe('valueAtTrackFraction', () => {
     const range = { min: 0, max: 10 };
     expect(valueAtTrackFraction(0.44, range, true)).toBe(4);
     expect(valueAtTrackFraction(0.45, range, true)).toBe(5);
+  });
+});
+
+describe('quantizeToStep (§8.8 Step field)', () => {
+  test('snaps to the nearest 0.1 without float drift', () => {
+    const range = { min: 0, max: 10 };
+    // 0.1 + 0.2 famously isn't 0.3 in plain float arithmetic - the Decimal grid
+    // arithmetic must not reintroduce that.
+    expect(quantizeToStep(0.23, 0.1, range)).toBe(0.2);
+    expect(quantizeToStep(0.27, 0.1, range)).toBe(0.3);
+    expect(quantizeToStep(4.4830503302, 0.1, range)).toBe(4.5);
+  });
+
+  test('grid is measured from range.min, not zero', () => {
+    const range = { min: 0.5, max: 10.5 };
+    expect(quantizeToStep(0.62, 0.1, range)).toBe(0.6);
+    expect(quantizeToStep(0.65, 0.1, range)).toBe(0.7);
+  });
+
+  test('clamps the quantized value into range', () => {
+    const range = { min: 0, max: 1 };
+    expect(quantizeToStep(0.98, 0.1, range)).toBe(1);
+    expect(quantizeToStep(-0.05, 0.1, range)).toBe(0);
+  });
+
+  test('a non-positive or non-finite step disables quantization (still range-clamped)', () => {
+    const range = { min: 0, max: 10 };
+    expect(quantizeToStep(4.483, 0, range)).toBe(4.483);
+    expect(quantizeToStep(4.483, -1, range)).toBe(4.483);
+    expect(quantizeToStep(4.483, Number.NaN, range)).toBe(4.483);
+    expect(quantizeToStep(12, 0, range)).toBe(10);
+  });
+
+  test('a larger step steps by whole units', () => {
+    const range = { min: 0, max: 100 };
+    expect(quantizeToStep(23, 5, range)).toBe(25);
+    expect(quantizeToStep(22, 5, range)).toBe(20);
   });
 });

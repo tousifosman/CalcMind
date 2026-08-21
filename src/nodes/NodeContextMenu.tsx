@@ -4,7 +4,8 @@
 // screen point:
 //
 //   • Node menu — `Copy`, `Delete`, `Select group`, `Label` and `Create link` on values
-//     (P6b.1, §8.6), and for a reference `Unlink from parent` (P6.4 / §8.6).
+//     (P6b.1, §8.6), `Show slider` on a scrubbable number (§8.8), and for a reference
+//     `Unlink from parent` (P6.4 / §8.6).
 //   • Canvas menu — `Add number`, `Paste`, `Add graph` (disabled: §17.2 defers
 //     graphing; copy/paste is future work; Add number is a normal tap), plus
 //     `Select all` when the canvas has nodes (§8.6).
@@ -29,6 +30,7 @@ import { useDocumentStore } from '../store/documentStore';
 import { NodeId, Vec2 } from '../model/types';
 import { copyTextForNode } from '../engine/copyText';
 import { getDeviceLocale } from '../ui/locale';
+import { rawToSliderValue } from './inferSliderRange';
 
 // ─── Item shape ──────────────────────────────────────────────────────────────
 
@@ -105,6 +107,7 @@ interface NodeContextMenuProps {
   onCreateLink: (nodeId: NodeId) => void;
   onCopy: (nodeId: NodeId) => void;
   onCopyWithoutResult: () => void;
+  onShowSlider: (nodeId: NodeId) => void;
   onDismiss: () => void;
 }
 
@@ -118,6 +121,7 @@ export function NodeContextMenu({
   onCreateLink,
   onCopy,
   onCopyWithoutResult,
+  onShowSlider,
   onDismiss,
 }: NodeContextMenuProps) {
   const nodes = useDocumentStore((s) => s.document.nodes);
@@ -220,6 +224,20 @@ export function NodeContextMenu({
     });
   }
 
+  // §8.8: the value-slider popover is opened explicitly from here rather than
+  // following selection. Same scrubbability check `ValueSliderOverlay` used to gate
+  // auto-showing on - a plain number with a complete (not mid-typing) raw value.
+  const canSlide = node && node.kind === 'number' && rawToSliderValue(node.raw) !== null;
+  if (canSlide) {
+    items.push({
+      label: 'Show slider',
+      onPress: () => {
+        onShowSlider(nodeId);
+        onDismiss();
+      },
+    });
+  }
+
   // §8.6: references also get `Unlink from parent` — freezes the live/last-known
   // value as a plain number (P6.4). Same action as dangling convert-to-number.
   if (node?.kind === 'reference') {
@@ -285,6 +303,7 @@ interface ContextMenuOverlayProps {
   onCreateLink: (nodeId: NodeId) => void;
   onCopy: (nodeId: NodeId) => void;
   onCopyWithoutResult: () => void;
+  onShowSlider: (nodeId: NodeId) => void;
 }
 
 export function ContextMenuOverlay({
@@ -296,6 +315,7 @@ export function ContextMenuOverlay({
   onCreateLink,
   onCopy,
   onCopyWithoutResult,
+  onShowSlider,
 }: ContextMenuOverlayProps) {
   const contextMenu = useUiStore((state) => state.contextMenu);
   const closeContextMenu = useUiStore((state) => state.closeContextMenu);
@@ -314,6 +334,7 @@ export function ContextMenuOverlay({
         onCreateLink={onCreateLink}
         onCopy={onCopy}
         onCopyWithoutResult={onCopyWithoutResult}
+        onShowSlider={onShowSlider}
         onDismiss={closeContextMenu}
       />
     );

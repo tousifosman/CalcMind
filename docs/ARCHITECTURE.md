@@ -565,6 +565,16 @@ world  = screen / zoom + pan
 - One-finger drag on empty canvas pans; pinch zooms about the pinch centroid; on web, wheel
   scrolls and ctrl/⌘+wheel zooms.
 - All snap thresholds are defined in **world units** so snapping feels identical at any zoom.
+- **Commit only on release**: `Canvas` drives pan/pinch/wheel through Reanimated shared values
+  every frame, and only writes the committed result into `documentStore`'s `document.viewport`
+  on release (or, for wheel, a debounce) — a commit calls `notifyDocumentDirty`, so committing
+  every frame would spam autosave. Screen-space UI mounted *inside* `Canvas` gets live tracking
+  for free from the shared-value-driven transform; anything that can't be (because it must render
+  outside that transform, as a fixed screen overlay — the §8.8 slider popover, so far) instead
+  reads `uiStore.liveViewport`, a lightweight bridge `Canvas` publishes every gesture frame and
+  clears on commit (cheap and side-effect-free, unlike the document store, since nothing besides
+  this class of consumer subscribes to it). Reading the committed viewport alone there would make
+  that UI visibly lag a gesture in progress and only "catch up" on release.
 
 ---
 
@@ -823,10 +833,11 @@ operators are visually separated from digits.
   that browser-native scroll, since `autoFocus` itself takes no options. Only the canvas's own
   pan (a deliberate gesture, or none at all here) should ever move where a cell sits on screen.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` and `Create link` on values
-  (number / result / live reference — P6b.1), and for a reference `Unlink from parent`.
-  `Create link` drops a free reference to the value near it — no operator, not attached to a
-  chain — for a link the user wants to place and drag elsewhere rather than keep computing from
-  immediately (§8.7's third path, alongside continuation and drag-to-link).
+  (number / result / live reference — P6b.1), `Show slider` on a scrubbable number (§8.8), and
+  for a reference `Unlink from parent`. `Create link` drops a free reference to the value near it
+  — no operator, not attached to a chain — for a link the user wants to place and drag elsewhere
+  rather than keep computing from immediately (§8.7's third path, alongside continuation and
+  drag-to-link).
 - **`Copy` writes a cell's own value to the system clipboard** (`copyTextForNode`,
   `engine/copyText.ts`) — the same display text its own component renders: a number's raw, a
   result's (or stale result's) display, a live or dangling reference's resolved text. Disabled
@@ -947,9 +958,12 @@ other live reference.
 
 ### 8.8 Value slider
 
-Selecting a number raises a slider in a popover anchored beneath its cell, with the range endpoints
-labelled. Dragging it rewrites that number and the whole dependent subgraph recomputes live —
-results, and any graphs, updating per frame.
+The cell menu's `Show slider` item (§8.6, a scrubbable plain number only) raises a slider in a
+popover anchored beneath its cell, with the range endpoints labelled. Dragging it rewrites that
+number and the whole dependent subgraph recomputes live — results, and any graphs, updating per
+frame. It no longer follows selection automatically — that was the original P6b.3 shape, but a
+popover on every selected number crowded the canvas for a mode most edits don't need; opening it
+is now a deliberate action, same footing as `Label` or `Create link`.
 
 This is the feature that makes the dependency graph *felt* rather than merely correct: a static
 model answers one question, a scrubable one answers "what if". It is cheap to build on top of §11
@@ -957,12 +971,38 @@ and should not be deferred to the far end of the plan.
 
 - **Range** is inferred from the current value: `[0, 10^ceil(log10(|v|))]` for positive values,
   symmetric about zero when the value is negative, `[0, 10]` when the value is zero. The user can
-  edit the bounds.
-- **Tap the slider to snap** to integers; drag again for continuous values.
+  edit the bounds. Between them, a **Step** field (default `0.1`, editable, must be positive)
+  sets continuous dragging's grid size.
+- **Tap the slider to snap to a whole integer** — a separate, coarser mode from Step. **Drag
+  quantizes to the Step field's grid** instead of landing on an arbitrary fraction
+  (`quantizeToStep` in `inferSliderRange.ts`, `Decimal`-based so the grid arithmetic doesn't drift
+  like `0.1 + 0.2`) — a device vibrates once per step crossing, not continuously, so a step feels
+  like a step rather than a raw pointer readout.
 - **Scrubbing is a drag, not a commit.** The whole gesture coalesces into a single undo entry, and
   autosave is suppressed until release — otherwise one scrub writes hundreds of documents.
 - Recompute during scrub runs on the dirty subgraph only (§11) and must hold 60fps; if a subgraph
   is too expensive, throttle recompute to the frame budget rather than dropping the interaction.
+- **Dismissal and pinning.** The popover opens unpinned: the next canvas tap or long-press
+  anywhere but its own cell closes it, the same as any other momentary prompt (§8.6's context
+  menu, the dangling-recovery sheet). A `Keep open` checkbox on the popover pins it — this
+  suppresses that dismissal, draws a connector line from the cell to the popover (in the popover's
+  own chrome colour, not the cell's identity hue — the line reads as this window's edge, not a
+  document-graph connector; it is screen-space chrome and does not participate in
+  `ConnectorLayer`'s scene), and reveals a drag handle that repositions the popover independent of
+  the cell, via an offset from its anchored position. Unpinning snaps the offset back to zero. The
+  handle's own container is always mounted at a fixed height — only its bar's opacity and its
+  gesture's enabled state follow `pinned` — specifically so toggling the checkbox never resizes
+  the popover. All of this is ephemeral `uiStore` state (`sliderState`) — never persisted, never
+  undoable, same reasoning as selection and the context menu (§8.5's last bullet).
+- **Position tracking.** The popover anchors horizontally off the cell's own width, but that
+  width is captured once when the slider opens on a node and held fixed for the rest of that
+  open — not read live from the cell every render — because the cell's width tracks its digit
+  count, which the very act of scrubbing changes continuously; anchoring off the live width made
+  the popover visibly shift as the value gained or lost digits mid-drag. Separately, the popover
+  reads `uiStore.liveViewport` (§7) rather than the committed `document.viewport` alone, so it and
+  its connector line track an in-progress canvas pan/pinch/wheel gesture immediately rather than
+  lagging until the gesture ends and the store commits — without that, panning while pinned open
+  visibly detached the connector from the cell until the gesture's release.
 
 ---
 
@@ -1575,6 +1615,9 @@ it unclear which parts were claims about the present and which were intentions.
 | 26 | A number cell entering edit mode on web focuses itself explicitly (`.focus({ preventScroll: true })`), instead of relying on RN's `autoFocus` prop | User reported the keypad visibly moving whenever a cell was added or edited near the canvas edge. Root cause: `autoFocus` becomes a literal HTML `autofocus` attribute on web, and the browser's own autofocus-scroll algorithm was scrolling the app's root container (`body`/`#root`) to bring the newly-focused input into view — dragging the *entire* screen, keypad included, since there was no code doing that on purpose. `preventScroll: true` has no equivalent prop on `autoFocus` itself, so the fix takes over the focus call rather than configuring the existing one; native keeps the plain prop, since there's no browser there to scroll. Verified live both ways: reverting the fix and re-running the same script reproduced a real 29px scroll on the exact repro; the fix took it to zero | Never — this is a bug fix, not a design trade-off; revisit only if RN's `autoFocus` itself ever grows a `preventScroll` option worth switching to |
 | 27 | Digit / decimal / `+/-` on a selected operator now target the chain member to its right (edit it if it's a number, insert one if there's nothing there) instead of staying disabled, except when that neighbour is a linked cell or a result | User named the exact three cases. The empty-operand deletion path decision #25 just shipped left a genuinely reachable state — a bare trailing operator with nothing after it — that digits still refused to do anything with; treating "no number cell to the right" as "make one" and "already a number cell there" as "edit it" covers that gap with the same `appendNumberNode` §8.5 already uses elsewhere for mid-chain insertion (it splices after any given member, not just at a chain's end, so no new plumbing was needed). The linked-cell/result exclusion mirrors every other place those two kinds are already treated as non-editable, non-target cells | Never for the two exclusions; revisit if a future request wants the same right-neighbour targeting for `()` or `=` on a selected operator too |
 | 28 | `Copy` writes a cell's own display text to the clipboard; `Copy As` → `Copy without result` (offered once the cell is part of a group selection) copies every chain/free node in that selection with `=` and the answer dropped, one per line | User asked for `Copy` (previously a permanently-disabled placeholder, per decision-adjacent §8.5/§8.6 prose) to actually work, plus a `Copy As` submenu on a group selection with one item for now. Reused each kind's own display-content function (`resultCellContent`, `referenceCellContent`, `formatForDisplay`) rather than re-deriving text, so the clipboard always matches what's on screen. `Copy As` reveals its one nested item on tap *or* hover (both requested explicitly) via `MenuItem.indent`/`onHoverIn` rather than a separate flyout sheet — simplest structure for exactly one item; both handlers only ever reveal, never toggle closed, after live testing showed a toggle let a mouse user's own hover-then-click collapse the row they were about to tap into. `Clipboard` comes from `'react-native'` directly (deprecated in RN core but still functional, and aliased to `react-native-web`'s own implementation for the web build via the existing `react-native$` webpack alias) rather than adding `@react-native-clipboard/clipboard` — no new native dependency for one string write | Migrate off RN core's `Clipboard` if it is ever actually removed rather than merely deprecated; revisit `Copy As`'s one-item menu if a second variant is requested |
+| 29 | Value slider (§8.8) no longer opens automatically on selection; a `Show slider` context-menu item opens it, and a `Keep open` checkbox on the popover jointly gates three things — surviving a tap-elsewhere, drawing a connector line to the cell, and a drag handle to reposition the popover | User request: a popover on every selected number crowded the canvas. Made the trigger explicit (§8.6, same footing as `Label`/`Create link`) rather than tied to selection. The three pinned behaviours were specified separately (a checkbox that keeps it open; drawing a line; making it draggable) but read as one state, not three independent flags, once traced through: a slider worth keeping open across other taps is also one worth relocating away from the cell it's anchored under, and once it can be relocated a line back to that cell is what keeps the association legible — so one `pinned` boolean on `uiStore.sliderState` drives all three, rather than three separate checkboxes | A user wants the connector line or the drag handle without suppressing tap-elsewhere dismissal, or vice versa |
+| 30 | Decision #29's drag handle stays mounted at a fixed size always, toggling only its bar's opacity and its gesture's `enabled` state with `pinned`, rather than conditionally rendering the whole handle; the connector line takes the popover's own chrome colour, not the cell's identity hue; a Step field (default `0.1`, positive-only) sits between the range bounds and continuous dragging quantizes to it (`quantizeToStep`), vibrating once per step crossing | User-reported regression from #29's own first cut: conditionally mounting the drag handle only while pinned made the popover visibly grow on check and shrink on uncheck. Fixed by always mounting it and toggling only paint, not layout — the general fix for "a togglable affordance must not resize its container" wherever RN's default is to omit rather than hide. Separately requested in the same round: the connector should read as the popover's own edge rather than borrow the cell's identity hue (documents relate through hue per §11.1; this line isn't one of those relationships), and dragging should move in namable increments with tactile feedback rather than an arbitrary continuous value | A user wants the connector to carry identity hue after all (e.g. multiple pinned sliders open at once, needing to tell which line belongs to which cell) |
+| 31 | The slider popover's horizontal anchor uses the cell's width captured once at open time, not read live; a new `uiStore.liveViewport` bridge (§7) lets it track an in-progress Canvas pan/pinch/wheel gesture instead of only the committed, gesture-end-throttled `document.viewport` | Two user-reported bugs from real-device use, both structural rather than cosmetic: (1) the popover visibly shifted as the scrubbed value gained/lost digits, because its anchor read the cell's live (content-dependent) width every render — the same live value the popover's own scrubbing was changing; (2) the connector line visibly detached from the cell while panning and only reattached once the gesture ended, because the popover is a fixed screen overlay outside `Canvas`'s Reanimated-driven transform and so has no live view of an in-progress pan/pinch/wheel gesture, only of `documentStore`'s committed viewport, which §7's "commit only on release" rule deliberately keeps a gesture behind. `liveViewport` generalizes node-drag's existing solution to the same class of problem (`ViewportContext.tsx`) to a consumer that, unlike node-drag, isn't mounted inside `Canvas` and so can't read the shared values directly via that context | Another screen-space overlay needs the same live tracking — extend `liveViewport`'s consumers rather than inventing a second bridge |
 
 ## 17. Open questions
 

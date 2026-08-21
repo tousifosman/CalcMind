@@ -1420,6 +1420,17 @@ export function editNumberNode(nodeId: NodeId): void {
   useUiStore.getState().setEditingNode(nodeId);
 }
 
+/**
+ * Open the §8.8 value-slider popover for `nodeId`, from the cell menu's `Show slider`
+ * item (P6b.3+). The slider no longer follows selection automatically - this is the
+ * one path that raises it. Selects the node too, same as every other menu action that
+ * targets a node, so the cell reads as the keypad target while its slider is open.
+ */
+export function showValueSlider(nodeId: NodeId): void {
+  selectNode(nodeId);
+  useUiStore.getState().openSlider(nodeId);
+}
+
 /** Clears selection and, if the node being edited is an empty number, discards it (§8.6). */
 export function deselectNode(): void {
   discardIfAbandoned(null);
