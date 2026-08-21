@@ -1,12 +1,16 @@
 import React from 'react';
 import { Text, TextInput } from 'react-native';
 import { act } from 'react-test-renderer';
+import { useSharedValue } from 'react-native-reanimated';
 import { NumberNode } from './NumberNode';
 import { useDocumentStore } from '../store/documentStore';
 import { useUiStore } from '../store/uiStore';
+import { usePreferencesStore } from '../store/preferencesStore';
 import { addNumberNode, editNumberNode } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
-import { rolePalette } from '../ui/tokens';
+import { rolePalette, nodeHeightFor } from '../ui/tokens';
+import { widthOf } from '../chains/measure';
+import { CanvasViewportContext } from '../canvas/ViewportContext';
 import { renderNode, unmountAll, findHostByTestID } from './testUtils';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
@@ -14,6 +18,27 @@ jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
 function resetStore() {
   useDocumentStore.setState({ document: createEmptyDocument(), undoStack: [], redoStack: [] });
   useUiStore.setState({ selectedNodeId: null, editingNodeId: null });
+  usePreferencesStore.setState({ autoPanToEditedCell: true });
+}
+
+/** Stub `<Canvas>` context so the auto-pan effect (§7 P7 follow-up) has something to call.
+ *  `panIntoView` is the jest.fn() tests assert against; panX/panY/zoom are unused by these
+ *  tests but required by the type. */
+function ViewportStub({
+  children,
+  panIntoView,
+}: {
+  children: React.ReactNode;
+  panIntoView: (rect: { x: number; y: number; width: number; height: number }) => void;
+}) {
+  const panX = useSharedValue(0);
+  const panY = useSharedValue(0);
+  const zoom = useSharedValue(1);
+  return (
+    <CanvasViewportContext.Provider value={{ panX, panY, zoom, panIntoView }}>
+      {children}
+    </CanvasViewportContext.Provider>
+  );
 }
 
 beforeEach(resetStore);
@@ -195,5 +220,83 @@ describe('NumberNode editing', () => {
     act(() => renderer.root.findByType(TextInput).props.onKeyPress({ nativeEvent: { key: '2' } }));
 
     expect(useDocumentStore.getState().document.nodes[id]).toMatchObject({ raw: '1' });
+  });
+});
+
+describe('NumberNode auto-pan-to-edited-cell (§7 P7 follow-up)', () => {
+  test('does not crash when rendered outside <Canvas> — no CanvasViewportContext provider', () => {
+    // Every other test in this file renders NumberNode this way (standalone, per this
+    // file's own convention) - `useCanvasViewportOptional` (not the throwing
+    // `useCanvasViewport`) is what keeps that working once this effect exists.
+    const id = addNumberNode({ x: 0, y: 0 }, '5');
+    act(() => editNumberNode(id));
+    expect(() => renderNode(<NumberNode id={id} />)).not.toThrow();
+  });
+
+  test('calls panIntoView with the cell world rect on entering edit mode', () => {
+    const id = addNumberNode({ x: 40, y: 60 }, '1020');
+    act(() => editNumberNode(id));
+    const panIntoView = jest.fn();
+    renderNode(
+      <ViewportStub panIntoView={panIntoView}>
+        <NumberNode id={id} />
+      </ViewportStub>,
+    );
+
+    const node = useDocumentStore.getState().document.nodes[id]!;
+    expect(panIntoView).toHaveBeenCalledWith({
+      x: 40,
+      y: 60,
+      width: widthOf(node, 'en-US', usePreferencesStore.getState().numeralFontSize),
+      height: nodeHeightFor(usePreferencesStore.getState().numeralFontSize),
+    });
+  });
+
+  test('does not call panIntoView for a cell that is not the edit target', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '5');
+    const panIntoView = jest.fn();
+    renderNode(
+      <ViewportStub panIntoView={panIntoView}>
+        <NumberNode id={id} />
+      </ViewportStub>,
+    );
+
+    expect(panIntoView).not.toHaveBeenCalled();
+  });
+
+  test('does not call panIntoView when the preference is turned off', () => {
+    usePreferencesStore.setState({ autoPanToEditedCell: false });
+    const id = addNumberNode({ x: 0, y: 0 }, '5');
+    act(() => editNumberNode(id));
+    const panIntoView = jest.fn();
+    renderNode(
+      <ViewportStub panIntoView={panIntoView}>
+        <NumberNode id={id} />
+      </ViewportStub>,
+    );
+
+    expect(panIntoView).not.toHaveBeenCalled();
+  });
+
+  test('re-checks as the cell grows while being typed into', () => {
+    const id = addNumberNode({ x: 0, y: 0 }, '1');
+    act(() => editNumberNode(id));
+    const panIntoView = jest.fn();
+    const renderer = renderNode(
+      <ViewportStub panIntoView={panIntoView}>
+        <NumberNode id={id} />
+      </ViewportStub>,
+    );
+    expect(panIntoView).toHaveBeenCalledTimes(1);
+
+    act(() => renderer.root.findByType(TextInput).props.onChangeText('123456789'));
+
+    expect(panIntoView).toHaveBeenCalledTimes(2);
+    const node = useDocumentStore.getState().document.nodes[id]!;
+    expect(panIntoView).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        width: widthOf(node, 'en-US', usePreferencesStore.getState().numeralFontSize),
+      }),
+    );
   });
 });

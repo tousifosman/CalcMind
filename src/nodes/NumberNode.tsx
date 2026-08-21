@@ -12,7 +12,7 @@ import { useUiStore } from '../store/uiStore';
 import { deselectNode, setNodeRaw, finishEditingLabel, setNodeLabel } from '../store/commands';
 import { formatForDisplay, parseUserInput } from '../engine/format';
 import { widthOf } from '../chains/measure';
-import { rolePalette, glyphColor } from '../ui/tokens';
+import { rolePalette, glyphColor, nodeHeightFor } from '../ui/tokens';
 import { getDeviceLocale } from '../ui/locale';
 import { commandFromHardwareKey, dispatchEditorCommand } from '../keypad/keymap';
 import { Cell, useGlyphTextStyle } from './Cell';
@@ -20,6 +20,7 @@ import { useSourceIdentityHue } from './useIdentityHue';
 import { useNodeSelected, useNodeGroupSelected } from './useNodeSelected';
 import { useGroupPosition } from './useGroupPosition';
 import { usePreferencesStore } from '../store/preferencesStore';
+import { useCanvasViewportOptional } from '../canvas/ViewportContext';
 
 interface NumberNodeProps {
   id: NodeId;
@@ -94,6 +95,32 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
 
   const glyphTextStyle = useGlyphTextStyle();
   const fontSize = usePreferencesStore((s) => s.numeralFontSize);
+
+  // §7 auto-pan-to-edited-cell (P7 follow-up, §12.5 opt-out): a cell entering edit mode
+  // (added or typed into) pans the canvas to keep it clear of the visible edge, with
+  // padding. This is a different fix from the `preventScroll` effect above — that one
+  // stops the *keypad* from moving; this is what actually keeps the edited cell in view,
+  // which the browser's old accidental autoFocus-scroll used to do as an unintended side
+  // effect before that fix removed it. `useCanvasViewportOptional` (not the throwing
+  // `useCanvasViewport`) so this stays a no-op rather than a crash for every component
+  // spec that renders `NumberNode` standalone, without mounting `Canvas` — most of them.
+  // Re-runs on `node` (not narrowed to `numberNode`, which isn't in scope until after the
+  // early return below - hooks must stay unconditional) so both entering edit mode and
+  // growing while being typed into (which can push a chain further past the edge without
+  // moving this cell's own `position`) keep re-checking.
+  const canvasViewport = useCanvasViewportOptional();
+  const autoPanEnabled = usePreferencesStore((s) => s.autoPanToEditedCell);
+  useEffect(() => {
+    if (!isEditing || !autoPanEnabled || !canvasViewport || !node || node.kind !== 'number') {
+      return;
+    }
+    canvasViewport.panIntoView({
+      x: node.position.x,
+      y: node.position.y,
+      width: widthOf(node, getDeviceLocale(), fontSize),
+      height: nodeHeightFor(fontSize),
+    });
+  }, [isEditing, autoPanEnabled, canvasViewport, node, fontSize]);
 
   if (!node || node.kind !== 'number') return null;
   // Rebound so the narrowing above survives into the closures below - TS does not carry a

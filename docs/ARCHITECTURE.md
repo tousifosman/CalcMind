@@ -575,6 +575,21 @@ world  = screen / zoom + pan
   clears on commit (cheap and side-effect-free, unlike the document store, since nothing besides
   this class of consumer subscribes to it). Reading the committed viewport alone there would make
   that UI visibly lag a gesture in progress and only "catch up" on release.
+- **Auto-pan to an edited cell** (§12.5 opt-out, on by default): a number cell entering edit
+  mode — added or typed into — pans the canvas so it clears a fixed screen-space padding
+  (`canvas/autoPan.ts`'s `AUTO_PAN_PADDING`, 24dp, independent of zoom) on whichever visible
+  edge it currently violates. `Canvas`'s own laid-out size (tracked via `onLayout`) *is* the
+  bounds this pans against — it already excludes the keypad, which shares the flex column
+  below it (`AppShell.tsx`) rather than overlaying it, so no separate adjustment is needed for
+  keypad height. `computeAutoPanTarget` is pure geometry (no store, no Reanimated) so the
+  "does this need a pan, and by how much" question is unit-tested directly; `Canvas` exposes
+  `panIntoView` through `ViewportContext` (alongside the existing shared values) so a node view
+  — `NumberNode`, so far, via `useCanvasViewportOptional` rather than the throwing
+  `useCanvasViewport`, since it must also render standalone in component tests — can trigger
+  it without importing `Canvas` itself. Animates over 220ms via `withTiming`, then commits the
+  same way a released gesture does. Distinct from `preventScroll` (§8.5): that fix stops the
+  browser's own autoFocus-scroll from moving the *whole page, keypad included*; this replaces
+  the *usefulness* that accidental scroll used to provide, moving only the canvas.
 
 ---
 
@@ -831,7 +846,9 @@ operators are visually separated from digits.
   focuses the input itself on web, via `.focus({ preventScroll: true })` in an effect (native
   keeps the plain `autoFocus` prop — no browser to scroll there) — the one thing that suppresses
   that browser-native scroll, since `autoFocus` itself takes no options. Only the canvas's own
-  pan (a deliberate gesture, or none at all here) should ever move where a cell sits on screen.
+  pan (a deliberate gesture, or none at all here) should ever move where a cell sits on screen —
+  §7's auto-pan-to-edited-cell is the follow-up that gives that pan something to do here, so an
+  edge cell stays reachable without the page-drag this fix removed.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` and `Create link` on values
   (number / result / live reference — P6b.1), `Show slider` on a scrubbable number (§8.8), and
   for a reference `Unlink from parent`. `Create link` drops a free reference to the value near it
@@ -1455,8 +1472,13 @@ migration ships (production `migrations` stays empty while v1 is current).
 
 A third category of state, alongside `documentStore` (persisted + undoable) and `uiStore`
 (never persisted, never undoable): **persisted, but not undoable, and not part of any
-document.** Currently one setting — the numeral font size, `store/preferencesStore.ts`'s
-`numeralFontSize` — surfaced as the Settings sheet's Canvas Number Font Size row (§8.5).
+document.** Two settings — the numeral font size, `store/preferencesStore.ts`'s
+`numeralFontSize` — surfaced as the Settings sheet's Canvas Number Font Size row (§8.5) — and
+the auto-pan-to-edited-cell toggle, `autoPanToEditedCell` (§7), surfaced as its Auto-pan to
+Edited Cell switch. `write()` replaces the whole persisted blob rather than merging (below),
+so `preferencesStore.ts` centralises every setter's persist call through one `persist()`
+closure that writes *every* field's current value — a setter that only wrote its own field
+would silently drop the other preference from disk on the next restart.
 
 - **Contract** (`persistence/preferences.ts`, same bundler platform-resolution trick as
   `adapter.ts` §12.2) is deliberately smaller than the document `StorageAdapter`: `read()` /
@@ -1618,6 +1640,7 @@ it unclear which parts were claims about the present and which were intentions.
 | 29 | Value slider (§8.8) no longer opens automatically on selection; a `Show slider` context-menu item opens it, and a `Keep open` checkbox on the popover jointly gates three things — surviving a tap-elsewhere, drawing a connector line to the cell, and a drag handle to reposition the popover | User request: a popover on every selected number crowded the canvas. Made the trigger explicit (§8.6, same footing as `Label`/`Create link`) rather than tied to selection. The three pinned behaviours were specified separately (a checkbox that keeps it open; drawing a line; making it draggable) but read as one state, not three independent flags, once traced through: a slider worth keeping open across other taps is also one worth relocating away from the cell it's anchored under, and once it can be relocated a line back to that cell is what keeps the association legible — so one `pinned` boolean on `uiStore.sliderState` drives all three, rather than three separate checkboxes | A user wants the connector line or the drag handle without suppressing tap-elsewhere dismissal, or vice versa |
 | 30 | Decision #29's drag handle stays mounted at a fixed size always, toggling only its bar's opacity and its gesture's `enabled` state with `pinned`, rather than conditionally rendering the whole handle; the connector line takes the popover's own chrome colour, not the cell's identity hue; a Step field (default `0.1`, positive-only) sits between the range bounds and continuous dragging quantizes to it (`quantizeToStep`), vibrating once per step crossing | User-reported regression from #29's own first cut: conditionally mounting the drag handle only while pinned made the popover visibly grow on check and shrink on uncheck. Fixed by always mounting it and toggling only paint, not layout — the general fix for "a togglable affordance must not resize its container" wherever RN's default is to omit rather than hide. Separately requested in the same round: the connector should read as the popover's own edge rather than borrow the cell's identity hue (documents relate through hue per §11.1; this line isn't one of those relationships), and dragging should move in namable increments with tactile feedback rather than an arbitrary continuous value | A user wants the connector to carry identity hue after all (e.g. multiple pinned sliders open at once, needing to tell which line belongs to which cell) |
 | 31 | The slider popover's horizontal anchor uses the cell's width captured once at open time, not read live; a new `uiStore.liveViewport` bridge (§7) lets it track an in-progress Canvas pan/pinch/wheel gesture instead of only the committed, gesture-end-throttled `document.viewport` | Two user-reported bugs from real-device use, both structural rather than cosmetic: (1) the popover visibly shifted as the scrubbed value gained/lost digits, because its anchor read the cell's live (content-dependent) width every render — the same live value the popover's own scrubbing was changing; (2) the connector line visibly detached from the cell while panning and only reattached once the gesture ended, because the popover is a fixed screen overlay outside `Canvas`'s Reanimated-driven transform and so has no live view of an in-progress pan/pinch/wheel gesture, only of `documentStore`'s committed viewport, which §7's "commit only on release" rule deliberately keeps a gesture behind. `liveViewport` generalizes node-drag's existing solution to the same class of problem (`ViewportContext.tsx`) to a consumer that, unlike node-drag, isn't mounted inside `Canvas` and so can't read the shared values directly via that context | Another screen-space overlay needs the same live tracking — extend `liveViewport`'s consumers rather than inventing a second bridge |
+| 32 | A cell entering edit mode auto-pans the canvas to clear a fixed 24dp screen-space padding from whichever visible edge it violates (`canvas/autoPan.ts`), on by default with a Settings opt-out (`autoPanToEditedCell`) | Direct follow-up to decision #26 (2026-08-21's `preventScroll` fix): that fix correctly stopped the browser's autoFocus-scroll from dragging the whole page, keypad included, but the user pointed out the *positive* side effect went with it — an edge cell was no longer brought into view *at all*. Padding is a fixed dp (like every other spacing token, §1.2), not a world-space distance, so it reads the same regardless of zoom. Scoped to `NumberNode` (the only kind with an edit mode) rather than every node kind, and to entering/growing during edit rather than every selection change, matching exactly what was asked; a settings toggle rather than always-on since a canvas move the user didn't gesture for is exactly the kind of thing some users will want to disable, unlike the font-size row which has no reason to be optional | Never for the default-on choice; revisit the fixed 220ms/24dp constants if a user asks for them to be configurable too, or extend past `NumberNode` if a future non-number edit affordance needs the same treatment |
 
 ## 17. Open questions
 

@@ -205,7 +205,7 @@ function ViewportStub({ children }: { children: React.ReactNode }) {
   const panY = useSharedValue(0);
   const zoom = useSharedValue(1);
   return (
-    <CanvasViewportContext.Provider value={{ panX, panY, zoom }}>
+    <CanvasViewportContext.Provider value={{ panX, panY, zoom, panIntoView: () => {} }}>
       {children}
     </CanvasViewportContext.Provider>
   );
