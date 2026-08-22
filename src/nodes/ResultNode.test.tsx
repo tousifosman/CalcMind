@@ -1,12 +1,17 @@
 import React from 'react';
+import { useSharedValue } from 'react-native-reanimated';
 import { ResultNode, STALE_RESULT_OPACITY } from './ResultNode';
 import { RESULT_DOT_TILE } from './ResultDotTexture';
 import { useDocumentStore } from '../store/documentStore';
+import { useUiStore } from '../store/uiStore';
+import { usePreferencesStore } from '../store/preferencesStore';
 import { setNodeRaw } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
-import { rolePalette, resultDotColor, tokens } from '../ui/tokens';
+import { rolePalette, resultDotColor, tokens, nodeHeightFor } from '../ui/tokens';
+import { widthOf } from '../chains/measure';
 import { explainEngineError, explainCircularReference, CIRCULAR_UNLINK_LABEL, type EngineErrorKind } from '../engine/errors';
 import type { ResultDerived, ResultNode as ResultNodeModel } from '../model/types';
+import { CanvasViewportContext } from '../canvas/ViewportContext';
 import { renderNode, unmountAll, findHostByTestID } from './testUtils';
 import { act } from 'react-test-renderer';
 
@@ -14,6 +19,26 @@ jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
 
 function resetStore() {
   useDocumentStore.setState({ document: createEmptyDocument(), undoStack: [], redoStack: [] });
+  useUiStore.setState({ selectedNodeId: null });
+  usePreferencesStore.setState({ autoPanToEditedCell: true });
+}
+
+/** Stub `<Canvas>` context, same shape `NumberNode.test.tsx` uses for the same purpose. */
+function ViewportStub({
+  children,
+  panIntoView,
+}: {
+  children: React.ReactNode;
+  panIntoView: (rect: { x: number; y: number; width: number; height: number }) => void;
+}) {
+  const panX = useSharedValue(0);
+  const panY = useSharedValue(0);
+  const zoom = useSharedValue(1);
+  return (
+    <CanvasViewportContext.Provider value={{ panX, panY, zoom, panIntoView }}>
+      {children}
+    </CanvasViewportContext.Provider>
+  );
 }
 
 beforeEach(resetStore);
@@ -218,5 +243,63 @@ describe('ResultNode', () => {
       unlink.props.onPress();
     });
     expect(useDocumentStore.getState().document.nodes['ref-close']).toBeUndefined();
+  });
+});
+
+describe('ResultNode auto-pan (§7 P7 follow-up)', () => {
+  function selectedResult(): ResultNodeModel {
+    return { ...resultWith({ display: '135290700000', computedAt: '2026-08-21T00:00:00.000Z' }), position: { x: 400, y: 60 } };
+  }
+
+  test('does not crash when rendered outside <Canvas> — no CanvasViewportContext provider', () => {
+    addResultNode(selectedResult());
+    useUiStore.setState({ selectedNodeId: 'r1' });
+    expect(() => renderNode(<ResultNode id="r1" />)).not.toThrow();
+  });
+
+  test('calls panIntoView with the cell world rect once the result becomes selected (§8.7, right after =)', () => {
+    addResultNode(selectedResult());
+    useUiStore.setState({ selectedNodeId: 'r1' });
+    const panIntoView = jest.fn();
+    renderNode(
+      <ViewportStub panIntoView={panIntoView}>
+        <ResultNode id="r1" />
+      </ViewportStub>,
+    );
+
+    const node = useDocumentStore.getState().document.nodes.r1!;
+    const fontSize = usePreferencesStore.getState().numeralFontSize;
+    expect(panIntoView).toHaveBeenCalledWith({
+      x: 400,
+      y: 60,
+      width: widthOf(node, 'en-US', fontSize),
+      height: nodeHeightFor(fontSize),
+    });
+  });
+
+  test('does not call panIntoView for a result that is not selected', () => {
+    addResultNode(selectedResult());
+    const panIntoView = jest.fn();
+    renderNode(
+      <ViewportStub panIntoView={panIntoView}>
+        <ResultNode id="r1" />
+      </ViewportStub>,
+    );
+
+    expect(panIntoView).not.toHaveBeenCalled();
+  });
+
+  test('does not call panIntoView when the preference is turned off', () => {
+    usePreferencesStore.setState({ autoPanToEditedCell: false });
+    addResultNode(selectedResult());
+    useUiStore.setState({ selectedNodeId: 'r1' });
+    const panIntoView = jest.fn();
+    renderNode(
+      <ViewportStub panIntoView={panIntoView}>
+        <ResultNode id="r1" />
+      </ViewportStub>,
+    );
+
+    expect(panIntoView).not.toHaveBeenCalled();
   });
 });

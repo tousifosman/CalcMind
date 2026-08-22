@@ -25,15 +25,21 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   runOnJS,
+  withTiming,
 } from 'react-native-reanimated';
 import { useDocumentStore } from '../store/documentStore';
 import { useUiStore } from '../store/uiStore';
 import { Vec2, ZOOM_MIN, ZOOM_MAX } from '../model/types';
-import { CanvasViewportContext } from './ViewportContext';
+import { CanvasViewportContext, type AutoPanCallbacks } from './ViewportContext';
+import { computeAutoPanTarget, type WorldRect } from './autoPan';
 
 const WHEEL_COMMIT_DEBOUNCE_MS = 200;
 /** Wheel deltaY-per-notch that reads as one "ctrl+wheel" zoom step. */
 const WHEEL_ZOOM_SENSITIVITY = 0.0035;
+/** Auto-pan-to-edited-cell (§7 P7 follow-up): smooth rather than an instant jump, but
+ *  brief — this is a "keep working" correction the user didn't ask for directly, not a
+ *  gesture they're driving, so it shouldn't linger. */
+const AUTO_PAN_DURATION_MS = 220;
 
 function clampZoom(zoom: number): number {
   return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
@@ -80,6 +86,43 @@ export function Canvas({ children, style, onTap, onLongPress }: CanvasProps) {
 
   function publishLiveViewport(x: number, y: number, z: number) {
     useUiStore.getState().setLiveViewport({ pan: { x, y }, zoom: z });
+  }
+
+  // Auto-pan-to-edited-cell (§7 P7 follow-up, §12.5 opt-out): this View's own laid-out
+  // size *is* the visible canvas bounds `computeAutoPanTarget` pans against — it already
+  // excludes the keypad, which shares the flex column below it (AppShell.tsx) rather than
+  // overlaying it, so no separate "minus keypad height" adjustment is needed here. A ref,
+  // not state: read imperatively from `panIntoView` below, never used to drive a render.
+  const canvasSize = useRef({ width: 0, height: 0 });
+
+  // Called by a node view (NumberNode, so far) entering edit mode, via context - see
+  // ViewportContext.tsx. Not a gesture, so it doesn't fit the pan/pinch handlers' worklet
+  // shape above; reads the shared values from the JS thread (fine, just not reactive) and
+  // animates toward the computed target the same "commit only on release" way a real
+  // gesture does, via the `finished` callback rather than a fixed delay. `callbacks` fires
+  // only around an actual pan - never for a rect that already fit, so the common case (a
+  // cell already comfortably in view) never pays for whatever the caller's `onWillPan`/
+  // `onSettled` do.
+  function panIntoView(rect: WorldRect, callbacks?: AutoPanCallbacks) {
+    const target = computeAutoPanTarget(
+      rect,
+      { pan: { x: panX.value, y: panY.value }, zoom: zoom.value },
+      canvasSize.current,
+    );
+    const onSettled = callbacks?.onSettled;
+    if (!target) {
+      onSettled?.();
+      return;
+    }
+    callbacks?.onWillPan?.();
+    panX.value = withTiming(target.x, { duration: AUTO_PAN_DURATION_MS });
+    panY.value = withTiming(target.y, { duration: AUTO_PAN_DURATION_MS }, (finished) => {
+      'worklet';
+      if (finished) {
+        runOnJS(commitViewport)();
+        if (onSettled) runOnJS(onSettled)();
+      }
+    });
   }
 
   const pan = Gesture.Pan()
@@ -201,8 +244,15 @@ export function Canvas({ children, style, onTap, onLongPress }: CanvasProps) {
   const webWheelProps: Record<string, unknown> = Platform.OS === 'web' ? { onWheel } : {};
 
   return (
-    <CanvasViewportContext.Provider value={{ panX, panY, zoom }}>
-      <View style={[styles.fill, style]} {...webWheelProps}>
+    <CanvasViewportContext.Provider value={{ panX, panY, zoom, panIntoView }}>
+      <View
+        style={[styles.fill, style]}
+        onLayout={(e) => {
+          const { width, height } = e.nativeEvent.layout;
+          canvasSize.current = { width, height };
+        }}
+        {...webWheelProps}
+      >
         <GestureDetector gesture={composedGesture}>
           <View style={styles.fill} testID="canvas-surface">
             <Animated.View style={[styles.fill, outerStyle]}>

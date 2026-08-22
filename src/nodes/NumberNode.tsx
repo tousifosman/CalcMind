@@ -12,13 +12,15 @@ import { useUiStore } from '../store/uiStore';
 import { deselectNode, setNodeRaw, finishEditingLabel, setNodeLabel } from '../store/commands';
 import { formatForDisplay, parseUserInput } from '../engine/format';
 import { widthOf } from '../chains/measure';
-import { rolePalette, glyphColor } from '../ui/tokens';
+import { rolePalette, glyphColor, nodeHeightFor } from '../ui/tokens';
 import { getDeviceLocale } from '../ui/locale';
 import { commandFromHardwareKey, dispatchEditorCommand } from '../keypad/keymap';
 import { Cell, useGlyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
-import { useNodeSelected } from './useNodeSelected';
+import { useNodeSelected, useNodeGroupSelected } from './useNodeSelected';
+import { useGroupPosition } from './useGroupPosition';
 import { usePreferencesStore } from '../store/preferencesStore';
+import { useCanvasViewportOptional } from '../canvas/ViewportContext';
 
 interface NumberNodeProps {
   id: NodeId;
@@ -29,8 +31,14 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
   const isEditing = useUiStore((state) => state.editingNodeId === id);
   const isEditingLabel = useUiStore((state) => state.editingLabelNodeId === id);
   const selected = useNodeSelected(id);
+  const groupSelected = useNodeGroupSelected(id);
   const identityHue = useSourceIdentityHue(id);
+  const groupPosition = useGroupPosition(id, node?.chainId ?? null);
   const inputRef = useRef<TextInput>(null);
+  // Set for the duration of the auto-pan effect's own programmatic blur (below), so
+  // `onBlur`'s `deselectNode` (a *real* blur - the user tapped away, or similar) can tell
+  // the difference and skip itself for this one. See that effect for why this exists.
+  const suppressBlurDeselect = useRef(false);
 
   // Web only, same trade as Canvas.tsx's onWheel and AppShell's keydown listener (no DOM lib
   // in this project's tsconfig). react-native-gesture-handler's web backend treats a bubbling
@@ -53,6 +61,19 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
     // same trade Canvas.tsx's onWheel and AppShell's window keydown listener already make.
     const inputNode: any = inputRef.current;
     if (!inputNode || typeof inputNode.addEventListener !== 'function') return;
+
+    // `autoFocus` (below) becomes a literal HTML `autofocus` attribute on web, and the
+    // browser's own autofocus algorithm scrolls its nearest scrollable ancestor to bring
+    // the newly-focused input into view — here, that's the whole app's root container
+    // (`body`/`#root`, `web/index.html`), so a cell added near the canvas edge dragged
+    // the *entire* screen, keypad included, rather than leaving the keypad fixed and
+    // letting only the canvas itself account for the cell's position. Reported live: the
+    // keypad visibly shifted on every off-screen add/edit. Calling `.focus()` ourselves
+    // with `preventScroll: true` is the one thing that suppresses that browser-native
+    // scroll — there's no prop for it, `autoFocus` itself doesn't take options.
+    if (typeof inputNode.focus === 'function') {
+      inputNode.focus({ preventScroll: true });
+    }
 
     function onNativeKeyDown(e: any): void {
       if (e.key === 'Enter' || e.key === ' ') {
@@ -78,6 +99,73 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
 
   const glyphTextStyle = useGlyphTextStyle();
   const fontSize = usePreferencesStore((s) => s.numeralFontSize);
+
+  // §7 auto-pan-to-edited-cell (P7 follow-up, §12.5 opt-out): a cell entering edit mode
+  // (added or typed into) pans the canvas to keep it clear of the visible edge, with
+  // padding. This is a different fix from the `preventScroll` effect above — that one
+  // stops the *keypad* from moving; this is what actually keeps the edited cell in view,
+  // which the browser's old accidental autoFocus-scroll used to do as an unintended side
+  // effect before that fix removed it. `useCanvasViewportOptional` (not the throwing
+  // `useCanvasViewport`) so this stays a no-op rather than a crash for every component
+  // spec that renders `NumberNode` standalone, without mounting `Canvas` — most of them.
+  // Re-runs on `node` (not narrowed to `numberNode`, which isn't in scope until after the
+  // early return below - hooks must stay unconditional) so both entering edit mode and
+  // growing while being typed into (which can push a chain further past the edge without
+  // moving this cell's own `position`) keep re-checking.
+  const canvasViewport = useCanvasViewportOptional();
+  const autoPanEnabled = usePreferencesStore((s) => s.autoPanToEditedCell);
+  useEffect(() => {
+    if (!isEditing || !autoPanEnabled || !canvasViewport || !node || node.kind !== 'number') {
+      return;
+    }
+    // Web only: blur this input for the pan's duration, refocusing (still `preventScroll`,
+    // same as the effect above) once it settles. Reported live on a real device: the pan
+    // itself was enough to bring the keyboard-drags-the-page bug back, even though nothing
+    // here calls `.focus()` or `scrollIntoView()` again - WebKit can re-trigger its own
+    // "scroll the focused control into view" heuristic purely from a *focused* element's
+    // bounding rect changing, including via a CSS transform, independent of any new focus
+    // call (this is a different trigger than the one-time `autoFocus` HTML-attribute case
+    // the effect above already covers). Losing DOM focus for ~`AUTO_PAN_DURATION_MS` costs
+    // nothing the on-screen keypad needs — it dispatches through `onKeyPress` regardless of
+    // this input's focus state — only a hardware key pressed mid-pan would be missed, and
+    // even then only in a JS-side `pointerEvents="none"` field like this one, not by having
+    // no visible caret.
+    //
+    // `suppressBlurDeselect` guards against a second regression this same blur call caused,
+    // also only reproducible on a real device: `.blur()` synchronously fires this input's own
+    // `onBlur={deselectNode}` below, which clears `editingNodeId`/`selectedNodeId` and — for
+    // an already-non-empty cell — commits and fully exits edit mode, same as a genuine blur
+    // (tapping away) would. The *next* keystroke then lands with nothing selected, which
+    // `dispatchEditorCommand`'s digit case reads as "start a fresh cell" (`addNumberNode`) —
+    // reported live as an extra stray cell appearing mid-type. `deselectNode` is exactly
+    // right for a real blur; it must not fire for this purely-cosmetic, DOM-only one.
+    const inputNode: any =
+      Platform.OS === 'web' && inputRef.current ? (inputRef.current as any) : null;
+    const canBlurFocus =
+      inputNode &&
+      typeof inputNode.blur === 'function' &&
+      typeof inputNode.focus === 'function';
+    canvasViewport.panIntoView(
+      {
+        x: node.position.x,
+        y: node.position.y,
+        width: widthOf(node, getDeviceLocale(), fontSize),
+        height: nodeHeightFor(fontSize),
+      },
+      canBlurFocus
+        ? {
+            onWillPan: () => {
+              suppressBlurDeselect.current = true;
+              inputNode.blur();
+            },
+            onSettled: () => {
+              inputNode.focus({ preventScroll: true });
+              suppressBlurDeselect.current = false;
+            },
+          }
+        : undefined,
+    );
+  }, [isEditing, autoPanEnabled, canvasViewport, node, fontSize]);
 
   if (!node || node.kind !== 'number') return null;
   // Rebound so the narrowing above survives into the closures below - TS does not carry a
@@ -151,6 +239,8 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
       identityHue={identityHue}
       isEditingLabel={isEditingLabel}
       selected={selected}
+      groupSelected={groupSelected}
+      groupPosition={groupPosition}
       onLabelChange={(text) => setNodeLabel(id, text)}
       onLabelBlur={finishEditingLabel}
     >
@@ -162,8 +252,18 @@ function NumberNodeComponent({ id }: NumberNodeProps) {
           value={display}
           onChangeText={handleChangeText}
           onKeyPress={handleKeyPress}
-          onBlur={deselectNode}
-          autoFocus
+          onBlur={() => {
+            // See the auto-pan effect above: a blur it triggers itself (purely to dodge a
+            // WebKit scroll heuristic) must not also exit edit mode the way a real one does.
+            if (suppressBlurDeselect.current) return;
+            deselectNode();
+          }}
+          // Native has no browser to scroll — RN's own `autoFocus` is fine there. Web
+          // focuses itself instead, via the effect above, specifically so it can pass
+          // `preventScroll: true` (no such option on this prop) and keep the keypad from
+          // sliding along with a cell added near the canvas edge — see that effect for
+          // the full story.
+          autoFocus={Platform.OS !== 'web'}
           // Custom keypad is the soft-input surface (§8.5); keep the TextInput focused for
           // caret + hardware keys, but do not raise the OS keyboard on top of ours.
           // `showSoftInputOnFocus={false}` alone is not enough on mobile web: RN-web only

@@ -1,13 +1,19 @@
-// §1.2 P7: the numeral font size preference. Persistence and chain-reflow side effects
-// are mocked so this stays a test of the store's own logic (clamping, when it writes,
-// when it reflows) — preferences.native.test.ts / preferences.web.test.ts cover the
-// adapters themselves, and reflowAllChains's own geometry is chains/layout.test.ts's job.
-const mockWrite = jest.fn(async (_prefs: { numeralFontSize?: number }) => {});
-const mockRead = jest.fn(async () => ({}) as { numeralFontSize?: number });
+// §1.2 P7: the numeral font size preference, plus §7's auto-pan-to-edited-cell toggle.
+// Persistence and chain-reflow side effects are mocked so this stays a test of the store's
+// own logic (clamping, when it writes, when it reflows) — preferences.native.test.ts /
+// preferences.web.test.ts cover the adapters themselves, and reflowAllChains's own
+// geometry is chains/layout.test.ts's job.
+interface MockPrefs {
+  numeralFontSize?: number;
+  autoPanToEditedCell?: boolean;
+}
+
+const mockWrite = jest.fn(async (_prefs: MockPrefs) => {});
+const mockRead = jest.fn(async () => ({}) as MockPrefs);
 
 jest.mock('../persistence/preferences', () => ({
   preferencesAdapter: {
-    write: (prefs: { numeralFontSize?: number }) => mockWrite(prefs),
+    write: (prefs: MockPrefs) => mockWrite(prefs),
     read: () => mockRead(),
   },
 }));
@@ -26,7 +32,10 @@ import { tokens } from '../ui/tokens';
 
 beforeEach(() => {
   jest.clearAllMocks();
-  usePreferencesStore.setState({ numeralFontSize: tokens.numeralFontSize });
+  usePreferencesStore.setState({
+    numeralFontSize: tokens.numeralFontSize,
+    autoPanToEditedCell: true,
+  });
 });
 
 describe('preferencesStore numeralFontSize', () => {
@@ -34,11 +43,14 @@ describe('preferencesStore numeralFontSize', () => {
     expect(usePreferencesStore.getState().numeralFontSize).toBe(tokens.numeralFontSize);
   });
 
-  test('setNumeralFontSize updates state, persists, and reflows every open chain at the new size', () => {
+  test('setNumeralFontSize updates state, persists (with the full blob), and reflows every open chain at the new size', () => {
     usePreferencesStore.getState().setNumeralFontSize(26);
 
     expect(usePreferencesStore.getState().numeralFontSize).toBe(26);
-    expect(mockWrite).toHaveBeenCalledWith({ numeralFontSize: 26 });
+    // persist() writes every field's current value, not just the one that changed — a
+    // partial write would silently drop autoPanToEditedCell from disk on the next
+    // restart (see preferencesStore.ts's `persist` comment).
+    expect(mockWrite).toHaveBeenCalledWith({ numeralFontSize: 26, autoPanToEditedCell: true });
     expect(mockReflow).toHaveBeenCalledWith(26);
   });
 
@@ -102,5 +114,74 @@ describe('preferencesStore numeralFontSize', () => {
     mockRead.mockResolvedValueOnce({ numeralFontSize: 18 });
     await usePreferencesStore.getState().hydrate();
     expect(mockReflow).not.toHaveBeenCalled();
+  });
+});
+
+describe('preferencesStore autoPanToEditedCell (§7 P7 follow-up)', () => {
+  test('starts on by default', () => {
+    expect(usePreferencesStore.getState().autoPanToEditedCell).toBe(true);
+  });
+
+  test('setAutoPanToEditedCell(false) updates state and persists the full blob', () => {
+    usePreferencesStore.getState().setAutoPanToEditedCell(false);
+
+    expect(usePreferencesStore.getState().autoPanToEditedCell).toBe(false);
+    expect(mockWrite).toHaveBeenCalledWith({
+      numeralFontSize: tokens.numeralFontSize,
+      autoPanToEditedCell: false,
+    });
+  });
+
+  test('setAutoPanToEditedCell(true) after turning it off updates state and persists both fields', () => {
+    usePreferencesStore.getState().setAutoPanToEditedCell(false);
+    mockWrite.mockClear();
+    usePreferencesStore.getState().setAutoPanToEditedCell(true);
+
+    expect(usePreferencesStore.getState().autoPanToEditedCell).toBe(true);
+    expect(mockWrite).toHaveBeenCalledWith({
+      numeralFontSize: tokens.numeralFontSize,
+      autoPanToEditedCell: true,
+    });
+  });
+
+  test('setting to the current value is a no-op: no write', () => {
+    usePreferencesStore.getState().setAutoPanToEditedCell(true);
+    expect(mockWrite).not.toHaveBeenCalled();
+  });
+
+  test('a changed numeral font size does not clobber a previously-set autoPanToEditedCell on disk', () => {
+    usePreferencesStore.getState().setAutoPanToEditedCell(false);
+    usePreferencesStore.getState().setNumeralFontSize(26);
+
+    expect(mockWrite).toHaveBeenLastCalledWith({
+      numeralFontSize: 26,
+      autoPanToEditedCell: false,
+    });
+  });
+
+  test('a failed persist keeps the in-memory value (swallowed, not surfaced)', async () => {
+    mockWrite.mockRejectedValueOnce(new Error('disk full'));
+    usePreferencesStore.getState().setAutoPanToEditedCell(false);
+    expect(usePreferencesStore.getState().autoPanToEditedCell).toBe(false);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  test('hydrate() loads a persisted false value over the default', async () => {
+    mockRead.mockResolvedValueOnce({ autoPanToEditedCell: false });
+    await usePreferencesStore.getState().hydrate();
+    expect(usePreferencesStore.getState().autoPanToEditedCell).toBe(false);
+  });
+
+  test('hydrate() with nothing saved leaves the default (true) in place', async () => {
+    mockRead.mockResolvedValueOnce({});
+    await usePreferencesStore.getState().hydrate();
+    expect(usePreferencesStore.getState().autoPanToEditedCell).toBe(true);
+  });
+
+  test('hydrate() ignores a non-boolean value and keeps the default', async () => {
+    mockRead.mockResolvedValueOnce({ autoPanToEditedCell: 'nope' as unknown as boolean });
+    await usePreferencesStore.getState().hydrate();
+    expect(usePreferencesStore.getState().autoPanToEditedCell).toBe(true);
   });
 });

@@ -4,7 +4,7 @@
 // amber accent, rather than this app's usual light keypad chrome — a deliberate one-off,
 // not a preview of P7.4's still-pending light/dark theme system.
 import { useEffect, useState } from 'react';
-import { Modal, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Modal, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import ChevronLeftIcon from 'react-native-heroicons/outline/ChevronLeftIcon';
 import ChevronRightIcon from 'react-native-heroicons/outline/ChevronRightIcon';
 import { version } from '../../package.json';
@@ -61,6 +61,8 @@ function RootPane({ onDone, onOpenAbout }: { onDone: () => void; onOpenAbout: ()
       </View>
       <View style={styles.section}>
         <NumeralSizeRow />
+        <View style={styles.rowSeparator} />
+        <AutoPanRow />
       </View>
       <View style={styles.section}>
         <TouchableOpacity
@@ -147,6 +149,27 @@ function NumeralSizeRow() {
           <Text style={styles.stepperGlyph}>+</Text>
         </TouchableOpacity>
       </View>
+    </View>
+  );
+}
+
+/** §7 P7 follow-up: whether a cell entering edit mode pans the canvas to keep it clear of
+ *  the visible edge (padded, `autoPan.ts`). On by default; this is the opt-out for anyone
+ *  who finds the pan itself distracting rather than helpful. */
+function AutoPanRow() {
+  const enabled = usePreferencesStore((s) => s.autoPanToEditedCell);
+  const setEnabled = usePreferencesStore((s) => s.setAutoPanToEditedCell);
+
+  return (
+    <View style={styles.row} testID="settings-row-auto-pan">
+      <Text style={styles.rowLabel}>Auto-pan to Edited Cell</Text>
+      <Switch
+        value={enabled}
+        onValueChange={setEnabled}
+        trackColor={{ true: accentColor }}
+        testID="settings-auto-pan-toggle"
+        accessibilityLabel="Auto-pan to edited cell"
+      />
     </View>
   );
 }
@@ -245,6 +268,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: '#1C1C1E',
     overflow: 'hidden',
+  },
+  rowSeparator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: '#3A3A3C',
+    marginLeft: 16,
   },
   row: {
     flexDirection: 'row',
