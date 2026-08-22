@@ -704,16 +704,20 @@ operators are visually separated from digits.
 
 | Region | Keys |
 |---|---|
-| Digits | `7 8 9 / 4 5 6 / 1 2 3`, bottom row decimal separator (locale glyph, inserts canonical `.`) / `0` / `+/-` — decimal and sign flank `0` rather than sitting in their own row |
 | Number editing | **Create link**, **Add components**, **Notes** |
 | History | undo, redo, backspace |
+| Digits | `7 8 9 / 4 5 6 / 1 2 3`, bottom row decimal separator (locale glyph, inserts canonical `.`) / `0` / `+/-` — decimal and sign flank `0` rather than sitting in their own row |
 | Operators (accent column) | `÷ × − + () =` — `()` sits underneath `+` |
 | Mode strip | dismiss keypad, **Workspace** *(later — documents, P5)*, functions *(later)*, **Chart** *(later — graph, §17.2)*, **Clear all**, **Settings** (icon-only cog) |
 
+- The main column stacks **number editing, then history, then the digit grid** — the number
+  side's original bottom two rows (number-editing, history) now sit at its top, above the
+  digit grid, so they're reached first. Purely a within-column reorder: the operator (accent)
+  column and every key's size are unchanged.
 - Keys act on the **selected node** if there is one, otherwise they create a new node at the
   caret/last-tap point.
-- **Every key is the same 48px tall.** The main column (digit grid + number-editing row +
-  history row) and the accent column (operators + `()` + `=`) both stack six rows, and every
+- **Every key is the same 48px tall.** The main column (number-editing row + history row +
+  digit grid) and the accent column (operators + `()` + `=`) both stack six rows, and every
   row uses the same `KEY_GAP` bottom margin, so a shared height is what keeps the two columns'
   rows landing on the same lines instead of drifting apart by a few px per row. This was a
   real, reported bug: `key`'s base height (and therefore every key built on it —
