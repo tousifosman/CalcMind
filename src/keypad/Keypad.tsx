@@ -267,59 +267,10 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
 
       <View style={styles.body}>
         <View style={styles.mainColumn}>
-          <View style={styles.digitGrid} testID="keypad-digits">
-            {DIGIT_ROWS.map((row) => (
-              <View style={styles.digitRow} key={row.join('')}>
-                {row.map((value) => (
-                  <DigitKey
-                    key={value}
-                    value={value}
-                    disabled={numberKeysDisabled}
-                    onPress={() => press({ region: 'digit', value })}
-                  />
-                ))}
-              </View>
-            ))}
-            {/* `0`'s row: decimal on its left, `+/-` on its right — under `1` and `3`
-                respectively, the reference app's bottom-row layout. Both now use
-                `numberKeysDisabled` — the same rule the digits use — rather than the looser
-                `numberEditingKeysDisabled` (which only blocks while an operator is selected):
-                a selected result or linked cell isn't a number-edit target any more than a
-                digit is, so decimal / `+/-` disable right alongside `0`. They just live in
-                the digit grid now so they land in this row instead of a dedicated one. Same
-                fill and label style as `0` when enabled (`rolePalette.number.fill` /
-                `keyLabel`, via `gridEditingKey` + `labelStyle`) so the whole row reads as one
-                colour rather than `0` standing out from its neighbours — and the same
-                `digitKeyDisabled` swap-to-grey when disabled, layered on top of
-                `gridEditingKey`/`keyLabel` so it wins over both: `Key`'s own generic
-                `keyDisabled` just fades whatever colour is already there (right for the
-                accent-coloured keys), which used to leave these two visibly greenish while
-                every other number key had already gone flat grey. */}
-            <View style={styles.digitRow}>
-              <Key
-                label={decimalSeparatorFor(locale)}
-                onPress={() => press({ region: 'decimal' })}
-                disabled={numberKeysDisabled}
-                testID="keypad-decimal"
-                style={[styles.gridEditingKey, numberKeysDisabled && styles.digitKeyDisabled]}
-                labelStyle={[styles.keyLabel, numberKeysDisabled && styles.digitKeyLabelDisabled]}
-              />
-              <DigitKey
-                value="0"
-                disabled={numberKeysDisabled}
-                onPress={() => press({ region: 'digit', value: '0' })}
-              />
-              <Key
-                label="+/-"
-                onPress={() => press({ region: 'sign' })}
-                disabled={numberKeysDisabled}
-                testID="keypad-sign"
-                style={[styles.gridEditingKey, numberKeysDisabled && styles.digitKeyDisabled]}
-                labelStyle={[styles.keyLabel, numberKeysDisabled && styles.digitKeyLabelDisabled]}
-              />
-            </View>
-          </View>
-
+          {/* Number-editing and history rows sit above the digit grid now — the number
+              side's original bottom two rows moved to its top; still the same three-column
+              rows they always were, just reordered within this column. Operator column
+              (accent column, below) is untouched. */}
           <View style={styles.editingRow} testID="keypad-number-editing">
             {/* §8.6 `Create link`: takes the slot `.` used to occupy in this row. Enabled
                 for a selected number, result, or live reference (`canCreateLink`); creates
@@ -375,6 +326,67 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                 testID="keypad-backspace"
               />
             </GestureDetector>
+          </View>
+
+          <View style={styles.digitGrid} testID="keypad-digits">
+            {DIGIT_ROWS.map((row) => (
+              <View style={styles.digitRow} key={row.join('')} testID={`keypad-digit-row-${row.join('')}`}>
+                {row.map((value) => (
+                  <DigitKey
+                    key={value}
+                    value={value}
+                    disabled={numberKeysDisabled}
+                    onPress={() => press({ region: 'digit', value })}
+                  />
+                ))}
+              </View>
+            ))}
+            {/* `0`'s row: decimal on its left, `+/-` on its right — under `1` and `3`
+                respectively, the reference app's bottom-row layout. Both now use
+                `numberKeysDisabled` — the same rule the digits use — rather than the looser
+                `numberEditingKeysDisabled` (which only blocks while an operator is selected):
+                a selected result or linked cell isn't a number-edit target any more than a
+                digit is, so decimal / `+/-` disable right alongside `0`. They just live in
+                the digit grid now so they land in this row instead of a dedicated one. Same
+                fill and label style as `0` when enabled (`rolePalette.number.fill` /
+                `keyLabel`, via `gridEditingKey` + `labelStyle`) so the whole row reads as one
+                colour rather than `0` standing out from its neighbours — and the same
+                `digitKeyDisabled` swap-to-grey when disabled, layered on top of
+                `gridEditingKey`/`keyLabel` so it wins over both: `Key`'s own generic
+                `keyDisabled` just fades whatever colour is already there (right for the
+                accent-coloured keys), which used to leave these two visibly greenish while
+                every other number key had already gone flat grey. */}
+            {/* Last row of the main column now that the digit grid follows the
+                number-editing/history rows (§8.5) — `digitRow`'s own marginBottom would
+                otherwise be trailing, wasted space, growing the main column 6px past the
+                accent column's total (they share the same "every row but the last carries
+                the gap" total, which is what keeps them landing on identical row lines) and
+                triggering the browser to stretch/round the shorter column into
+                misalignment. `lastRow` cancels just that trailing margin, the same way
+                `equalsKey` already does for the accent column's own last row. */}
+            <View style={[styles.digitRow, styles.lastRow]} testID="keypad-digit-row-last">
+              <Key
+                label={decimalSeparatorFor(locale)}
+                onPress={() => press({ region: 'decimal' })}
+                disabled={numberKeysDisabled}
+                testID="keypad-decimal"
+                style={[styles.gridEditingKey, numberKeysDisabled && styles.digitKeyDisabled]}
+                labelStyle={[styles.keyLabel, numberKeysDisabled && styles.digitKeyLabelDisabled]}
+              />
+              <DigitKey
+                value="0"
+                disabled={numberKeysDisabled}
+                onPress={() => press({ region: 'digit', value: '0' })}
+              />
+              <Key
+                label="+/-"
+                onPress={() => press({ region: 'sign' })}
+                disabled={numberKeysDisabled}
+                testID="keypad-sign"
+                style={[styles.gridEditingKey, numberKeysDisabled && styles.digitKeyDisabled]}
+                labelStyle={[styles.keyLabel, numberKeysDisabled && styles.digitKeyLabelDisabled]}
+              />
+            </View>
           </View>
         </View>
 
@@ -634,6 +646,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     marginBottom: KEY_GAP,
   },
+  // Cancels `digitRow`'s marginBottom for whichever row is actually last in the main
+  // column — see its call site's comment for why a trailing gap there breaks alignment.
+  lastRow: {
+    marginBottom: 0,
+  },
   digitKey: {
     flex: 1,
     height: 48,
@@ -660,6 +677,11 @@ const styles = StyleSheet.create({
   },
   historyRow: {
     flexDirection: 'row',
+    // Used to rely on being the last row in the column, where a trailing margin doesn't
+    // matter. It no longer is — the digit grid now follows it (§8.5) — so without this the
+    // missing gap collapsed the space between this row and the next, shifting every row
+    // below it out of line with the operator column's own evenly `KEY_GAP`-spaced rows.
+    marginBottom: KEY_GAP,
   },
   key: {
     flex: 1,

@@ -489,6 +489,82 @@ describe('main column and accent column rows stay aligned (§8.5)', () => {
     expect(new Set(heights).size).toBe(1);
     expect(heights[0]).toBe(48);
   });
+
+  test('every non-final row in the main column carries the same bottom gap', () => {
+    // `historyRow` used to be exempt (it was always the last row, where a trailing margin
+    // doesn't matter) and had no `marginBottom` of its own. Reordering the main column
+    // (§8.5) put the digit grid after it, silently collapsing that gap and shifting every
+    // row below out of line with the operator column's own evenly spaced rows — a real,
+    // reported regression. Asserting every non-final row shares one gap value catches a
+    // repeat the same way the height check above catches a repeat of the 44-vs-48 bug.
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    const rowTestIDs = ['keypad-number-editing', 'keypad-history'];
+    const gaps = rowTestIDs.map((testID) => findByTestID(renderer, testID).props.style.marginBottom);
+    expect(new Set(gaps).size).toBe(1);
+    expect(gaps[0]).toBeGreaterThan(0);
+  });
+
+  test('the two columns sum to the same total natural height', () => {
+    // The real invariant behind both row-alignment bugs above: with every key 48px tall
+    // (checked above), the two columns land on identical row lines *only* if their six
+    // rows' gaps add up to the same total — five rows carrying `KEY_GAP`, one true last
+    // row that doesn't, on both sides. The fix for the previous bug (giving `historyRow`
+    // its gap back) left the digit grid's now-actually-last row still carrying its own
+    // unconditional trailing gap, so the main column summed 6px taller than the accent
+    // column — invisible to the gap-equality check above, since every individual gap was
+    // still a valid `KEY_GAP` or 0, just the wrong row was the one still carrying it. That
+    // mismatch is what a real device showed as every operator key rendering ~1px too tall
+    // (the browser stretching the shorter column to fill the taller one's height):
+    // react-test-renderer doesn't run real layout, so this can only assert the arithmetic,
+    // not reproduce the stretch itself — the browser boundingBox() check that actually
+    // caught it isn't available here.
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    // RN style arrays merge left-to-right with later entries overriding earlier ones for
+    // the same key (not summing) — mirrors that merge rather than assuming a flat object.
+    function marginBottomOf(style: unknown): number {
+      const layers = ([] as { marginBottom?: number }[]).concat(style as never).filter(Boolean);
+      return layers.reduce((resolved, layer) => layer.marginBottom ?? resolved, 0);
+    }
+
+    // Read every gap from a *host* node (`findHostByTestID`), not `findByTestID`: the
+    // latter's first tree match is often the outer composite (e.g. `OperatorKey` itself),
+    // which never receives a `style` prop at all — its style is hardcoded internally and
+    // only appears once flattened onto the actual host node further down.
+    //
+    // Main column: the number-editing and history rows' own containers, then each of the
+    // digit grid's four row containers (three from the `DIGIT_ROWS.map`, plus the decimal/
+    // `0`/`+/-` row — now the column's true last row, so the only one that must *not*
+    // carry the gap).
+    const mainRowGaps = [
+      'keypad-number-editing',
+      'keypad-history',
+      'keypad-digit-row-789',
+      'keypad-digit-row-456',
+      'keypad-digit-row-123',
+      'keypad-digit-row-last',
+    ].map((id) => marginBottomOf(findHostByTestID(renderer.root, id).props.style));
+    const mainTotal = 6 * 48 + mainRowGaps.reduce((sum, g) => sum + g, 0);
+
+    const accentGaps = [
+      'keypad-op-divide',
+      'keypad-op-multiply',
+      'keypad-op-subtract',
+      'keypad-op-add',
+      'keypad-paren',
+      'keypad-equals',
+    ].map((id) => marginBottomOf(findHostByTestID(renderer.root, id).props.style));
+    const accentTotal = 6 * 48 + accentGaps.reduce((sum, g) => sum + g, 0);
+
+    expect(mainTotal).toBe(accentTotal);
+  });
 });
 
 describe('() moved into the accent column, under + (§8.5)', () => {

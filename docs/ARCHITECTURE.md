@@ -704,22 +704,35 @@ operators are visually separated from digits.
 
 | Region | Keys |
 |---|---|
-| Digits | `7 8 9 / 4 5 6 / 1 2 3`, bottom row decimal separator (locale glyph, inserts canonical `.`) / `0` / `+/-` — decimal and sign flank `0` rather than sitting in their own row |
 | Number editing | **Create link**, **Add components**, **Notes** |
 | History | undo, redo, backspace |
+| Digits | `7 8 9 / 4 5 6 / 1 2 3`, bottom row decimal separator (locale glyph, inserts canonical `.`) / `0` / `+/-` — decimal and sign flank `0` rather than sitting in their own row |
 | Operators (accent column) | `÷ × − + () =` — `()` sits underneath `+` |
 | Mode strip | dismiss keypad, **Workspace** *(later — documents, P5)*, functions *(later)*, **Chart** *(later — graph, §17.2)*, **Clear all**, **Settings** (icon-only cog) |
 
+- The main column stacks **number editing, then history, then the digit grid** — the number
+  side's original bottom two rows (number-editing, history) now sit at its top, above the
+  digit grid, so they're reached first. Purely a within-column reorder: the operator (accent)
+  column and every key's size are unchanged.
 - Keys act on the **selected node** if there is one, otherwise they create a new node at the
   caret/last-tap point.
-- **Every key is the same 48px tall.** The main column (digit grid + number-editing row +
-  history row) and the accent column (operators + `()` + `=`) both stack six rows, and every
-  row uses the same `KEY_GAP` bottom margin, so a shared height is what keeps the two columns'
-  rows landing on the same lines instead of drifting apart by a few px per row. This was a
-  real, reported bug: `key`'s base height (and therefore every key built on it —
-  `OperatorKey`, `EqualsKey`, `Create link`, etc.) used to be 44px against `digitKey`'s 48px,
-  invisible while the two columns had different row counts and only became a visible
-  cumulative stagger once `()`'s move (above) made them match.
+- **Every key is the same 48px tall, and the two columns' total heights must match.** The
+  main column (number-editing row + history row + digit grid) and the accent column
+  (operators + `()` + `=`) both stack six rows of five carrying `KEY_GAP`'s bottom margin
+  plus one true last row that doesn't (`equalsKey` on the accent side; `lastRow` cancels
+  `digitRow`'s own margin on the main side) — 5×54+48 = 318px on both sides. Both halves of
+  that identity matter: a shared 48px height is what keeps same-position rows the same
+  height, but it's the **matching total** that keeps row *N* on one side level with row *N*
+  on the other — if the totals diverge, the shorter column's flex container gets stretched
+  to match and the browser spreads the slack as a sub-pixel-per-row drift across every one
+  of its rows, not a jump at one obvious row. Both failure modes are real, reported bugs:
+  `key`'s base height (and therefore every key built on it — `OperatorKey`, `EqualsKey`,
+  `Create link`, etc.) used to be 44px against `digitKey`'s 48px, invisible while the two
+  columns had different row counts and only became a visible cumulative stagger once `()`'s
+  move (above) made them match; separately, reordering the main column's rows (below) briefly
+  left it summing 6px taller than the accent column even with every individual row's own gap
+  correct, because "last row" had moved to a different row than the one still coded not to
+  carry a trailing gap.
 - Decimal and `+/-` share `0`'s fill (`rolePalette.number.fill`, the same teal as every digit)
   and label style, so the bottom digit row reads as one colour rather than `0` standing out
   from its neighbours — and share its `disabled` rule too: they are number keys, not a
