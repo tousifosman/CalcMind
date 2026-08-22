@@ -15,6 +15,8 @@ import {
   appendEqualsNode,
   appendOperatorAndNumber,
   continueFromValue,
+  continueFromValueWithParens,
+  convertEqualsToOperator,
   createLinkToValue,
   setNodeRaw,
   setOperatorSymbol,
@@ -37,6 +39,24 @@ export function groupContainsResult(
     if (nodes[id]?.kind === 'result') return true;
   }
   return false;
+}
+
+/** True when `nodeId`'s own chain (if any) already contains an equals node (§9: at most
+ *  one `=` per chain — appending a second would splice it in front of the existing
+ *  equals+result pair instead of replacing anything, corrupting the formula). Gates the
+ *  keypad's `=` key (`Keypad.tsx`'s `EqualsKey`) and {@link dispatchEditorCommand}'s
+ *  `equals` case alike, so a hardware Enter/`=` press can't do what the on-screen button
+ *  already refuses to. */
+export function chainHasEquals(
+  nodeId: NodeId | null | undefined,
+  nodes: Record<NodeId, CalcNode>,
+  chains: Record<string, { members: readonly NodeId[] }>,
+): boolean {
+  const chainId = nodeId ? nodes[nodeId]?.chainId : null;
+  if (!chainId) return false;
+  const chain = chains[chainId];
+  if (!chain) return false;
+  return chain.members.some((id) => nodes[id]?.kind === 'equals');
 }
 
 export type Digit = '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9';
@@ -200,6 +220,34 @@ export function resolveParenSide(
  *  opens the in-place editor (see digit branch in {@link dispatchEditorCommand}). */
 function focusNode(node: CalcNode): void {
   selectNode(node.id);
+}
+
+/** The chain member immediately to the left of `node`, or `null` when it's the chain's
+ *  first member (or free) — where backspace on an operator, or on an already-empty
+ *  number, lands the selection after deleting the cell (§8.5), the same neighbour
+ *  {@link moveSelectionAlongChain} (P7.2 arrows) already computes. */
+function leftChainNeighborId(node: CalcNode): NodeId | null {
+  if (node.chainId === null) return null;
+  const chain = useDocumentStore.getState().document.chains[node.chainId];
+  if (!chain) return null;
+  const index = chain.members.indexOf(node.id);
+  if (index <= 0) return null;
+  return chain.members[index - 1] ?? null;
+}
+
+/** The chain member immediately to the right of `node`, or `null` when there isn't one
+ *  (chain's last member, or the node isn't chained). Exported — shared by
+ *  {@link dispatchEditorCommand}'s own operator-digit handling below (§8.5: typing while
+ *  an operator is selected targets the operand to its right) and `Keypad.tsx`'s
+ *  disabled-state computation for the same rule, so the on-screen key and the dispatch
+ *  function can't disagree about which cell a digit lands in. */
+export function rightChainNeighborId(node: CalcNode): NodeId | null {
+  if (node.chainId === null) return null;
+  const chain = useDocumentStore.getState().document.chains[node.chainId];
+  if (!chain) return null;
+  const index = chain.members.indexOf(node.id);
+  if (index === -1) return null;
+  return chain.members[index + 1] ?? null;
 }
 
 function moveSelectionAlongChain(selectedId: NodeId | null, direction: 'left' | 'right'): void {
@@ -430,17 +478,72 @@ export function dispatchEditorCommand(command: EditorCommand): void {
   }
 
   if (command.region === 'backspace') {
-    if (editingNumber) {
-      if (editingNumber.raw === '') {
-        deselectNode(); // already empty - discards it (§8.6)
+    // A result is derived, not user input — backspace is disabled here (both this
+    // dispatch guard and the keypad's own `disabled` prop, `Keypad.tsx`), not just
+    // quietly no-op'd, so deleting a finished formula's answer takes a deliberate
+    // action (long-press → Delete) rather than the same key that erases every other
+    // cell one press at a time.
+    if (selectedNode?.kind === 'result') {
+      return;
+    }
+    // A number backspaces digit-by-digit, editing or not — tapping a (non-editing)
+    // number and pressing backspace used to delete the whole cell immediately, far
+    // more destructive than what backspace does everywhere else in this app (erase one
+    // character). `editingNumber`'s own raw *is* `selectedNode.raw` when they're the
+    // same node, so this reads directly off the selection either way; reaching '' via
+    // a trim keeps the empty cell selected (and editing, so a following digit lands in
+    // it) rather than auto-discarding — only a backspace on an *already*-empty number
+    // deletes it, landing on the left neighbour same as an operator does, below.
+    if (selectedNode?.kind === 'number') {
+      if (selectedNode.raw !== '') {
+        setNodeRaw(selectedNode.id, selectedNode.raw.slice(0, -1));
+        editNumberNode(selectedNode.id);
       } else {
-        setNodeRaw(editingNumber.id, editingNumber.raw.slice(0, -1));
+        const leftId = leftChainNeighborId(selectedNode);
+        deleteNode(selectedNode.id);
+        if (leftId) selectNode(leftId);
+        else deselectNode();
       }
-    } else if (selectedNode) {
+      return;
+    }
+    // An operator deletes and lands the selection on its left neighbour (§8.5) rather
+    // than fully deselecting, so backspacing along a chain reads as "keep going"
+    // instead of losing the selection's place after every cell removed.
+    if (selectedNode?.kind === 'operator') {
+      const leftId = leftChainNeighborId(selectedNode);
+      deleteNode(selectedNode.id);
+      if (leftId) selectNode(leftId);
+      else deselectNode();
+      return;
+    }
+    if (selectedNode) {
       deleteNode(selectedNode.id);
       // Prefer deselectNode so a leftover Select-group highlight clears with the
       // primary selection (same contract as Escape / tap-elsewhere).
       deselectNode();
+    }
+    return;
+  }
+
+  // §9: a chain's `=` is terminal — nothing can be *appended* after it. Continuation
+  // (§8.7) happens from the *result*, never from the `=` symbol itself, so digit /
+  // decimal / sign / paren / `=` are all inert while the equals cell is the selected
+  // target — backspace already returned above and still deletes it like any other cell.
+  // Without this, selecting `=` directly and pressing one of those would splice a new
+  // member right after it (`appendMembersToChain` inserts after whatever node is
+  // targeted), i.e. exactly "a cell after the equals" — a chain's result (added below
+  // `=` by `finalizeChain`) is what should follow it, never user input.
+  //
+  // An operator is the one key that *does* something here, and it isn't an append: it
+  // converts `=` into that operator in place (`convertEqualsToOperator`), the same
+  // "replace in place" the keypad already does for a selected operator
+  // (`setOperatorSymbol`, in the generic switch below) — `1 + 2 = 3`, select `=`, press
+  // `+` builds `1 + 2 + _`, focused for the next digits, same as any other operator
+  // press seeds and focuses its fresh operand.
+  if (selectedNode?.kind === 'equals') {
+    if (command.region === 'operator') {
+      const converted = convertEqualsToOperator(selectedNode.id, command.op);
+      if (converted) editNumberNode(converted.numberId);
     }
     return;
   }
@@ -472,6 +575,14 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     if (command.region === 'operator') {
       const { numberId } = continueFromValue(selectedNode.id, command.op);
       editNumberNode(numberId);
+    } else if (command.region === 'paren') {
+      // §8.7 continuation, wrapped: `()` on a selected result used to no-op (read-only,
+      // same as digits) — now it starts a new chain the same way an operator does, just
+      // grouped: `( ref )` instead of `ref ⊕ _`. Select (not edit — there's no operand to
+      // type into yet) the close paren, so a following operator or `=` extends this new
+      // chain in place, same as any other selected structural cell.
+      const { closeParenId } = continueFromValueWithParens(selectedNode.id);
+      selectNode(closeParenId);
     }
     return;
   }
@@ -515,11 +626,39 @@ export function dispatchEditorCommand(command: EditorCommand): void {
     case 'digit':
     case 'decimal':
     case 'sign': {
-      // Operator cells are not number-edit targets (keypad digits are disabled);
-      // do not append a fresh number at the chain end.
-      if (selectedNode?.kind === 'operator') return;
-
       const char = command.region === 'digit' ? command.value : command.region === 'decimal' ? '.' : '-';
+
+      // An operator itself never takes text input, but §8.5 wants its *right* operand
+      // reachable from here rather than silently no-opping: typing while an operator is
+      // selected edits the number cell right of it, same as tapping that number then
+      // typing (below). Nothing there yet — a bare trailing operator, e.g. one backspace
+      // just emptied and deleted its operand's cell, or an operator directly before a
+      // paren group (implicit multiplication, §10.2) — inserts a fresh number with the
+      // typed value instead, same `appendNumberNode` any other selected node uses further
+      // down. A linked cell or a result to the right can't be edited and isn't
+      // grammatical to splice a fresh operand in front of, so digits stay inert there,
+      // same as every other key a result itself already rejects (`Keypad.tsx`'s own
+      // disabled computation mirrors this via the same `rightChainNeighborId`).
+      if (selectedNode?.kind === 'operator') {
+        const rightId = rightChainNeighborId(selectedNode);
+        const rightNode = rightId ? useDocumentStore.getState().document.nodes[rightId] : undefined;
+        if (rightNode?.kind === 'reference' || rightNode?.kind === 'result') return;
+        if (rightNode?.kind === 'number') {
+          editNumberNode(rightNode.id);
+          if (command.region === 'decimal' && rightNode.raw.includes('.')) return;
+          if (command.region === 'sign') {
+            setNodeRaw(
+              rightNode.id,
+              rightNode.raw.startsWith('-') ? rightNode.raw.slice(1) : `-${rightNode.raw}`,
+            );
+          } else {
+            setNodeRaw(rightNode.id, rightNode.raw + char);
+          }
+          return;
+        }
+        editNumberNode(appendNumberNode(selectedNode.id, char));
+        return;
+      }
 
       if (editingNumber) {
         if (command.region === 'decimal' && editingNumber.raw.includes('.')) return; // one separator only
@@ -584,6 +723,16 @@ export function dispatchEditorCommand(command: EditorCommand): void {
 
     case 'equals': {
       if (selectedNode) {
+        // §9: at most one `=` per chain. The equals cell itself already returned
+        // above, but any *other* member of an already-`=`'d chain (an operand being
+        // edited, e.g.) would otherwise splice a second `=` in front of the existing
+        // one — reject it here too, matching the keypad's own `EqualsKey` disabled
+        // state (`chainHasEquals`, mirrored in `Keypad.tsx`) so a hardware Enter/`=`
+        // can't do what the on-screen button already refuses to.
+        const before = useDocumentStore.getState().document;
+        if (chainHasEquals(selectedNode.id, before.nodes, before.chains)) {
+          return;
+        }
         // §8.7: after `=` the natural next action is continuation (operator on the
         // result). Select the new result when one exists; fall back to `=` only
         // when the chain did not evaluate (no result member).

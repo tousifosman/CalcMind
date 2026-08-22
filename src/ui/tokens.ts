@@ -32,7 +32,11 @@ export const tokens = {
    *  `nodeHeightFor(numeralFontSize) === nodeHeight` exactly (9×2 + 22 = 40), so the live
    *  formula reproduces the tuned default rather than jumping on first use (§1.2 P7). */
   numberPaddingY: 9,
-  operatorWidth: 34,
+  /** Reduced from the reference-derived 34 — measured live (`getBoundingClientRect` on the
+   *  glyph vs. the cell) at ~10.5dp of padding either side of a ~13dp-wide glyph, well past
+   *  `numberPaddingX`'s already-trimmed 4dp for the equivalent number-cell padding. `26`
+   *  keeps a visibly narrower pill without cutting so far the glyph looks cramped. */
+  operatorWidth: 26,
   equalsWidth: 35,
   /** Bumped from the reference's 3 (ratio-accurate) to 8 for a friendlier silhouette. */
   cornerRadius: 8,

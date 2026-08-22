@@ -34,6 +34,8 @@ import {
   repointReference,
   editNodeLabel,
   createLinkToValue,
+  copyNodeValue,
+  copyGroupWithoutResult,
   showValueSlider,
 } from '../store/commands';
 import { isDanglingReference, isRepointTarget } from '../engine/reference';
@@ -214,6 +216,8 @@ export function AppShell() {
           onUnlinkFromParent={unlinkFromParent}
           onLabelNode={editNodeLabel}
           onCreateLink={createLinkToValue}
+          onCopy={copyNodeValue}
+          onCopyWithoutResult={copyGroupWithoutResult}
           onShowSlider={showValueSlider}
         />
         <DanglingRecoveryOverlay />

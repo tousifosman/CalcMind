@@ -6,6 +6,7 @@
 // reflowChain / finalizeChain. Typing still builds chains through appendMembersToChain
 // (P2.8, decision #16); drag-snap commits go through the P3.4 commands below, which
 // share the same §8.3 bookkeeping (dissolve / empty-delete / drop result with `=`).
+import { Clipboard } from 'react-native';
 import { setAutosaveSuppressed, useDocumentStore } from './documentStore';
 import { historyTop, type HistoryEntry } from './undo';
 import { useUiStore } from './uiStore';
@@ -34,6 +35,7 @@ import {
 } from '../engine/reference';
 import { parseComputedDisplay } from '../engine/format';
 import { identitySourceId } from '../engine/identity';
+import { copyTextForNode, chainTextWithoutResult } from '../engine/copyText';
 
 export function renameDocument(name: string): void {
   useDocumentStore.getState().applyCommand((draft) => {
@@ -272,6 +274,65 @@ export function appendOperatorAndNumber(
   return { operatorId: operatorNode.id, numberId: numberNode.id };
 }
 
+/** §9: converts a chain's `=` into an operator in place - selecting `=` and pressing an
+ *  operator key builds `1 + 2 + _` from `1 + 2 = 3` (the same operator+empty-number shape
+ *  any other operator press produces), replacing the equals rather than inserting past it
+ *  the way `appendOperatorAndNumber` would. The old equals leaves `members` and whatever
+ *  result depended on it disappears in the same `finalizeChain` cascade that already
+ *  drops a result when its chain loses `=` (recomputeChain treats a chain with no equals
+ *  as not Evaluated) - deleting `=` alone already produces exactly this, so this is that
+ *  removal plus the new pair's insertion, in one undo entry rather than two, so undo can't
+ *  strand the chain mid-conversion (equals gone, new operator not yet there, or vice
+ *  versa).
+ *
+ *  Returns `null` (no-op) if `equalsId` isn't an equals node, or - never true for a real
+ *  equals node, which always has a preceding operand, but guarded rather than assumed -
+ *  it has no predecessor to anchor the replacement to. */
+export function convertEqualsToOperator(
+  equalsId: NodeId,
+  op: OperatorSymbol,
+): { operatorId: NodeId; numberId: NodeId } | null {
+  const { nodes, chains } = useDocumentStore.getState().document;
+  const equalsNode = nodes[equalsId];
+  if (!equalsNode || equalsNode.kind !== 'equals' || equalsNode.chainId === null) return null;
+  const chain = chains[equalsNode.chainId];
+  if (!chain) return null;
+  const equalsIndex = chain.members.indexOf(equalsId);
+  const anchorId = equalsIndex > 0 ? chain.members[equalsIndex - 1] : undefined;
+  if (!anchorId) return null;
+
+  const operatorNode = createOperatorNode({ x: 0, y: 0 }, op);
+  const numberNode = createNumberNode({ x: 0, y: 0 }, '');
+  const locale = getDeviceLocale();
+
+  useDocumentStore.getState().applyCommand((draft) => {
+    const draftChain = draft.chains[equalsNode.chainId!];
+    if (!draftChain) return;
+    // Same "stamp dangling refs first" rule deleteNode follows (§11.2) - anything
+    // referencing the result this equals is about to take with it keeps its last
+    // known value instead of silently losing it.
+    deleteNodesLeavingDanglingRefs(draft, [equalsId], locale);
+    const anchorIndex = draftChain.members.indexOf(anchorId);
+    if (anchorIndex === -1) return;
+    operatorNode.chainId = draftChain.id;
+    numberNode.chainId = draftChain.id;
+    draft.nodes[operatorNode.id] = operatorNode;
+    draft.nodes[numberNode.id] = numberNode;
+    // Drop the now-deleted equals from `members`, then splice the new pair in
+    // exactly where it was.
+    draftChain.members = draftChain.members.filter((id) => draft.nodes[id] !== undefined);
+    draftChain.members.splice(
+      draftChain.members.indexOf(anchorId) + 1,
+      0,
+      operatorNode.id,
+      numberNode.id,
+    );
+    finalizeChain(draft, draftChain.id);
+  });
+
+  return { operatorId: operatorNode.id, numberId: numberNode.id };
+}
+
 /** Vertical pitch of a continuation chain from the row above it (§8.7), *at the
  *  compiled-in default font size*. One-and-a-half cell heights: a full cell plus a
  *  half-cell gap, matching the spacing under the source group's first cell.
@@ -444,6 +505,59 @@ export function continueFromResult(
   op: OperatorSymbol,
 ): { chainId: ChainId; referenceId: NodeId; operatorId: NodeId; numberId: NodeId } {
   return continueFromValue(resultNodeId, op);
+}
+
+/** Same continuation anchor/placement as {@link continueFromValue} (§8.7), but for the
+ *  keypad's `()` key on a result, free number, or live reference: instead of an operator
+ *  + empty number, wraps the fresh reference in a balanced pair of parens - `( ref )` -
+ *  so the linked value can be grouped before it feeds a larger expression (`(ref) × 2`)
+ *  rather than always continuing as a bare operand. No operator/number to focus for
+ *  typing, so the caller selects (not edits) the close paren - the same append-after-
+ *  anchor targeting a selected paren already gets elsewhere means a following operator
+ *  or `=` extends this new chain in place. */
+export function continueFromValueWithParens(
+  valueNodeId: NodeId,
+): { chainId: ChainId; referenceId: NodeId; openParenId: NodeId; closeParenId: NodeId } {
+  const { nodes, chains } = useDocumentStore.getState().document;
+  const value = nodes[valueNodeId];
+  const isLiveReference =
+    value?.kind === 'reference' && nodes[value.targetNodeId] !== undefined;
+  if (
+    !value ||
+    (value.kind !== 'result' && value.kind !== 'number' && !isLiveReference)
+  ) {
+    throw new Error(
+      `continueFromValueWithParens: node ${valueNodeId} is not a number, result, or live reference (got ${value?.kind ?? 'missing'})`,
+    );
+  }
+
+  const openParen = createParenNode({ x: 0, y: 0 }, 'open');
+  const reference = createReferenceNode({ x: 0, y: 0 }, valueNodeId);
+  const closeParen = createParenNode({ x: 0, y: 0 }, 'close');
+  const chainId = createChainId();
+  const anchor = continuationAnchor(valueNodeId, nodes, chains, getDeviceLocale());
+
+  useDocumentStore.getState().applyCommand((draft) => {
+    openParen.chainId = chainId;
+    reference.chainId = chainId;
+    closeParen.chainId = chainId;
+    draft.nodes[openParen.id] = openParen;
+    draft.nodes[reference.id] = reference;
+    draft.nodes[closeParen.id] = closeParen;
+    draft.chains[chainId] = {
+      id: chainId,
+      anchor,
+      members: [openParen.id, reference.id, closeParen.id],
+    };
+    reflowChain(draft, chainId);
+  });
+
+  return {
+    chainId,
+    referenceId: reference.id,
+    openParenId: openParen.id,
+    closeParenId: closeParen.id,
+  };
 }
 
 /**
@@ -769,6 +883,54 @@ export function deleteGroup(ids: Iterable<NodeId>): void {
       finalizeChain(draft, chainId);
     }
   });
+}
+
+/** §8.6 `Copy`: writes this cell's own value to the system clipboard. No document
+ *  mutation, so no undo entry — a no-op (and no clipboard write) for a kind with no
+ *  value of its own, or a value not yet in a copyable state, same guard the context
+ *  menu's own `disabled` state already applies (checked again here so a stale press,
+ *  e.g. a hardware-triggered one, can't slip a write through regardless). */
+export function copyNodeValue(nodeId: NodeId): void {
+  const { nodes } = useDocumentStore.getState().document;
+  const text = copyTextForNode(nodeId, nodes, getDeviceLocale());
+  if (text !== null) Clipboard.setString(text);
+}
+
+/** §8.6 `Copy As` → `Copy without result`: every chain and free node in the current
+ *  Select-group / Select-all set, each chain rendered as its formula minus `=` and the
+ *  answer ({@link chainTextWithoutResult}), free values rendered the same as a lone
+ *  `Copy` — one per line, so a multi-chain Select-all selection copies as one block. A
+ *  lone free result contributes nothing (there is no "without result" version of just
+ *  the result itself) rather than a stray empty line. Reads the current group selection
+ *  itself, same as `selectAll`, so the context menu can wire this with no adapter. */
+export function copyGroupWithoutResult(): void {
+  const { nodes, chains } = useDocumentStore.getState().document;
+  const groupSelectedIds = useUiStore.getState().groupSelectedIds;
+  const locale = getDeviceLocale();
+
+  const chainIds = new Set<ChainId>();
+  const freeNodeIds: NodeId[] = [];
+  for (const id of groupSelectedIds) {
+    const node = nodes[id];
+    if (!node) continue;
+    if (node.chainId !== null) chainIds.add(node.chainId);
+    else freeNodeIds.push(id);
+  }
+
+  const lines: string[] = [];
+  for (const chainId of chainIds) {
+    const chain = chains[chainId];
+    if (!chain) continue;
+    const text = chainTextWithoutResult(chain, nodes, locale);
+    if (text !== '') lines.push(text);
+  }
+  for (const id of freeNodeIds) {
+    if (nodes[id]?.kind === 'result') continue;
+    const text = copyTextForNode(id, nodes, locale);
+    if (text !== null) lines.push(text);
+  }
+
+  if (lines.length > 0) Clipboard.setString(lines.join('\n'));
 }
 
 /**

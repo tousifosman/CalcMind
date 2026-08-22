@@ -8,12 +8,12 @@
 // dimmed rather than flashing empty; engine errors render as explanations from
 // `explainEngineError`, never as a bare glyph (§11.2). `CircularReference` names the cycle and
 // offers Unlink on the DFS closing edge (P6.3).
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { NodeId } from '../model/types';
 import { useNode } from '../store/selectors';
 import { unlinkReference, finishEditingLabel, setNodeLabel } from '../store/commands';
-import { rolePalette, glyphColor, tokens, nodeHeightFor } from '../ui/tokens';
+import { rolePalette, glyphColor, nodeHeightFor } from '../ui/tokens';
 import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
 import {
@@ -23,11 +23,13 @@ import {
   RESULT_ERROR_FONT_SIZE,
 } from '../engine/errors';
 import { Cell, useGlyphTextStyle } from './Cell';
-import { ResultDotTexture } from './ResultDotTexture';
+import { ResultDotTexture, textureSize } from './ResultDotTexture';
 import { useSourceIdentityHue } from './useIdentityHue';
 import { useUiStore } from '../store/uiStore';
-import { useNodeSelected } from './useNodeSelected';
+import { useNodeSelected, useNodeGroupSelected } from './useNodeSelected';
+import { useGroupPosition } from './useGroupPosition';
 import { usePreferencesStore } from '../store/preferencesStore';
+import { useCanvasViewportOptional } from '../canvas/ViewportContext';
 
 /** Opacity for a §9 Stale result — previous value stays readable but clearly not current. */
 export const STALE_RESULT_OPACITY = 0.45;
@@ -41,16 +43,44 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
   const identityHue = useSourceIdentityHue(id);
   const isEditingLabel = useUiStore((state) => state.editingLabelNodeId === id);
   const selected = useNodeSelected(id);
+  const groupSelected = useNodeGroupSelected(id);
+  const groupPosition = useGroupPosition(id, node?.chainId ?? null);
   const glyphTextStyle = useGlyphTextStyle();
   const fontSize = usePreferencesStore((s) => s.numeralFontSize);
+
+  // §7 auto-pan (P7 follow-up, §12.5 opt-out): `dispatchEditorCommand`'s `equals` case
+  // selects a chain's freshly-computed result the moment it exists (§8.7 - the natural next
+  // action is continuation from it), the same way an added/typed-into number becomes the
+  // edit target in `NumberNode`'s own auto-pan effect. A result can't enter edit mode (it has
+  // none), so `selected` is this kind's analogous trigger — without it, a long chain's result
+  // could compute already past the visible edge with nothing bringing it into view, reported
+  // live (`123 × 33 × 1,000 × 33,333 =` landing off-screen). No blur/focus concerns here,
+  // unlike `NumberNode`'s version of this effect: a result has no `TextInput` to protect.
+  const canvasViewport = useCanvasViewportOptional();
+  const autoPanEnabled = usePreferencesStore((s) => s.autoPanToEditedCell);
+  useEffect(() => {
+    if (!selected || !autoPanEnabled || !canvasViewport || !node || node.kind !== 'result') {
+      return;
+    }
+    canvasViewport.panIntoView({
+      x: node.position.x,
+      y: node.position.y,
+      width: widthOf(node, getDeviceLocale(), fontSize),
+      height: nodeHeightFor(fontSize),
+    });
+  }, [selected, autoPanEnabled, canvasViewport, node, fontSize]);
+
   if (!node || node.kind !== 'result') return null;
 
   const locale = getDeviceLocale();
   const palette = rolePalette.result;
   const content = resultCellContent(node.derived);
   const bandWidth = widthOf(node, locale, fontSize);
-  const textureWidth = bandWidth - 2 * tokens.borderBand;
-  const textureHeight = nodeHeightFor(fontSize) - 2 * tokens.borderBand;
+  const { width: textureWidth, height: textureHeight } = textureSize(
+    bandWidth,
+    fontSize,
+    groupPosition,
+  );
 
   const isCircular =
     content.mode === 'error' &&
@@ -75,6 +105,8 @@ function ResultNodeComponent({ id }: ResultNodeProps) {
       identityHue={identityHue}
       isEditingLabel={isEditingLabel}
       selected={selected}
+      groupSelected={groupSelected}
+      groupPosition={groupPosition}
       onLabelChange={(text) => setNodeLabel(id, text)}
       onLabelBlur={finishEditingLabel}
       bandBackground={

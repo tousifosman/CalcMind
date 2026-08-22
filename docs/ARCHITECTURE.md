@@ -60,7 +60,7 @@ The reference raster has a cell height of 256px. Tokens below are that geometry 
 | `borderBand` | 11 | 0.043 | **3** |
 | `numeralFontSize` | 127 | 0.496 | **22** (weight 400) *(reduced from the ratio-accurate 30/800 — read as oversized on-screen; this is now only the compiled-in default — §12.5's Settings sheet lets the user override it live, 14–30dp)* |
 | `numberPaddingX` | 48 | 0.188 | **4** *(reduced from the ratio-accurate 12, in two steps — see decision 18)* |
-| `operatorWidth` | 136 | 0.531 | **34** |
+| `operatorWidth` | 136 | 0.531 | **26** *(reduced from the ratio-accurate 34 — measured live at ~10.5dp either side of the glyph, well past `numberPaddingX`'s own already-trimmed 4dp; also the paren cell's width, unchanged, since it deliberately shares this token — see decision 22)* |
 | `equalsWidth` | 140 | 0.547 | **35** |
 | `cornerRadius` | 12 | 0.047 | **8** *(bumped from 3 for a friendlier silhouette)* |
 | `mathAxisOffset` | +16 from centre | 0.063 | **2** below centre *(scaled down from 4 with `nodeHeight`'s two reductions to stay near the same ratio — decision 18)* |
@@ -575,6 +575,42 @@ world  = screen / zoom + pan
   clears on commit (cheap and side-effect-free, unlike the document store, since nothing besides
   this class of consumer subscribes to it). Reading the committed viewport alone there would make
   that UI visibly lag a gesture in progress and only "catch up" on release.
+- **Auto-pan to an edited cell** (§12.5 opt-out, on by default): a number cell entering edit
+  mode — added or typed into — pans the canvas so it clears a fixed screen-space padding
+  (`canvas/autoPan.ts`'s `AUTO_PAN_PADDING`, 24dp, independent of zoom) on whichever visible
+  edge it currently violates. `Canvas`'s own laid-out size (tracked via `onLayout`) *is* the
+  bounds this pans against — it already excludes the keypad, which shares the flex column
+  below it (`AppShell.tsx`) rather than overlaying it, so no separate adjustment is needed for
+  keypad height. `computeAutoPanTarget` is pure geometry (no store, no Reanimated) so the
+  "does this need a pan, and by how much" question is unit-tested directly; `Canvas` exposes
+  `panIntoView` through `ViewportContext` (alongside the existing shared values) so a node view
+  — `NumberNode`, so far, via `useCanvasViewportOptional` rather than the throwing
+  `useCanvasViewport`, since it must also render standalone in component tests — can trigger
+  it without importing `Canvas` itself. Animates over 220ms via `withTiming`, then commits the
+  same way a released gesture does. Distinct from `preventScroll` (§8.5): that fix stops the
+  browser's own autoFocus-scroll from moving the *whole page, keypad included*; this replaces
+  the *usefulness* that accidental scroll used to provide, moving only the canvas.
+  `panIntoView` takes optional `onWillPan`/`onSettled` callbacks, fired only around an actual
+  pan (never for a rect that already fit) — `NumberNode` uses them on web to blur its own
+  `TextInput` for the pan's duration and refocus (`preventScroll: true`, same as `preventScroll`
+  above) once it settles. Reported live on a real device: the animated pan alone was enough to
+  bring the keyboard-drags-the-page bug back, with no new `.focus()`/`scrollIntoView()` call
+  anywhere — WebKit can re-trigger its own "scroll the focused control into view" heuristic
+  purely from a *focused* element's bounding rect changing, including via a CSS transform,
+  independent of what triggered that change. `preventScroll` only covers the one-time
+  `autoFocus`-attribute trigger; this covers the ongoing one. Losing DOM focus for the pan's
+  duration costs nothing the on-screen keypad needs (it dispatches through `onKeyPress`
+  regardless of this input's focus state) — only a hardware key pressed mid-pan would be missed.
+  That blur is guarded against re-triggering `NumberNode`'s own `onBlur={deselectNode}` (a
+  `suppressBlurDeselect` ref, armed by `onWillPan`, disarmed by `onSettled`) — without it, the
+  pan's own blur exited edit mode exactly like a real one would, and the next keystroke landed
+  with nothing selected, which `dispatchEditorCommand`'s digit case reads as "start a fresh
+  cell" — reported live as a stray cell appearing mid-type. `ResultNode` gets the same
+  `panIntoView` treatment, but keyed on `selected` rather than an edit mode it doesn't have —
+  `dispatchEditorCommand`'s `equals` case selects a chain's freshly-computed result the moment
+  it exists (§8.7), so a long chain's result can compute already past the visible edge with
+  nothing bringing it into view otherwise; no blur/focus concerns there, since a result has no
+  `TextInput` to protect.
 
 ---
 
@@ -714,15 +750,70 @@ operators are visually separated from digits.
   group's result), with no bundled operator or empty number.
 - **`Add components`** (squares-plus glyph) and **`Notes`** (pencil-square glyph) fill out the
   rest of the number-editing row, sharing `Create link`'s blue fill. Declared but not yet
-  functional — same "affordance before behaviour" pattern as the context menu's `Copy` or the
-  canvas menu's `Add number` / `Add graph` (§8.6): always rendered disabled, with no `onPress`,
-  until their behaviour is specified.
+  functional — same "affordance before behaviour" pattern as the canvas menu's `Add number` /
+  `Add graph` (§8.6): always rendered disabled, with no `onPress`, until their behaviour is
+  specified. The context menu's `Copy` used to be a third example here — it no longer is (§8.6).
 - The history row exposes **undo** and **redo** next to backspace — the same commands as
   `Ctrl/Cmd+Z` / `Ctrl/Cmd+Shift+Z` (or `Y`).
+- **Backspace on a single selection is kind-specific, not a blanket delete-the-cell.**
+  - A **result** disables backspace entirely (both the keypad key and
+    `dispatchEditorCommand`'s own guard) — it's derived, not user input; deleting one takes a
+    deliberate long-press → `Delete` instead. Select-group backspace (deleting the whole group
+    as a unit, below) is unaffected even when the group contains a result — a different,
+    still-desired command.
+  - A **number** trims its `raw` one character at a time, editing or not — tapping a
+    (non-editing) number and backspacing used to delete the whole cell immediately, far more
+    destructive than what backspace does everywhere else. Reaching `''` stays there, selected
+    and editing, rather than auto-discarding; only a backspace on an *already*-empty number
+    deletes the cell, landing the selection on its left neighbour (below) — one more backspace
+    than before, so committing a genuinely empty cell is a deliberate second press.
+  - An **operator** deletes and lands the selection on its **left chain neighbour**
+    (`leftChainNeighborId`, `keymap.ts`) instead of fully deselecting, so backspacing along a
+    chain reads as "keep going" rather than losing your place after every cell removed. Falls
+    back to a full deselect when there's no left neighbour (first member, or free).
+  - Every other kind (paren, equals, reference) keeps the original behaviour: delete the cell,
+    fully deselect.
+- **Digit / decimal / `+/-` on a selected operator target the operand to its right**, rather
+  than staying disabled (§8.5). A number there is edited in place — same as tapping that number
+  then typing, appending to whatever `raw` it already has. Nothing there yet (a bare trailing
+  operator, e.g. one backspace just emptied and deleted its own operand's cell, above; or an
+  operator directly before a paren group, implicit multiplication §10.2) inserts a fresh number
+  right there instead (`appendNumberNode`, which splices after any given member, not just at a
+  chain's end). A **linked cell** or a **result** to the right stays inert — neither is editable,
+  and splicing a fresh operand in front of one isn't grammatical — the keypad's own digit/decimal/
+  sign keys greying out (`rightChainNeighborId`, shared with `dispatchEditorCommand`) matches that
+  exactly. `()` and `=` are unaffected by this — an operator was never a target for either.
 - Pressing `=` on a chain selects the new **result** (not the `=` glyph) so the next operator
   is ready for continuation without an extra tap.
+- **`=` disables once its chain already has one** (§9: at most one `=` per chain). Selecting
+  the equals cell itself, the result, or any other member of an already-`=`'d chain all grey
+  the keypad's `=` key out (`chainHasEquals`, `keymap.ts`) rather than let a second `=` splice
+  in front of the existing equals+result pair. `dispatchEditorCommand`'s own `equals` case
+  carries the identical check, so a hardware Enter/`=` press can't do what the on-screen button
+  already refuses to.
+- **Selecting `=` leaves only the operator column active.** Digit, decimal, `+/-`, `()`,
+  `Create link` and `=` itself all grey out — nothing appends after `=` (§9); a chain's result
+  is what belongs there, placed by `finalizeChain`, never further user input. Backspace still
+  deletes the cell, same as any other. An **operator** is the one exception, and it isn't an
+  append: it *converts* `=` into that operator in place (`convertEqualsToOperator`,
+  `store/commands.ts`) — `1 + 2 = 3`, select `=`, press `×` builds `1 + 2 × _`, focused for the
+  next digits, the old `=` and its result gone in the same undo entry the new operator+number
+  arrive in. The same "replace in place" a selected operator already gets
+  (`setOperatorSymbol`), just for the chain's terminator instead of one of its operators.
 - **Continuation shortcut (§8.7).** With a result — or a number that is selected but not being
-  edited — pressing an operator starts a new chain that references that value.
+  edited — pressing an operator starts a new chain that references that value; pressing `()`
+  does the same but wraps the reference in a balanced pair of parens (`( ref )`,
+  `continueFromValueWithParens`) instead of seeding an operator + empty number, so the linked
+  value can be grouped before it feeds a larger expression. The close paren is selected (not
+  edited — there's nothing to type into yet), so a following operator or `=` extends the new
+  chain in place. Only a selected **result** gets `()` here today — a free number's `()` groups
+  within its own new chain instead of linking (existing, unrelated behaviour).
+- **Operator (and, for a selected result, `()`) keys tint to `Create link`'s blue whenever the
+  press is about to make a new linked cell**, rather than staying the ordinary operator amber —
+  so the outcome is visible before the tap. True for a selected result, a selected free number
+  that isn't being edited, or (every operator) a `Select group`/`Select all` set containing a
+  result; false for a number already in a chain, one being typed into, or a live reference —
+  those extend the current chain in place instead of linking, so they keep the amber fill.
 - Tapping empty canvas creates a number node there, in edit mode, and shows the keypad if it
   was hidden (§8.6) — superseding the placeholder from when nothing was on the canvas yet to
   tap on. Dismissing the keypad is the mode strip's chevron key.
@@ -764,16 +855,48 @@ operators are visually separated from digits.
   appending in-chain. **Focus is always visible:** a white outset ring on the cell marks the
   keypad target, including read-only results and selected-but-not-editing numbers (continuation,
   §8.7). The selected node's wrapper stacks above flush chain neighbours so the ring is not
-  painted under the next member. While selected, the inset identity ring (§11.1) is omitted so
-  focus is a single chrome layer; hue still reads from the caption and connectors.
+  painted under the next member — and a node showing its own outset identity ring (§11.1)
+  elevates the same way while unselected, for the same reason. While selected, the identity
+  ring is omitted so focus is a single chrome layer (an outset white ring in the same spot);
+  hue still reads from the caption and connectors.
 - `Escape` deselects. Committing an empty number (backspace to nothing, or deselecting with
   nothing typed) discards it rather than leaving a blank cell on the canvas.
+- **Entering edit mode never scrolls the page on web.** A number cell's `TextInput` used RN's
+  own `autoFocus` prop, which on web becomes a literal HTML `autofocus` attribute — the browser's
+  own autofocus algorithm then scrolls its nearest scrollable ancestor to bring the newly-focused
+  input into view. That ancestor is the whole app's root container (`body`/`#root`,
+  `web/index.html`), so a cell added or edited near the canvas edge dragged the *entire* screen,
+  keypad included, along with it — reported live as "the keyboard moves." `NumberNode.tsx` now
+  focuses the input itself on web, via `.focus({ preventScroll: true })` in an effect (native
+  keeps the plain `autoFocus` prop — no browser to scroll there) — the one thing that suppresses
+  that browser-native scroll, since `autoFocus` itself takes no options. Only the canvas's own
+  pan (a deliberate gesture, or none at all here) should ever move where a cell sits on screen —
+  §7's auto-pan-to-edited-cell is the follow-up that gives that pan something to do here, so an
+  edge cell stays reachable without the page-drag this fix removed.
 - Long-press on a node → `Copy`, `Delete`, `Select group`, `Label` and `Create link` on values
   (number / result / live reference — P6b.1), `Show slider` on a scrubbable number (§8.8), and
   for a reference `Unlink from parent`. `Create link` drops a free reference to the value near it
   — no operator, not attached to a chain — for a link the user wants to place and drag elsewhere
   rather than keep computing from immediately (§8.7's third path, alongside continuation and
   drag-to-link).
+- **`Copy` writes a cell's own value to the system clipboard** (`copyTextForNode`,
+  `engine/copyText.ts`) — the same display text its own component renders: a number's raw, a
+  result's (or stale result's) display, a live or dangling reference's resolved text. Disabled
+  for a kind with no value of its own (operator / paren / equals) or one not yet in a copyable
+  state (an empty or errored result). No undo entry — reading and writing the clipboard is not a
+  document mutation.
+- **`Copy As` → `Copy without result`** appears alongside `Copy` once the long-pressed cell is
+  part of the active group selection (`Select group` / `Select all`, below) — a lone cell has
+  nothing else worth copying "as." Tapping (or, on web, hovering) `Copy As` reveals the one item
+  as a nested row rather than opening a separate flyout sheet; both tap and hover only ever
+  *reveal*, never toggle back closed — a toggle let a mouse user's own hover-then-click sequence
+  collapse the row right as they went to tap the item underneath it (caught live). `Copy without
+  result` (`copyGroupWithoutResult`, `store/commands.ts`) copies every chain and free node in the
+  group selection, one per line: each chain renders as its formula with `=` and the result
+  dropped (`chainTextWithoutResult`) — `12 + 5 = 17` copies as `12 + 5`, not a dangling trailing
+  `=`. A lone free result contributes nothing, since results are never actually chainless in
+  practice (§9: a result's own `chainId` is its source chain), so this branch is defensive rather
+  than reachable through the ordinary command set today.
 - Long-press on empty canvas → `Add number`, `Add graph` *(later)*, `Paste`, `Select all`.
 - `Select group` selects the whole chain, which is how a chain gets moved or deleted as a unit.
   Double-tap / double-click any cell is the fast path to the same command (dwell-free, no
@@ -781,6 +904,12 @@ operators are visually separated from digits.
   result becomes the primary keypad target so an operator press continues from it (§8.7). The
   group highlight is cleared by the next single-node selection, edit, or deselect (tap another
   cell, Escape, keypad navigation) — it must not stick after the user has moved on.
+  **The focus ring merges across the group** (§11.3): every member still shows the ring, but
+  an interior seam between two flush, both-selected cells carries no border on either side of
+  it — only the group's own outer edge does — so the whole selection reads as one big cell
+  rather than each member individually outlined. An ordinary single selection (the keypad
+  target alone, not a group) always keeps the full ring on every side, even on a structurally
+  mid-chain cell, since its neighbours are not also selected.
 - `Select all` selects every node on the canvas (same ephemeral group-selection set as
   `Select group`). Disabled when the canvas is empty. Dragging any selected node then
   translates the whole selection — every selected chain (via its anchor) and every
@@ -821,7 +950,10 @@ is still an operand of that formula rather than a free-standing value: an operat
 *that* chain in place, immediately after the selected member (§8.5's append-after-anchor
 targeting), the same as typing does. `1 + 2 = 3`, select `2`, press `+` builds `1 + 2 + _` (the
 stale `=`/result get pushed past the new operand and the chain reads Incomplete until it's
-filled in, then recomputes) — it must not spin off a reference to `2` elsewhere.
+filled in, then recomputes) — it must not spin off a reference to `2` elsewhere. This
+append-after-anchor targeting is exactly why the `=` cell itself is a hard stop rather than
+just another anchor (§8.5, §9): appending *after* `=` is never a formula edit, so selecting the
+`=` cell rejects every key outright instead of splicing a new member past it.
 
 **A selected live reference never continuation-links, regardless of whether it's free or
 already a chain member — it always extends in place**, the same append-after-anchor path a
@@ -1096,10 +1228,15 @@ identity, not just by a line.**
   means something.
 - A value **acquires an identity** when it becomes a named thing, which happens two ways: something
   **references** it, or the user gives it a **label**. Either grants an **identity hue** from a
-  rotating palette, drawn as a ring on the cell. (The reference-only rule was wrong: the reference
-  app's own labels illustration colours three *inputs* purely because they are labelled.)
+  rotating palette, drawn as a ring outside the cell — same geometry as the P7.2 selection focus
+  ring, and replaced by that ring (white) while the cell is selected, rather than stacking both.
+  (The reference-only rule was wrong: the reference app's own labels illustration colours three
+  *inputs* purely because they are labelled.)
 - Every **reference** to that value is filled with the same hue. Two cells sharing a hue are the
-  same value, wherever they sit on the canvas.
+  same value, wherever they sit on the canvas. A reference whose ultimate source (walking through
+  any nested reference→reference chain) is a *result* also carries the §1.2 dot texture, same
+  pattern as the result cell itself — colour still carries *which* identity, the pattern alone
+  carries *derived from a result*.
 - The **connector** between them is drawn in that hue too, as a bezier with an arrowhead.
 - **The label belongs to the identity, not the cell.** It renders above the declaring cell *and*
   above every reference to it. In the compound-interest screenshot (§1.3) "Initial Deposit" appears
@@ -1152,13 +1289,39 @@ telling you why the error is there." So:
 ### 11.3 Rendering approach
 
 Nodes are plain RN `View`s with `borderRadius` — no SVG or Skia needed for the common case, which
-keeps web and native identical. The result node's dot texture is the exception:
+keeps web and native identical. A chain's members sit flush (§1.1), so `Cell.tsx` rounds and
+borders only the outer edge of the chain rather than every member's own four corners: each node
+component reads its `chainId` through `useGroupPosition` and passes the result (`'solo' | 'start'
+| 'middle' | 'end'`) as `groupPosition`, which `Cell` turns into per-corner radii and left/right
+border widths (`cornerRadii/sideBorderWidths` in `Cell.tsx`) so a multi-member chain reads as one
+rounded rectangle — same silhouette as `docs/assets/formula-reference.svg`'s clipped outer/inner
+rects — rather than a row of individually-rounded, individually-bordered chips. The result node's
+dot texture is the exception to "plain `View`":
 
 - Solid `#FF7E79` + `#FFA3A0` border band always — hue and border carry read-only-ness on their
   own (decision #9).
 - Dot texture (P7.3 / §1.2): `ResultDotTexture` paints a `react-native-svg` `Pattern` — 4×4 unit
-  tile, 1-unit dots at `(1,0)` and `(3,2)` in `#FFD1CF` — as a `Cell` `bandBackground` under the
-  identity ring and glyph. Same geometry as `docs/assets/formula-reference.svg`; decorative only.
+  tile, 1-unit dots at `(1,0)` and `(3,2)` in `#FFD1CF` — as a `Cell` `bandBackground`, clipped to
+  the band's own rounded corner. `textureSize` (`ResultDotTexture.tsx`) sizes it to the band's
+  actual content box via the same `sideBorderWidths(groupPosition, …)` the band itself uses,
+  rather than assuming both left and right always carry a border. Any `ReferenceNode` whose
+  ultimate source is a result (§11.1) passes the same component as its own `bandBackground`.
+- The identity ring and the P7.2 selection focus ring are both outset (painted outside the band,
+  not inset within it) and are laid out as **siblings** of the band inside a shared, unclipped
+  `cellOuter` wrapper — not children of the band itself. This matters specifically because the
+  band clips its own content whenever a `bandBackground` is present: an outset ring nested inside
+  that clipped View would be clipped away along with it, rendering correctly in the tree but
+  invisible on screen. Same geometry as `docs/assets/formula-reference.svg`; decorative only.
+- The selection focus ring's left/right border width is `sideBorderWidths(groupPosition, …)` —
+  the *same* group-position mask the band itself uses — whenever `groupSelected` is true
+  (§8.6: this cell's selection is `Select group`/`Select all` membership, from
+  `useNodeGroupSelected`, not just the lone `selectedNodeId` keypad target). That is what makes
+  a whole selected chain's ring merge into one outline instead of each member drawing a
+  complete ring around itself, which would otherwise double up as a visible border on every
+  interior seam between two flush, both-selected cells. An ordinary single selection passes
+  `'solo'` regardless of the cell's actual chain position, so a lone selected mid-chain cell
+  still gets a complete ring on every side — its neighbours are not selected, so there is no
+  seam to merge across.
 
 Connector curves (§11.1) also use `react-native-svg` — beziers in an overlay layer above the
 nodes, sharing the canvas transform. Implemented: `ConnectorLayer` is a sibling of `NodeLayer`
@@ -1333,8 +1496,13 @@ migration ships (production `migrations` stays empty while v1 is current).
 
 A third category of state, alongside `documentStore` (persisted + undoable) and `uiStore`
 (never persisted, never undoable): **persisted, but not undoable, and not part of any
-document.** Currently one setting — the numeral font size, `store/preferencesStore.ts`'s
-`numeralFontSize` — surfaced as the Settings sheet's Canvas Number Font Size row (§8.5).
+document.** Two settings — the numeral font size, `store/preferencesStore.ts`'s
+`numeralFontSize` — surfaced as the Settings sheet's Canvas Number Font Size row (§8.5) — and
+the auto-pan-to-edited-cell toggle, `autoPanToEditedCell` (§7), surfaced as its Auto-pan to
+Edited Cell switch. `write()` replaces the whole persisted blob rather than merging (below),
+so `preferencesStore.ts` centralises every setter's persist call through one `persist()`
+closure that writes *every* field's current value — a setter that only wrote its own field
+would silently drop the other preference from disk on the next restart.
 
 - **Contract** (`persistence/preferences.ts`, same bundler platform-resolution trick as
   `adapter.ts` §12.2) is deliberately smaller than the document `StorageAdapter`: `read()` /
@@ -1485,9 +1653,20 @@ it unclear which parts were claims about the present and which were intentions.
 | 18 | `numeralFontSize`/`numeralFontWeight` reduced to 22/400 from the reference-accurate 30/800; `numberPaddingX` reduced to 4 from 12, in two steps (12→8→4); `nodeHeight` reduced to 40 from 64, in two steps (64→48→40), with `mathAxisOffset` scaled 4→2 to match | User-reported live: the ratio-accurate glyph size read as oversized in the cell; regular weight at the smaller size stays legible without the bold's extra visual weight; the number-cell width table in `measure.ts` had to be re-derived by hand too, since it is a fixed lookup keyed to the *value* of `numeralFontSize`, not a live scale from it; 8 still read as excess whitespace on further feedback; a fixed 64dp then 48dp band around the shrunk 22px glyph kept reading as excess space above/below the text even after the first cut — asked the user how far to take it given `nodeHeight` also sizes the tap/drag hit box, and 40 (near the common ~44dp touch-target minimum) was the answer (§1.2, §8.1) | A future reference restyle re-derives the ratio and disagrees; padding or band height reads too tight against the border band, or tap targets prove too small in real use |
 | 19 | Numeral font size made a live, persisted user preference (§12.5) rather than staying a fixed token; `nodeHeight`/`numberPaddingX`/`mathAxisOffset` stay fixed | Direct follow-on from decision #18's thread: the user asked to be able to change it themselves rather than keep asking for a different fixed value. Only the glyph size needed to be adjustable to satisfy the request; moving the padding/height tokens too would have meant re-deriving `measure.ts`'s glyph-width table and the tap-target floor on every change, for no requested benefit | Users want padding/height to visually track a much larger or smaller chosen size too — **fired**, see decision #20 |
 | 20 | `nodeHeight` made a live function of the font size (`nodeHeightFor`, §12.5), not a fixed token; `numberPaddingX`/`mathAxisOffset` stay fixed. Settings row also renamed to "Canvas Number Font Size", given a non-editable "pt" unit label, and its value made directly typable alongside the existing +/− stepper | User noticed the cell stayed a fixed height across a font-size change while its width already tracked live (decision #19 had only wired width) — an inconsistency between the two axes of the same cell, not a new feature. `nodeHeightFor` is derived (`fontSize + 2 × numberPaddingY`), not a second independently-threaded parameter, so most call sites needed no new argument — only `caretAt` (`chains/layout.ts`) gained one, since it's the one site without `fontSize` already in scope. `numberPaddingX`/`mathAxisOffset` were left fixed, matching #19's reasoning: nothing asked for the cell's *proportions* to change, only for both axes of its *size* to agree | A future request wants the padding or maths-axis offset to also scale with the chosen size |
-| 21 | Value slider (§8.8) no longer opens automatically on selection; a `Show slider` context-menu item opens it, and a `Keep open` checkbox on the popover jointly gates three things — surviving a tap-elsewhere, drawing a connector line to the cell, and a drag handle to reposition the popover | User request: a popover on every selected number crowded the canvas. Made the trigger explicit (§8.6, same footing as `Label`/`Create link`) rather than tied to selection. The three pinned behaviours were specified separately (a checkbox that keeps it open; drawing a line; making it draggable) but read as one state, not three independent flags, once traced through: a slider worth keeping open across other taps is also one worth relocating away from the cell it's anchored under, and once it can be relocated a line back to that cell is what keeps the association legible — so one `pinned` boolean on `uiStore.sliderState` drives all three, rather than three separate checkboxes | A user wants the connector line or the drag handle without suppressing tap-elsewhere dismissal, or vice versa |
-| 22 | Decision #21's drag handle stays mounted at a fixed size always, toggling only its bar's opacity and its gesture's `enabled` state with `pinned`, rather than conditionally rendering the whole handle; the connector line takes the popover's own chrome colour, not the cell's identity hue; a Step field (default `0.1`, positive-only) sits between the range bounds and continuous dragging quantizes to it (`quantizeToStep`), vibrating once per step crossing | User-reported regression from #21's own first cut: conditionally mounting the drag handle only while pinned made the popover visibly grow on check and shrink on uncheck. Fixed by always mounting it and toggling only paint, not layout — the general fix for "a togglable affordance must not resize its container" wherever RN's default is to omit rather than hide. Separately requested in the same round: the connector should read as the popover's own edge rather than borrow the cell's identity hue (documents relate through hue per §11.1; this line isn't one of those relationships), and dragging should move in namable increments with tactile feedback rather than an arbitrary continuous value | A user wants the connector to carry identity hue after all (e.g. multiple pinned sliders open at once, needing to tell which line belongs to which cell) |
-| 23 | The slider popover's horizontal anchor uses the cell's width captured once at open time, not read live; a new `uiStore.liveViewport` bridge (§7) lets it track an in-progress Canvas pan/pinch/wheel gesture instead of only the committed, gesture-end-throttled `document.viewport` | Two user-reported bugs from real-device use, both structural rather than cosmetic: (1) the popover visibly shifted as the scrubbed value gained/lost digits, because its anchor read the cell's live (content-dependent) width every render — the same live value the popover's own scrubbing was changing; (2) the connector line visibly detached from the cell while panning and only reattached once the gesture ended, because the popover is a fixed screen overlay outside `Canvas`'s Reanimated-driven transform and so has no live view of an in-progress pan/pinch/wheel gesture, only of `documentStore`'s committed viewport, which §7's "commit only on release" rule deliberately keeps a gesture behind. `liveViewport` generalizes node-drag's existing solution to the same class of problem (`ViewportContext.tsx`) to a consumer that, unlike node-drag, isn't mounted inside `Canvas` and so can't read the shared values directly via that context | Another screen-space overlay needs the same live tracking — extend `liveViewport`'s consumers rather than inventing a second bridge |
+| 21 | Identity ring moved from inset to outset (same geometry as the P7.2 selection focus ring, replaced by it while selected); any reference tracing back to a result also gets the result's dot texture, transitively through nested reference→reference chains | User pointed at the shipped-inset ring directly: it read as chrome buried inside the cell rather than the cell's own outer identity, and wanted it to *become* the white focus ring on selection rather than being hidden in favour of a separate one. Reusing the focus ring's exact geometry (`cornerRadii`/outset offsets) made that literal — the same physical ring, recoloured. Also required moving both outset rings out from being children of the band to being its siblings (`cellOuter` wrapper, §11.3): the band clips its own content for a `bandBackground` texture, and a ring nested inside a clipped parent is invisible regardless of its own style being correct — caught live, not by any test, since Jest's renderer doesn't compute real overflow clipping | Never for the ring geometry (it is now the same code path as focus); revisit the pattern-propagation rule if a future request wants it to mean something narrower than "traces back to a result" |
+| 22 | `=` is a hard stop: selecting the equals cell rejects every key, and the keypad's `=` key disables once its chain already has one (`chainHasEquals`), regardless of which member is selected; `operatorWidth` reduced 34→26 | User reported two gaps directly. First: selecting `=` and pressing a digit/paren/operator/`=` spliced a new member in right after it (`appendMembersToChain` inserts after whatever node is targeted) — a chain's result belongs there, placed by `finalizeChain`, never further user input; fixed with a full early-return once `selectedNode.kind === 'equals'`, plus a `chainHasEquals` guard inside `dispatchEditorCommand`'s own `equals` case so a hardware Enter/`=` can't bypass what the on-screen key's `disabled` prop already refuses (mirrored in both places rather than only the UI, since the UI gate never covered the hardware path). Second: operator-cell padding (~10.5dp either side of a ~13dp glyph, measured live via `getBoundingClientRect`) read as excessive next to `numberPaddingX`'s already-trimmed 4dp; picked 26 to cut it visibly without leaving the glyph cramped. 26 sits *below* `chains/bounds.ts`'s `SNAP_DISTANCE` (28) — a value `chains/snapping.test.ts` had one fixture built to stay clear of — but the full suite (`resolveSnapCandidate`'s "nearest wins" tie-break) passed unchanged regardless, so no snapping fix was needed. Kept the paren cell sharing the same token, unchanged design intent (§1.2), and left `equalsWidth` untouched since only "operator cells" were named | Never for the equals hard-stop; revisit `operatorWidth` if a future request wants parens sized independently of operators, or `equalsWidth` brought in line with the now-narrower operator cells |
+| 23 | `Select group`/`Select all` merges the selection focus ring across interior seams (new `useNodeGroupSelected`, reusing the band's own `sideBorderWidths(groupPosition, …)` mask) rather than every member drawing a complete ring around itself | User asked for exactly this: a selected group should read as one big cell, not N individually-outlined ones. Each group member already drew its own full 4-sided ring (`selected` is true for every id in `groupSelectedIds`), so two flush, both-selected cells doubled up a border on the shared seam between them. Reusing the *band's* own group-position mask was the direct fix, but it had to be gated on group membership specifically (`useNodeGroupSelected`, not the general `useNodeSelected`) — an ordinary single selection (the lone keypad target, `selectedNodeId`) must keep its full ring even on a structurally mid-chain cell, since its neighbours are not selected and there is nothing to merge across; conflating the two would have silently broken every existing single-selection ring | Never — this is now the same code path the band uses, so it inherits whatever `sideBorderWidths` does |
+| 24 | Operator (and, on a selected result, `()`) keys tint to `Create link`'s blue whenever the press creates a new linked cell; selecting `=` leaves only the operator column active, with an operator now converting `=` into itself in place (`convertEqualsToOperator`) instead of no-op; `()` on a selected result wraps a new link in parens (`continueFromValueWithParens`) instead of no-op | Three related gaps the user named from using the keypad: (1) nothing signalled that an operator press on a selected result/free-number was about to spin off a link rather than extend in place — same blue as the existing `Create link` button, not a new colour, so it reads as the same promise; (2) `=`'s own P7.2 hard-stop (decision #22) only ever blocked every key uniformly, so the digit/paren/`Create link`/`=` keys still rendered enabled even though pressing them already no-op'd — a real UI/behaviour mismatch, not just a missing feature, since `dispatchEditorCommand` already rejected them; fixed by extending `Keypad.tsx`'s existing `selectionBlocksDigits`/`selectionBlocksNumberEditing` gates to also cover a selected equals kind, and by giving the one live exception (operator) real behaviour instead of leaving it disabled too — converting `=` in place mirrors `setOperatorSymbol`'s existing "replace an operator in place" rule, just for the terminator; (3) `()` on a selected result was a pure no-op inherited from the `result` block's blanket `return`, when by the same logic that already lets an operator continuation-link from a result, `()` should too — wrapped in parens specifically because that is what distinguishes the paren key from an operator key, not because parens were the only sensible choice | Never for the tint/hard-stop rules; revisit `()`-creates-a-link if a future request wants it to also apply to a selected free number or a `Select group` result the way operator continuation already does |
+| 25 | Backspace becomes kind-specific rather than a blanket delete-the-cell: disabled on a selected result; a number trims one digit at a time (editing or not) and only deletes once already empty; an operator deletes and selects its left chain neighbour instead of fully deselecting | User named all three from using the keypad. A result is derived, not user input, so backspace joins `=`'s own P7.2 hard-stop philosophy (decision #22) rather than deleting a finished formula's answer on the same key that erases every other cell — long-press → `Delete` remains for a deliberate removal. A number's old behaviour (tap-select, one backspace, whole cell gone) was a uniquely destructive interpretation of a key that erases one character everywhere else in the app, including this same number while it's actively being edited — unified the two paths (`selectedNode.raw` reads the same whether or not `editingNodeId` matches, so editing vs. tap-selected no longer need different branches) and made reaching `''` a resting state instead of an auto-discard, so committing a truly empty cell costs one more deliberate backspace. An operator landing on its left neighbour (new `leftChainNeighborId`, mirroring the neighbour `moveSelectionAlongChain`/P7.2 arrows already compute) turns backspacing along a chain into "keep going" instead of losing the selection after every cell | Never — paren/equals/reference intentionally keep the original delete-and-deselect behaviour since nobody has asked for those to change too |
+| 26 | A number cell entering edit mode on web focuses itself explicitly (`.focus({ preventScroll: true })`), instead of relying on RN's `autoFocus` prop | User reported the keypad visibly moving whenever a cell was added or edited near the canvas edge. Root cause: `autoFocus` becomes a literal HTML `autofocus` attribute on web, and the browser's own autofocus-scroll algorithm was scrolling the app's root container (`body`/`#root`) to bring the newly-focused input into view — dragging the *entire* screen, keypad included, since there was no code doing that on purpose. `preventScroll: true` has no equivalent prop on `autoFocus` itself, so the fix takes over the focus call rather than configuring the existing one; native keeps the plain prop, since there's no browser there to scroll. Verified live both ways: reverting the fix and re-running the same script reproduced a real 29px scroll on the exact repro; the fix took it to zero | Never — this is a bug fix, not a design trade-off; revisit only if RN's `autoFocus` itself ever grows a `preventScroll` option worth switching to |
+| 27 | Digit / decimal / `+/-` on a selected operator now target the chain member to its right (edit it if it's a number, insert one if there's nothing there) instead of staying disabled, except when that neighbour is a linked cell or a result | User named the exact three cases. The empty-operand deletion path decision #25 just shipped left a genuinely reachable state — a bare trailing operator with nothing after it — that digits still refused to do anything with; treating "no number cell to the right" as "make one" and "already a number cell there" as "edit it" covers that gap with the same `appendNumberNode` §8.5 already uses elsewhere for mid-chain insertion (it splices after any given member, not just at a chain's end, so no new plumbing was needed). The linked-cell/result exclusion mirrors every other place those two kinds are already treated as non-editable, non-target cells | Never for the two exclusions; revisit if a future request wants the same right-neighbour targeting for `()` or `=` on a selected operator too |
+| 28 | `Copy` writes a cell's own display text to the clipboard; `Copy As` → `Copy without result` (offered once the cell is part of a group selection) copies every chain/free node in that selection with `=` and the answer dropped, one per line | User asked for `Copy` (previously a permanently-disabled placeholder, per decision-adjacent §8.5/§8.6 prose) to actually work, plus a `Copy As` submenu on a group selection with one item for now. Reused each kind's own display-content function (`resultCellContent`, `referenceCellContent`, `formatForDisplay`) rather than re-deriving text, so the clipboard always matches what's on screen. `Copy As` reveals its one nested item on tap *or* hover (both requested explicitly) via `MenuItem.indent`/`onHoverIn` rather than a separate flyout sheet — simplest structure for exactly one item; both handlers only ever reveal, never toggle closed, after live testing showed a toggle let a mouse user's own hover-then-click collapse the row they were about to tap into. `Clipboard` comes from `'react-native'` directly (deprecated in RN core but still functional, and aliased to `react-native-web`'s own implementation for the web build via the existing `react-native$` webpack alias) rather than adding `@react-native-clipboard/clipboard` — no new native dependency for one string write | Migrate off RN core's `Clipboard` if it is ever actually removed rather than merely deprecated; revisit `Copy As`'s one-item menu if a second variant is requested |
+| 29 | Value slider (§8.8) no longer opens automatically on selection; a `Show slider` context-menu item opens it, and a `Keep open` checkbox on the popover jointly gates three things — surviving a tap-elsewhere, drawing a connector line to the cell, and a drag handle to reposition the popover | User request: a popover on every selected number crowded the canvas. Made the trigger explicit (§8.6, same footing as `Label`/`Create link`) rather than tied to selection. The three pinned behaviours were specified separately (a checkbox that keeps it open; drawing a line; making it draggable) but read as one state, not three independent flags, once traced through: a slider worth keeping open across other taps is also one worth relocating away from the cell it's anchored under, and once it can be relocated a line back to that cell is what keeps the association legible — so one `pinned` boolean on `uiStore.sliderState` drives all three, rather than three separate checkboxes | A user wants the connector line or the drag handle without suppressing tap-elsewhere dismissal, or vice versa |
+| 30 | Decision #29's drag handle stays mounted at a fixed size always, toggling only its bar's opacity and its gesture's `enabled` state with `pinned`, rather than conditionally rendering the whole handle; the connector line takes the popover's own chrome colour, not the cell's identity hue; a Step field (default `0.1`, positive-only) sits between the range bounds and continuous dragging quantizes to it (`quantizeToStep`), vibrating once per step crossing | User-reported regression from #29's own first cut: conditionally mounting the drag handle only while pinned made the popover visibly grow on check and shrink on uncheck. Fixed by always mounting it and toggling only paint, not layout — the general fix for "a togglable affordance must not resize its container" wherever RN's default is to omit rather than hide. Separately requested in the same round: the connector should read as the popover's own edge rather than borrow the cell's identity hue (documents relate through hue per §11.1; this line isn't one of those relationships), and dragging should move in namable increments with tactile feedback rather than an arbitrary continuous value | A user wants the connector to carry identity hue after all (e.g. multiple pinned sliders open at once, needing to tell which line belongs to which cell) |
+| 31 | The slider popover's horizontal anchor uses the cell's width captured once at open time, not read live; a new `uiStore.liveViewport` bridge (§7) lets it track an in-progress Canvas pan/pinch/wheel gesture instead of only the committed, gesture-end-throttled `document.viewport` | Two user-reported bugs from real-device use, both structural rather than cosmetic: (1) the popover visibly shifted as the scrubbed value gained/lost digits, because its anchor read the cell's live (content-dependent) width every render — the same live value the popover's own scrubbing was changing; (2) the connector line visibly detached from the cell while panning and only reattached once the gesture ended, because the popover is a fixed screen overlay outside `Canvas`'s Reanimated-driven transform and so has no live view of an in-progress pan/pinch/wheel gesture, only of `documentStore`'s committed viewport, which §7's "commit only on release" rule deliberately keeps a gesture behind. `liveViewport` generalizes node-drag's existing solution to the same class of problem (`ViewportContext.tsx`) to a consumer that, unlike node-drag, isn't mounted inside `Canvas` and so can't read the shared values directly via that context | Another screen-space overlay needs the same live tracking — extend `liveViewport`'s consumers rather than inventing a second bridge |
+| 32 | A cell entering edit mode auto-pans the canvas to clear a fixed 24dp screen-space padding from whichever visible edge it violates (`canvas/autoPan.ts`), on by default with a Settings opt-out (`autoPanToEditedCell`) | Direct follow-up to decision #26 (2026-08-21's `preventScroll` fix): that fix correctly stopped the browser's autoFocus-scroll from dragging the whole page, keypad included, but the user pointed out the *positive* side effect went with it — an edge cell was no longer brought into view *at all*. Padding is a fixed dp (like every other spacing token, §1.2), not a world-space distance, so it reads the same regardless of zoom. Scoped to `NumberNode` (the only kind with an edit mode) rather than every node kind, and to entering/growing during edit rather than every selection change, matching exactly what was asked; a settings toggle rather than always-on since a canvas move the user didn't gesture for is exactly the kind of thing some users will want to disable, unlike the font-size row which has no reason to be optional | Never for the default-on choice; revisit the fixed 220ms/24dp constants if a user asks for them to be configurable too, or extend past `NumberNode` if a future non-number edit affordance needs the same treatment |
+| 33 | `NumberNode` blurs its own `TextInput` for decision #32's pan duration and refocuses (`preventScroll: true`) once it settles, on web only | User reported the keyboard-drags-the-page bug back within the same day #32 shipped, despite `preventScroll` (decision #26) still being in place untouched. Root cause, confirmed by reasoning about WebKit's documented behaviour rather than assumed (Chromium/Playwright cannot reproduce it — verified live against the deployed build, zero scroll across a 5-deep chain of continuations, so this is a real-device-only WebKit quirk with no local repro available): a *focused* control's bounding rect changing — even via a CSS transform, with no new `.focus()`/`scrollIntoView()` call — is enough on its own to re-trigger Safari's "scroll the focused control into view" heuristic; `preventScroll` only ever suppressed the one-time trigger from the `autoFocus` HTML attribute at focus-time. Blurring removes the only thing that heuristic keys off, for exactly the pan's ~220ms; the on-screen keypad never depended on this input's DOM focus to begin with (`Keypad.tsx` dispatches directly via `onKeyPress`, not through this ref), so the only real cost is a hardware key landing during that window | Revisit if a real-device test ever shows the heuristic firing from something *other* than DOM focus (would mean blur/refocus isn't the actual mechanism); extend the same blur/refocus pattern to a future non-`NumberNode` editable kind if one gains an edit mode and this bug resurfaces there |
+| 34 | `NumberNode`'s auto-pan blur (decision #33) is guarded by a `suppressBlurDeselect` ref so it does not also fire `onBlur={deselectNode}`; `ResultNode` gets its own `panIntoView` effect, keyed on `selected` rather than an edit mode it has none of | Two more real-device reports the same day, both from decision #33's own fix landing: (1) `.blur()` synchronously triggers this input's own `onBlur` prop, which is `deselectNode` — exiting edit mode exactly like a genuine blur, so every auto-pan blur was silently committing/discarding the cell being typed into; the *next* keystroke then landed with nothing selected, which `dispatchEditorCommand`'s digit case reads as "start a fresh cell," reported as a stray extra cell appearing mid-type. A boolean ref armed by `onWillPan` and disarmed by `onSettled` lets the real `onBlur` handler tell this apart from a genuine blur (tapping away) without weakening that path at all. (2) A long enough chain's result could compute already past the visible edge — `123 × 33 × 1,000 × 33,333 =` landing off-screen — with nothing bringing it into view, since only `NumberNode` had ever gained the decision #32 treatment; a result can't enter edit mode, but `dispatchEditorCommand`'s `equals` case already selects it the moment it's computed (§8.7), so `selected` is the direct analogue of `isEditing` here | Never for the blur-suppression mechanism itself; revisit if a future kind other than number/result needs the same "becomes the natural next target" treatment `selected`/`isEditing` each capture for their own kind |
 
 ## 17. Open questions
 

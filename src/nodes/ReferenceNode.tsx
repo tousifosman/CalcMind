@@ -4,6 +4,12 @@
 // (P6b.1 / §11.1) — editing the source updates every reference together. When the
 // target is gone, a neutral struck-through cell keeps the last known value dimmed
 // (P6.4) — colour is spent only where an identity still exists.
+//
+// A reference whose ultimate source (`identitySourceId`, walking through any nested
+// reference→reference chain) is a `result` node also gets the §1.2 dot texture, same
+// as the result cell itself — signalling "this too traces back to a derived value"
+// without touching its own hue-based fill/border (colour still carries *which*
+// identity; the pattern alone carries *derived-from-a-result*).
 import React from 'react';
 import { StyleSheet, Text } from 'react-native';
 import { NodeId } from '../model/types';
@@ -13,10 +19,12 @@ import { widthOf } from '../chains/measure';
 import { getDeviceLocale } from '../ui/locale';
 import { glyphColor, identityBorderFor } from '../ui/tokens';
 import { Cell, useGlyphTextStyle } from './Cell';
+import { ResultDotTexture, textureSize } from './ResultDotTexture';
 import { referenceCellContent } from '../engine/reference';
-import { labelForNode } from '../engine/identity';
+import { identitySourceId, labelForNode } from '../engine/identity';
 import { useReferenceIdentityHue } from './useIdentityHue';
-import { useNodeSelected } from './useNodeSelected';
+import { useNodeSelected, useNodeGroupSelected } from './useNodeSelected';
+import { useGroupPosition } from './useGroupPosition';
 import { usePreferencesStore } from '../store/preferencesStore';
 
 /** No-identity palette — distinct from role fills so an uncoloured reference is
@@ -40,6 +48,8 @@ function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
   const nodes = useDocumentStore((s) => s.document.nodes);
   const identityHue = useReferenceIdentityHue(id);
   const selected = useNodeSelected(id);
+  const groupSelected = useNodeGroupSelected(id);
+  const groupPosition = useGroupPosition(id, node?.chainId ?? null);
   const glyphTextStyle = useGlyphTextStyle();
   const fontSize = usePreferencesStore((s) => s.numeralFontSize);
   if (!node || node.kind !== 'reference') return null;
@@ -47,6 +57,16 @@ function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
   const locale = getDeviceLocale();
   const content = referenceCellContent(node, nodes, locale);
   const identityLabel = labelForNode(nodes, id);
+  // Propagates through nested reference→reference chains for free: `identitySourceId`
+  // already walks a reference's own target until it lands on a number or a result.
+  const sourceId = identitySourceId(nodes, id);
+  const showResultPattern = sourceId !== null && nodes[sourceId]?.kind === 'result';
+  const bandWidth = widthOf(node, locale, fontSize, nodes);
+  const { width: textureWidth, height: textureHeight } = textureSize(
+    bandWidth,
+    fontSize,
+    groupPosition,
+  );
 
   let fill: string;
   let border: string;
@@ -67,13 +87,25 @@ function ReferenceNodeComponent({ id }: ReferenceNodeProps) {
   return (
     <Cell
       testID={`reference-node-${id}`}
-      width={widthOf(node, locale, fontSize, nodes)}
+      width={bandWidth}
       fill={fill}
       border={border}
       label={identityLabel}
       // Caption uses the identity hue without drawing a declaring-cell ring.
       labelHue={identityHue}
       selected={selected}
+      groupSelected={groupSelected}
+      groupPosition={groupPosition}
+      bandBackground={
+        showResultPattern ? (
+          <ResultDotTexture
+            testID={`reference-node-${id}-texture`}
+            width={textureWidth}
+            height={textureHeight}
+            patternId={`reference-dots-${id}`}
+          />
+        ) : undefined
+      }
     >
       <Text
         testID={`reference-node-${id}-content`}

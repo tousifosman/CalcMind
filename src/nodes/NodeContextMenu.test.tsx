@@ -4,7 +4,7 @@ import { act } from 'react-test-renderer';
 import { NodeContextMenu, CanvasContextMenu, ContextMenuOverlay } from './NodeContextMenu';
 import { useUiStore } from '../store/uiStore';
 import { useDocumentStore } from '../store/documentStore';
-import { addNumberNode } from '../store/commands';
+import { addNumberNode, appendEqualsNode, selectGroup } from '../store/commands';
 import { createEmptyDocument } from '../model/factories';
 import { renderNode, unmountAll } from './testUtils';
 
@@ -40,6 +40,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={onDismiss}
       />,
@@ -73,6 +75,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={onDismiss}
       />,
@@ -91,29 +95,284 @@ describe('NodeContextMenu', () => {
     expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
-  test('Copy is marked disabled', () => {
-    const id = addNumberNode({ x: 0, y: 0 }, '3');
+  describe('Copy (§8.6)', () => {
+    test('enabled for a number and invokes onCopy with its id, then onDismiss', () => {
+      const id = addNumberNode({ x: 0, y: 0 }, '3');
+      const onCopy = jest.fn();
+      const onDismiss = jest.fn();
+      const renderer = renderNode(
+        <NodeContextMenu
+          nodeId={id}
+          anchor={ANCHOR}
+          onDelete={jest.fn()}
+          onSelectGroup={jest.fn()}
+          onUnlinkFromParent={jest.fn()}
+          onLabel={jest.fn()}
+          onCreateLink={jest.fn()}
+          onCopy={onCopy}
+          onCopyWithoutResult={jest.fn()}
+          onShowSlider={jest.fn()}
+          onDismiss={onDismiss}
+        />,
+      );
 
-    const renderer = renderNode(
-      <NodeContextMenu
-        nodeId={id}
-        anchor={ANCHOR}
-        onDelete={jest.fn()}
-        onSelectGroup={jest.fn()}
-        onUnlinkFromParent={jest.fn()}
-        onLabel={jest.fn()}
-        onCreateLink={jest.fn()}
-        onShowSlider={jest.fn()}
-        onDismiss={jest.fn()}
-      />,
-    );
+      const copyBtn = renderer.root
+        .findAll((node) => node.props.testID === 'context-menu-item-Copy')
+        .find((node) => node.props.disabled !== undefined);
+      expect(copyBtn).toBeDefined();
+      expect(copyBtn!.props.disabled).toBe(false);
 
-    const copyBtn = renderer.root
-      .findAll((node) => node.props.testID === `context-menu-item-Copy`)
-      .find((node) => node.props.disabled !== undefined);
+      act(() => {
+        copyBtn!.props.onPress();
+      });
+      expect(onCopy).toHaveBeenCalledWith(id);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
 
-    expect(copyBtn).toBeDefined();
-    expect(copyBtn!.props.disabled).toBe(true);
+    test('enabled for a computed result', () => {
+      const a = addNumberNode({ x: 0, y: 0 }, '3');
+      appendEqualsNode(a);
+      const resultId = Object.values(useDocumentStore.getState().document.nodes).find(
+        (n) => n.kind === 'result',
+      )!.id;
+      const renderer = renderNode(
+        <NodeContextMenu
+          nodeId={resultId}
+          anchor={ANCHOR}
+          onDelete={jest.fn()}
+          onSelectGroup={jest.fn()}
+          onUnlinkFromParent={jest.fn()}
+          onLabel={jest.fn()}
+          onCreateLink={jest.fn()}
+          onCopy={jest.fn()}
+          onCopyWithoutResult={jest.fn()}
+          onShowSlider={jest.fn()}
+          onDismiss={jest.fn()}
+        />,
+      );
+      const copyBtn = renderer.root
+        .findAll((node) => node.props.testID === 'context-menu-item-Copy')
+        .find((node) => node.props.disabled !== undefined);
+      expect(copyBtn!.props.disabled).toBe(false);
+    });
+
+    test('enabled for a dangling reference (copies its last known value)', () => {
+      act(() => {
+        useDocumentStore.getState().applyCommand((draft) => {
+          draft.nodes.dangling_copy = {
+            id: 'dangling_copy',
+            kind: 'reference',
+            position: { x: 0, y: 0 },
+            chainId: null,
+            createdAt: 0,
+            targetNodeId: 'gone',
+            lastKnownDisplay: '42',
+          };
+        });
+      });
+      const renderer = renderNode(
+        <NodeContextMenu
+          nodeId="dangling_copy"
+          anchor={ANCHOR}
+          onDelete={jest.fn()}
+          onSelectGroup={jest.fn()}
+          onUnlinkFromParent={jest.fn()}
+          onLabel={jest.fn()}
+          onCreateLink={jest.fn()}
+          onCopy={jest.fn()}
+          onCopyWithoutResult={jest.fn()}
+          onShowSlider={jest.fn()}
+          onDismiss={jest.fn()}
+        />,
+      );
+      const copyBtn = renderer.root
+        .findAll((node) => node.props.testID === 'context-menu-item-Copy')
+        .find((node) => node.props.disabled !== undefined);
+      expect(copyBtn!.props.disabled).toBe(false);
+    });
+
+    test('disabled for an operator — no value of its own', () => {
+      act(() => {
+        useDocumentStore.getState().applyCommand((draft) => {
+          draft.nodes.op_copy = {
+            id: 'op_copy',
+            kind: 'operator',
+            op: '+',
+            position: { x: 0, y: 0 },
+            chainId: null,
+            createdAt: 0,
+          };
+        });
+      });
+      const renderer = renderNode(
+        <NodeContextMenu
+          nodeId="op_copy"
+          anchor={ANCHOR}
+          onDelete={jest.fn()}
+          onSelectGroup={jest.fn()}
+          onUnlinkFromParent={jest.fn()}
+          onLabel={jest.fn()}
+          onCreateLink={jest.fn()}
+          onCopy={jest.fn()}
+          onCopyWithoutResult={jest.fn()}
+          onShowSlider={jest.fn()}
+          onDismiss={jest.fn()}
+        />,
+      );
+      const copyBtn = renderer.root
+        .findAll((node) => node.props.testID === 'context-menu-item-Copy')
+        .find((node) => node.props.disabled !== undefined);
+      expect(copyBtn!.props.disabled).toBe(true);
+    });
+  });
+
+  describe('Copy As (§8.6)', () => {
+    test('absent when this cell is not part of the active group selection', () => {
+      const id = addNumberNode({ x: 0, y: 0 }, '3');
+      const renderer = renderNode(
+        <NodeContextMenu
+          nodeId={id}
+          anchor={ANCHOR}
+          onDelete={jest.fn()}
+          onSelectGroup={jest.fn()}
+          onUnlinkFromParent={jest.fn()}
+          onLabel={jest.fn()}
+          onCreateLink={jest.fn()}
+          onCopy={jest.fn()}
+          onCopyWithoutResult={jest.fn()}
+          onShowSlider={jest.fn()}
+          onDismiss={jest.fn()}
+        />,
+      );
+      expect(
+        renderer.root.findAll((node) => node.props.testID === 'context-menu-item-Copy As'),
+      ).toHaveLength(0);
+    });
+
+    test('present once this cell is part of the group selection; tapping reveals Copy without result', () => {
+      const a = addNumberNode({ x: 0, y: 0 }, '3');
+      act(() => {
+        selectGroup(a);
+      });
+      const onCopyWithoutResult = jest.fn();
+      const onDismiss = jest.fn();
+      const renderer = renderNode(
+        <NodeContextMenu
+          nodeId={a}
+          anchor={ANCHOR}
+          onDelete={jest.fn()}
+          onSelectGroup={jest.fn()}
+          onUnlinkFromParent={jest.fn()}
+          onLabel={jest.fn()}
+          onCreateLink={jest.fn()}
+          onCopy={jest.fn()}
+          onCopyWithoutResult={onCopyWithoutResult}
+          onShowSlider={jest.fn()}
+          onDismiss={onDismiss}
+        />,
+      );
+
+      const copyAsBtn = renderer.root
+        .findAll((node) => node.props.testID === 'context-menu-item-Copy As')
+        .find((node) => node.props.onPress !== undefined);
+      expect(copyAsBtn).toBeDefined();
+      // Not revealed yet — no premature Copy without result row.
+      expect(
+        renderer.root.findAll(
+          (node) => node.props.testID === 'context-menu-item-Copy without result',
+        ),
+      ).toHaveLength(0);
+
+      act(() => {
+        copyAsBtn!.props.onPress();
+      });
+
+      const nestedBtn = renderer.root
+        .findAll((node) => node.props.testID === 'context-menu-item-Copy without result')
+        .find((node) => node.props.onPress !== undefined);
+      expect(nestedBtn).toBeDefined();
+
+      act(() => {
+        nestedBtn!.props.onPress();
+      });
+      expect(onCopyWithoutResult).toHaveBeenCalledTimes(1);
+      expect(onDismiss).toHaveBeenCalledTimes(1);
+    });
+
+    test('hovering Copy As also reveals Copy without result (web)', () => {
+      const a = addNumberNode({ x: 0, y: 0 }, '3');
+      act(() => {
+        selectGroup(a);
+      });
+      const renderer = renderNode(
+        <NodeContextMenu
+          nodeId={a}
+          anchor={ANCHOR}
+          onDelete={jest.fn()}
+          onSelectGroup={jest.fn()}
+          onUnlinkFromParent={jest.fn()}
+          onLabel={jest.fn()}
+          onCreateLink={jest.fn()}
+          onCopy={jest.fn()}
+          onCopyWithoutResult={jest.fn()}
+          onShowSlider={jest.fn()}
+          onDismiss={jest.fn()}
+        />,
+      );
+
+      const copyAsBtn = renderer.root.findAll(
+        (node) => node.props.testID === 'context-menu-item-Copy As',
+      )[0]!;
+      act(() => {
+        (copyAsBtn.props as { onMouseEnter?: () => void }).onMouseEnter?.();
+      });
+
+      expect(
+        renderer.root.findAll(
+          (node) => node.props.testID === 'context-menu-item-Copy without result',
+        ).length,
+      ).toBeGreaterThanOrEqual(1);
+    });
+
+    test('a tap right after a hover-reveal does not collapse it back (caught live)', () => {
+      const a = addNumberNode({ x: 0, y: 0 }, '3');
+      act(() => {
+        selectGroup(a);
+      });
+      const renderer = renderNode(
+        <NodeContextMenu
+          nodeId={a}
+          anchor={ANCHOR}
+          onDelete={jest.fn()}
+          onSelectGroup={jest.fn()}
+          onUnlinkFromParent={jest.fn()}
+          onLabel={jest.fn()}
+          onCreateLink={jest.fn()}
+          onCopy={jest.fn()}
+          onCopyWithoutResult={jest.fn()}
+          onShowSlider={jest.fn()}
+          onDismiss={jest.fn()}
+        />,
+      );
+
+      const copyAsBtn = renderer.root.findAll(
+        (node) => node.props.testID === 'context-menu-item-Copy As',
+      )[0]!;
+      act(() => {
+        (copyAsBtn.props as { onMouseEnter?: () => void }).onMouseEnter?.();
+      });
+      // A real mouse click is a hover (already fired above) followed by the press —
+      // firing onPress here reproduces exactly that second half.
+      act(() => {
+        copyAsBtn.props.onPress();
+      });
+
+      expect(
+        renderer.root.findAll(
+          (node) => node.props.testID === 'context-menu-item-Copy without result',
+        ).length,
+      ).toBeGreaterThanOrEqual(1);
+    });
   });
 
   test('Unlink from parent is absent for non-reference nodes', () => {
@@ -127,6 +386,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
@@ -164,6 +425,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={onUnlink}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={onDismiss}
       />,
@@ -192,6 +455,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={onLabel}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={onDismiss}
       />,
@@ -231,6 +496,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
@@ -263,6 +530,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
@@ -300,6 +569,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
@@ -322,6 +593,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={onCreateLink}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={onDismiss}
       />,
@@ -361,6 +634,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
@@ -393,6 +668,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
@@ -425,6 +702,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
@@ -448,6 +727,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={onShowSlider}
         onDismiss={onDismiss}
       />,
@@ -474,6 +755,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
@@ -507,6 +790,8 @@ describe('NodeContextMenu', () => {
         onUnlinkFromParent={jest.fn()}
         onLabel={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
         onDismiss={jest.fn()}
       />,
@@ -572,6 +857,8 @@ describe('ContextMenuOverlay', () => {
         onUnlinkFromParent={jest.fn()}
         onLabelNode={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
       />,
     );
@@ -592,6 +879,8 @@ describe('ContextMenuOverlay', () => {
         onUnlinkFromParent={jest.fn()}
         onLabelNode={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
       />,
     );
@@ -615,6 +904,8 @@ describe('ContextMenuOverlay', () => {
         onUnlinkFromParent={jest.fn()}
         onLabelNode={jest.fn()}
         onCreateLink={jest.fn()}
+        onCopy={jest.fn()}
+        onCopyWithoutResult={jest.fn()}
         onShowSlider={jest.fn()}
       />,
     );

@@ -10,6 +10,7 @@ import {
   setNodeRaw,
   deleteNode,
   appendEqualsNode,
+  appendNumberNode,
   appendOperatorAndNumber,
   createLinkToValue,
   selectAll,
@@ -21,6 +22,7 @@ import {
   dispatchEditorCommand,
   resolveParenSide,
   groupContainsResult,
+  chainHasEquals,
 } from './keymap';
 
 jest.mock('../ui/locale', () => ({ getDeviceLocale: () => 'en-US' }));
@@ -491,28 +493,6 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(useUiStore.getState().selectedNodeId).toBe(op.id);
   });
 
-  test('digit with an operator selected no-ops (does not append at chain end)', () => {
-    dispatchEditorCommand({ region: 'digit', value: '5' });
-    dispatchEditorCommand({ region: 'operator', op: '+' });
-    // Selection is on the empty number after `+`; move focus onto the operator
-    // (selectNode discards that empty placeholder — re-read members after).
-    const op = Object.values(useDocumentStore.getState().document.nodes).find(
-      (n) => n.kind === 'operator',
-    )!;
-    selectNode(op.id);
-    const before = useDocumentStore.getState().undoStack.length;
-    const membersBefore =
-      useDocumentStore.getState().document.chains[op.chainId!]!.members.length;
-
-    dispatchEditorCommand({ region: 'digit', value: '9' });
-
-    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
-    expect(
-      useDocumentStore.getState().document.chains[op.chainId!]!.members,
-    ).toHaveLength(membersBefore);
-    expect(useUiStore.getState().selectedNodeId).toBe(op.id);
-  });
-
   test('digit with a linked cell selected no-ops (does not append at chain end)', () => {
     dispatchEditorCommand({ region: 'digit', value: '3' });
     const numberId = useUiStore.getState().selectedNodeId!;
@@ -552,7 +532,7 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     });
   });
 
-  test('digit / paren / equals with a result selected still no-op (result is read-only)', () => {
+  test('digit / equals with a result selected still no-op (result is read-only)', () => {
     const chainId = 'c_result_test';
     const resultId = 'n_result_test';
     useDocumentStore.getState().applyCommand((draft) => {
@@ -570,14 +550,145 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     const before = useDocumentStore.getState().undoStack.length;
 
     dispatchEditorCommand({ region: 'digit', value: '1' });
-    dispatchEditorCommand({ region: 'paren', side: 'open' });
     dispatchEditorCommand({ region: 'equals' });
 
     expect(useDocumentStore.getState().undoStack).toHaveLength(before);
     expect(useUiStore.getState().selectedNodeId).toBe(resultId);
   });
 
-  test('backspace still deletes a selected result', () => {
+  test('paren with a result selected wraps a new link in ( ) instead of no-op (§8.7)', () => {
+    const chainId = 'c_result_paren_test';
+    const resultId = 'n_result_paren_test';
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains[chainId] = { id: chainId, members: [], anchor: { x: 0, y: 0 } };
+      draft.nodes[resultId] = {
+        id: resultId,
+        kind: 'result',
+        position: { x: 0, y: 0 },
+        chainId: null,
+        createdAt: Date.now(),
+        sourceChainId: chainId,
+      };
+    });
+    selectNode(resultId);
+
+    dispatchEditorCommand({ region: 'paren', side: 'open' });
+
+    const doc = useDocumentStore.getState().document;
+    const ref = Object.values(doc.nodes).find(
+      (n) => n.kind === 'reference' && n.targetNodeId === resultId,
+    )!;
+    expect(ref).toBeDefined();
+    const chain = doc.chains[ref.chainId!]!;
+    const kinds = chain.members.map((id) => doc.nodes[id]?.kind);
+    expect(kinds).toEqual(['paren', 'reference', 'paren']);
+    // Close paren selected (not editing — nothing to type into yet), so a following
+    // operator or `=` extends this new chain in place like any other selected paren.
+    const closeParenId = chain.members[2]!;
+    expect(useUiStore.getState().selectedNodeId).toBe(closeParenId);
+    expect(useUiStore.getState().editingNodeId).toBeNull();
+  });
+
+  test('selecting the = cell rejects digit/paren/equals — nothing appends after it', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const doc = useDocumentStore.getState().document;
+    const equalsNode = Object.values(doc.nodes).find((n) => n.kind === 'equals')!;
+    const chainId = equalsNode.chainId!;
+    const membersBefore = [...doc.chains[chainId]!.members];
+
+    selectNode(equalsNode.id);
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+    dispatchEditorCommand({ region: 'paren', side: 'open' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    expect(useDocumentStore.getState().document.chains[chainId]!.members).toEqual(membersBefore);
+    // Still selected — every command above was a no-op, not a deselect.
+    expect(useUiStore.getState().selectedNodeId).toBe(equalsNode.id);
+  });
+
+  test('an operator on a selected = converts it to that operator in place (§9)', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const before = useDocumentStore.getState().document;
+    const equalsNode = Object.values(before.nodes).find((n) => n.kind === 'equals')!;
+    const chainId = equalsNode.chainId!;
+    const resultId = before.chains[chainId]!.members.find(
+      (id) => before.nodes[id]?.kind === 'result',
+    )!;
+
+    selectNode(equalsNode.id);
+    dispatchEditorCommand({ region: 'operator', op: '×' });
+
+    const after = useDocumentStore.getState().document;
+    // The old = (and the result it had) are gone; the chain now reads 1 + 2 × _.
+    expect(after.nodes[equalsNode.id]).toBeUndefined();
+    expect(after.nodes[resultId]).toBeUndefined();
+    const chain = after.chains[chainId]!;
+    const kinds = chain.members.map((id) => after.nodes[id]?.kind);
+    expect(kinds).toEqual(['number', 'operator', 'number', 'operator', 'number']);
+    const newOperator = after.nodes[chain.members[3]!];
+    expect(newOperator).toMatchObject({ kind: 'operator', op: '×' });
+    // The fresh empty operand is what's now selected and being edited, same as any
+    // other operator press seeds and focuses its operand.
+    const newNumberId = chain.members[4]!;
+    expect(useUiStore.getState().selectedNodeId).toBe(newNumberId);
+    expect(useUiStore.getState().editingNodeId).toBe(newNumberId);
+    expect(after.nodes[newNumberId]).toMatchObject({ kind: 'number', raw: '' });
+  });
+
+  test('an operator on a selected = with no other chain history still leaves undo intact', () => {
+    // Guards convertEqualsToOperator's own no-op guard (missing predecessor) rather than
+    // a thrown error corrupting the undo stack — not reachable through the UI for a real
+    // equals node (always has a preceding operand), but dispatch shouldn't crash if one
+    // ever is selected with a malformed chain underneath it.
+    const chainId = 'c_malformed';
+    const equalsId = 'n_malformed_equals';
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains[chainId] = { id: chainId, members: [equalsId], anchor: { x: 0, y: 0 } };
+      draft.nodes[equalsId] = {
+        id: equalsId,
+        kind: 'equals',
+        position: { x: 0, y: 0 },
+        chainId,
+        createdAt: Date.now(),
+      };
+    });
+    selectNode(equalsId);
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(useDocumentStore.getState().document.nodes[equalsId]).toBeDefined();
+  });
+
+  test('= is rejected on any other member once the chain already has one — no second equals', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const doc = useDocumentStore.getState().document;
+    const one = Object.values(doc.nodes).find((n) => n.kind === 'number' && n.raw === '1')!;
+    const chainId = one.chainId!;
+    const membersBefore = [...doc.chains[chainId]!.members];
+
+    selectNode(one.id);
+    dispatchEditorCommand({ region: 'equals' });
+
+    const after = useDocumentStore.getState().document;
+    expect(after.chains[chainId]!.members).toEqual(membersBefore);
+    expect(after.chains[chainId]!.members.filter((id) => after.nodes[id]?.kind === 'equals')).toHaveLength(1);
+  });
+
+  test('backspace on a selected result is disabled — a derived value, not user input (§9)', () => {
     const resultId = 'n_result_test2';
     useDocumentStore.getState().applyCommand((draft) => {
       draft.nodes[resultId] = {
@@ -590,11 +701,13 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
       };
     });
     selectNode(resultId);
+    const before = useDocumentStore.getState().undoStack.length;
 
     dispatchEditorCommand({ region: 'backspace' });
 
-    expect(nodes()[resultId]).toBeUndefined();
-    expect(useUiStore.getState().selectedNodeId).toBeNull();
+    expect(nodes()[resultId]).toBeDefined();
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(useUiStore.getState().selectedNodeId).toBe(resultId);
   });
 
   test('full keystroke path: continue, type operand, = uses live reference value', () => {
@@ -739,6 +852,199 @@ describe('dispatchEditorCommand: continuation from a value (P4.9, §8.7)', () =>
     expect(doc.nodes[members[4]!]).toMatchObject({ kind: 'number', raw: '' });
     // The original trailing `3` is still last, just pushed one slot further right.
     expect(doc.nodes[members[6]!]).toMatchObject({ kind: 'number', raw: '3' });
+  });
+});
+
+describe('dispatchEditorCommand: backspace on a selected (not editing) number trims a digit (§8.5)', () => {
+  test('trims one digit at a time, staying selected and editing, before the cell empties', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '12');
+    selectNode(a); // tap-selected, not editing — the reported gap.
+
+    dispatchEditorCommand({ region: 'backspace' });
+
+    expect(nodes()[a]).toMatchObject({ raw: '1' });
+    expect(useUiStore.getState().selectedNodeId).toBe(a);
+    expect(useUiStore.getState().editingNodeId).toBe(a);
+  });
+
+  test('reaching an empty cell keeps it selected instead of auto-discarding', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '5');
+    selectNode(a);
+
+    dispatchEditorCommand({ region: 'backspace' });
+
+    expect(nodes()[a]).toMatchObject({ raw: '' });
+    expect(useUiStore.getState().selectedNodeId).toBe(a);
+  });
+
+  test('a second backspace on an already-empty number deletes it and selects its left neighbour', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const built = appendOperatorAndNumber(a, '+');
+    setNodeRaw(built.numberId, '9');
+    selectNode(built.numberId);
+    dispatchEditorCommand({ region: 'backspace' }); // '9' -> ''
+    expect(nodes()[built.numberId]).toMatchObject({ raw: '' });
+
+    dispatchEditorCommand({ region: 'backspace' }); // '' -> deleted, land on '+'
+
+    expect(nodes()[built.numberId]).toBeUndefined();
+    expect(useUiStore.getState().selectedNodeId).toBe(built.operatorId);
+  });
+
+  test('a free (chainless) empty number falls back to full deselect, same as before', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '9');
+    selectNode(a);
+    dispatchEditorCommand({ region: 'backspace' }); // '9' -> ''
+
+    dispatchEditorCommand({ region: 'backspace' }); // '' -> deleted, no neighbour
+
+    expect(nodes()[a]).toBeUndefined();
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+  });
+});
+
+describe('dispatchEditorCommand: backspace on a selected operator lands on its left neighbour (§8.5)', () => {
+  test('deletes the operator and selects the chain member to its left', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const built = appendOperatorAndNumber(a, '+');
+    setNodeRaw(built.numberId, '2');
+    selectNode(built.operatorId);
+
+    dispatchEditorCommand({ region: 'backspace' });
+
+    expect(nodes()[built.operatorId]).toBeUndefined();
+    expect(useUiStore.getState().selectedNodeId).toBe(a);
+    // The chain still holds together — '2' just lost its operator, not its chain.
+    const doc = useDocumentStore.getState().document;
+    expect(doc.chains[doc.nodes[a]!.chainId!]!.members).toEqual([a, built.numberId]);
+  });
+
+  test('an operator with nothing to its left falls back to full deselect', () => {
+    const a = addOperatorNode({ x: 0, y: 0 }, '+');
+    const numberId = appendNumberNode(a, '2');
+    selectNode(a);
+
+    dispatchEditorCommand({ region: 'backspace' });
+
+    expect(nodes()[a]).toBeUndefined();
+    expect(useUiStore.getState().selectedNodeId).toBeNull();
+    expect(nodes()[numberId]).toBeDefined();
+  });
+});
+
+describe('dispatchEditorCommand: digit on a selected operator targets its right operand (§8.5)', () => {
+  test('no number cell to the right: inserts a fresh one with the typed digit', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const built = appendOperatorAndNumber(a, '+');
+    deleteNode(built.numberId); // same state a backspace-emptied-then-deleted operand leaves
+    selectNode(built.operatorId);
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+
+    const doc = useDocumentStore.getState().document;
+    const chain = doc.chains[doc.nodes[a]!.chainId!]!;
+    expect(chain.members).toHaveLength(3);
+    const newId = chain.members[2]!;
+    expect(doc.nodes[newId]).toMatchObject({ kind: 'number', raw: '9' });
+    expect(useUiStore.getState().selectedNodeId).toBe(newId);
+    expect(useUiStore.getState().editingNodeId).toBe(newId);
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before + 1);
+  });
+
+  test('a number cell to the right: edits it in place, appending rather than duplicating', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const built = appendOperatorAndNumber(a, '+');
+    setNodeRaw(built.numberId, '2');
+    selectNode(built.operatorId);
+    const membersBefore =
+      useDocumentStore.getState().document.chains[nodes()[a]!.chainId!]!.members.length;
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+
+    expect(nodes()[built.numberId]).toMatchObject({ kind: 'number', raw: '29' });
+    expect(useUiStore.getState().selectedNodeId).toBe(built.numberId);
+    expect(useUiStore.getState().editingNodeId).toBe(built.numberId);
+    const doc = useDocumentStore.getState().document;
+    expect(doc.chains[doc.nodes[a]!.chainId!]!.members).toHaveLength(membersBefore);
+  });
+
+  test('decimal and sign on the right neighbour follow the same one-separator / toggle rules as editing it directly', () => {
+    const a = addNumberNode({ x: 0, y: 0 }, '1');
+    const built = appendOperatorAndNumber(a, '+');
+    setNodeRaw(built.numberId, '2.5');
+    selectNode(built.operatorId);
+
+    dispatchEditorCommand({ region: 'decimal' }); // already has one — ignored
+    dispatchEditorCommand({ region: 'sign' });
+
+    expect(nodes()[built.numberId]).toMatchObject({ kind: 'number', raw: '-2.5' });
+  });
+
+  test('the cell to the right is a linked cell: digit no-ops', () => {
+    const chainId = 'c_op_ref_test';
+    const opId = 'n_op_ref_test_op';
+    const refId = 'n_op_ref_test_ref';
+    const source = addNumberNode({ x: 0, y: 0 }, '7');
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains[chainId] = { id: chainId, members: [opId, refId], anchor: { x: 0, y: 0 } };
+      draft.nodes[opId] = {
+        id: opId,
+        kind: 'operator',
+        op: '+',
+        position: { x: 0, y: 0 },
+        chainId,
+        createdAt: Date.now(),
+      };
+      draft.nodes[refId] = {
+        id: refId,
+        kind: 'reference',
+        position: { x: 40, y: 0 },
+        chainId,
+        createdAt: Date.now(),
+        targetNodeId: source,
+      };
+    });
+    selectNode(opId);
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(useUiStore.getState().selectedNodeId).toBe(opId);
+    expect(useDocumentStore.getState().document.chains[chainId]!.members).toEqual([opId, refId]);
+  });
+
+  test('the cell to the right is a result: digit no-ops', () => {
+    const chainId = 'c_op_result_test';
+    const opId = 'n_op_result_test_op';
+    const resultId = 'n_op_result_test_result';
+    useDocumentStore.getState().applyCommand((draft) => {
+      draft.chains[chainId] = { id: chainId, members: [opId, resultId], anchor: { x: 0, y: 0 } };
+      draft.nodes[opId] = {
+        id: opId,
+        kind: 'operator',
+        op: '+',
+        position: { x: 0, y: 0 },
+        chainId,
+        createdAt: Date.now(),
+      };
+      draft.nodes[resultId] = {
+        id: resultId,
+        kind: 'result',
+        position: { x: 40, y: 0 },
+        chainId,
+        createdAt: Date.now(),
+        sourceChainId: chainId,
+      };
+    });
+    selectNode(opId);
+    const before = useDocumentStore.getState().undoStack.length;
+
+    dispatchEditorCommand({ region: 'digit', value: '9' });
+
+    expect(useDocumentStore.getState().undoStack).toHaveLength(before);
+    expect(useUiStore.getState().selectedNodeId).toBe(opId);
   });
 });
 
@@ -935,6 +1241,35 @@ describe('dispatchEditorCommand: arrows move selection between chains (P7.2)', (
     expect(useUiStore.getState().selectedNodeId).toBe(id);
     dispatchEditorCommand({ region: 'arrow', direction: 'down' });
     expect(useUiStore.getState().selectedNodeId).toBe(id);
+  });
+});
+
+describe('chainHasEquals (§9: at most one = per chain)', () => {
+  test('false for a free node, a chain with no equals, and a missing/null id', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    const free = Object.values(nodes()).find((n) => n.kind === 'number')!;
+    expect(chainHasEquals(free.id, nodes(), useDocumentStore.getState().document.chains)).toBe(false);
+    expect(chainHasEquals(null, nodes(), useDocumentStore.getState().document.chains)).toBe(false);
+    expect(chainHasEquals('missing', nodes(), useDocumentStore.getState().document.chains)).toBe(false);
+
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    const doc = useDocumentStore.getState().document;
+    const one = Object.values(doc.nodes).find((n) => n.kind === 'number' && n.raw === '1')!;
+    expect(chainHasEquals(one.id, doc.nodes, doc.chains)).toBe(false);
+  });
+
+  test('true for every member once the chain has an equals, including the equals/result themselves', () => {
+    dispatchEditorCommand({ region: 'digit', value: '1' });
+    dispatchEditorCommand({ region: 'operator', op: '+' });
+    dispatchEditorCommand({ region: 'digit', value: '2' });
+    dispatchEditorCommand({ region: 'equals' });
+
+    const doc = useDocumentStore.getState().document;
+    const one = Object.values(doc.nodes).find((n) => n.kind === 'number' && n.raw === '1')!;
+    for (const id of doc.chains[one.chainId!]!.members) {
+      expect(chainHasEquals(id, doc.nodes, doc.chains)).toBe(true);
+    }
   });
 });
 
