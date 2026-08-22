@@ -144,7 +144,10 @@ describe('buildConnectorScene', () => {
     expect(scene.curves).toHaveLength(2);
     expect(scene.badges).toHaveLength(0);
     expect(scene.curves.every((c) => c.hue === identityHues[0])).toBe(true);
-    expect(scene.curves.every((c) => c.opacity === 1)).toBe(true);
+    // Vague by default when nothing is selected (decision #13 revised).
+    expect(
+      scene.curves.every((c) => c.opacity === CONNECTOR_UNSELECTED_OPACITY),
+    ).toBe(true);
     expect(scene.hues).toEqual([identityHues[0]]);
     expect(scene.bounds).not.toBeNull();
   });
@@ -210,6 +213,13 @@ describe('buildConnectorScene', () => {
     const other = scene.curves.find((c) => c.referenceNodeId === 'b');
     expect(selected?.opacity).toBe(1);
     expect(other?.opacity).toBe(CONNECTOR_UNSELECTED_OPACITY);
+
+    // Losing selection fades the previously-emphasized curve back down too —
+    // vibrancy tracks the live selection, it isn't sticky (decision #24).
+    const cleared = buildConnectorScene(nodes, hues, 'en-US', null);
+    expect(cleared.curves.every((c) => c.opacity === CONNECTOR_UNSELECTED_OPACITY)).toBe(
+      true,
+    );
   });
 
   test('uses the neutral hue when the source has no identity colour', () => {

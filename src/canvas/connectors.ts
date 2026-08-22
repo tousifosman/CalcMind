@@ -198,9 +198,10 @@ function groupExpanded(
 function curveOpacity(
   link: ConnectorLink,
   selectedNodeId: NodeId | null,
-  anyLinkSelected: boolean,
 ): number {
-  if (!anyLinkSelected) return 1;
+  // Vague by default (decision #13 revised): a link only reads at full
+  // strength while it, or its source/reference, is the selection. Losing
+  // selection should fade every curve back down, not leave them vivid.
   return linkInvolvesSelection(link, selectedNodeId)
     ? 1
     : CONNECTOR_UNSELECTED_OPACITY;
@@ -306,10 +307,6 @@ export function buildConnectorScene(
     else bySource.set(link.sourceNodeId, [link]);
   }
 
-  const anyLinkSelected = links.some((link) =>
-    linkInvolvesSelection(link, selectedNodeId),
-  );
-
   const curves: ConnectorCurve[] = [];
   const badges: ConnectorBadge[] = [];
   const hueSet = new Set<string>();
@@ -357,7 +354,7 @@ export function buildConnectorScene(
         referenceNodeId: link.referenceNodeId,
         hue,
         d,
-        opacity: curveOpacity(link, selectedNodeId, anyLinkSelected),
+        opacity: curveOpacity(link, selectedNodeId),
       });
       bounds = expandBounds(bounds, start.x, start.y, pad);
       bounds = expandBounds(bounds, end.x, end.y, pad);
