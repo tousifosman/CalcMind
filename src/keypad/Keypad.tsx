@@ -664,6 +664,11 @@ const styles = StyleSheet.create({
   },
   historyRow: {
     flexDirection: 'row',
+    // Used to rely on being the last row in the column, where a trailing margin doesn't
+    // matter. It no longer is — the digit grid now follows it (§8.5) — so without this the
+    // missing gap collapsed the space between this row and the next, shifting every row
+    // below it out of line with the operator column's own evenly `KEY_GAP`-spaced rows.
+    marginBottom: KEY_GAP,
   },
   key: {
     flex: 1,

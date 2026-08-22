@@ -489,6 +489,24 @@ describe('main column and accent column rows stay aligned (§8.5)', () => {
     expect(new Set(heights).size).toBe(1);
     expect(heights[0]).toBe(48);
   });
+
+  test('every non-final row in the main column carries the same bottom gap', () => {
+    // `historyRow` used to be exempt (it was always the last row, where a trailing margin
+    // doesn't matter) and had no `marginBottom` of its own. Reordering the main column
+    // (§8.5) put the digit grid after it, silently collapsing that gap and shifting every
+    // row below out of line with the operator column's own evenly spaced rows — a real,
+    // reported regression. Asserting every non-final row shares one gap value catches a
+    // repeat the same way the height check above catches a repeat of the 44-vs-48 bug.
+    let renderer!: ReactTestRenderer;
+    act(() => {
+      renderer = create(<Keypad />);
+    });
+
+    const rowTestIDs = ['keypad-number-editing', 'keypad-history'];
+    const gaps = rowTestIDs.map((testID) => findByTestID(renderer, testID).props.style.marginBottom);
+    expect(new Set(gaps).size).toBe(1);
+    expect(gaps[0]).toBeGreaterThan(0);
+  });
 });
 
 describe('() moved into the accent column, under + (§8.5)', () => {
