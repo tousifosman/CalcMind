@@ -707,19 +707,21 @@ operators are visually separated from digits.
 | Digits | `7 8 9 / 4 5 6 / 1 2 3`, bottom row decimal separator (locale glyph, inserts canonical `.`) / `0` / `+/-` — decimal and sign flank `0` rather than sitting in their own row |
 | Number editing | **Create link**, **Add components**, **Notes** |
 | History | undo, redo, backspace |
-| Operators (accent column) | `÷ × − + () =` — `()` sits underneath `+` |
+| Operators (accent column) | `() = ÷ × − +` — `()` and `=` lead the column, above `÷ × − +` |
 | Mode strip | dismiss keypad, **Workspace** *(later — documents, P5)*, functions *(later)*, **Chart** *(later — graph, §17.2)*, **Clear all**, **Settings** (icon-only cog) |
 
 - Keys act on the **selected node** if there is one, otherwise they create a new node at the
   caret/last-tap point.
 - **Every key is the same 48px tall.** The main column (digit grid + number-editing row +
   history row) and the accent column (operators + `()` + `=`) both stack six rows, and every
-  row uses the same `KEY_GAP` bottom margin, so a shared height is what keeps the two columns'
-  rows landing on the same lines instead of drifting apart by a few px per row. This was a
-  real, reported bug: `key`'s base height (and therefore every key built on it —
-  `OperatorKey`, `EqualsKey`, `Create link`, etc.) used to be 44px against `digitKey`'s 48px,
-  invisible while the two columns had different row counts and only became a visible
-  cumulative stagger once `()`'s move (above) made them match.
+  row uses the same `KEY_GAP` bottom margin (the column's last row — `historyRow` on the main
+  side, `+` on the accent side — carries none, so both columns' six rows end at the same
+  height), so a shared height is what keeps the two columns' rows landing on the same lines
+  instead of drifting apart by a few px per row. This was a real, reported bug: `key`'s base
+  height (and therefore every key built on it — `OperatorKey`, `EqualsKey`, `Create link`,
+  etc.) used to be 44px against `digitKey`'s 48px, invisible while the two columns had
+  different row counts and only became a visible cumulative stagger once `()`'s move (above)
+  made them match.
 - Decimal and `+/-` share `0`'s fill (`rolePalette.number.fill`, the same teal as every digit)
   and label style, so the bottom digit row reads as one colour rather than `0` standing out
   from its neighbours — and share its `disabled` rule too: they are number keys, not a
@@ -729,8 +731,8 @@ operators are visually separated from digits.
   `Key`'s ordinary disabled treatment (opacity only) would have left them visibly green next
   to flat-grey digits. That disabled colour is a placeholder pending a real design pass, not a
   finished palette choice.
-- The grouping key is a single **`()`**, in the accent column underneath `+` (own row between
-  `+` and `=`, not a wide bottom-row key, and not separate `(` / `)`). Each press inserts
+- The grouping key is a single **`()`**, leading the accent column (own row above `=`, not a
+  wide bottom-row key, and not separate `(` / `)`). Each press inserts
   whichever side fits the chain through the selection: `)` when there is an unmatched open and a
   close is grammatical (after a number, reference, or close paren); otherwise `(`. Hardware
   `(`/`)` still map to an explicit side. Styled as an `OperatorKey` — same amber

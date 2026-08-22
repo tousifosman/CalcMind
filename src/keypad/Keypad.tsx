@@ -376,6 +376,22 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
         </View>
 
         <View style={styles.accentColumn} testID="keypad-operators">
+          {/* `()` and `=` lead the accent column now — the two bottom rows moved to the
+              top so they're reached first, above `÷ × − +`. Only the order changed, not
+              behaviour: `()` still resolves open/close from chain depth in
+              `dispatchEditorCommand`, and `=` still carries the same disabled rule. */}
+          <OperatorKey
+            label="()"
+            onPress={() => press({ region: 'paren' })}
+            disabled={numberEditingKeysDisabled}
+            testID="keypad-paren"
+            highlighted={parenCreatesLink}
+          />
+          <EqualsKey
+            onPress={() => press({ region: 'equals' })}
+            testID="keypad-equals"
+            disabled={dataEntryLocked || groupMode || selectedChainHasEquals}
+          />
           <OperatorKey
             label="÷"
             onPress={() => press({ region: 'operator', op: '÷' })}
@@ -403,22 +419,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
             testID="keypad-op-add"
             disabled={!operatorsEnabled}
             highlighted={operatorCreatesLink}
-          />
-          {/* `()` (§8.5): moved underneath `+` into the accent column, styled as an
-              `OperatorKey` — same amber fill and white label as `÷ × − +`. Side is resolved
-              in `dispatchEditorCommand` from chain depth so one tap opens or closes as
-              appropriate; only its position/colour changed, not its behaviour. */}
-          <OperatorKey
-            label="()"
-            onPress={() => press({ region: 'paren' })}
-            disabled={numberEditingKeysDisabled}
-            testID="keypad-paren"
-            highlighted={parenCreatesLink}
-          />
-          <EqualsKey
-            onPress={() => press({ region: 'equals' })}
-            testID="keypad-equals"
-            disabled={dataEntryLocked || groupMode || selectedChainHasEquals}
+            style={styles.accentKeyLast}
           />
         </View>
       </View>
@@ -511,6 +512,7 @@ function OperatorKey({
   testID,
   disabled,
   highlighted,
+  style,
 }: KeyProps & {
   /** §8.7: this press is about to create a new linked cell (a fresh reference) rather
    *  than extend the current chain in place — tint to `Create link`'s blue instead of
@@ -524,6 +526,7 @@ function OperatorKey({
         styles.accentKey,
         highlighted && !disabled && styles.accentKeyLink,
         disabled && styles.keyDisabled,
+        style,
       ]}
       onPress={onPress}
       disabled={disabled}
@@ -722,6 +725,13 @@ const styles = StyleSheet.create({
   accentKeyLink: {
     backgroundColor: identityHues[0],
   },
+  // `+` is the accent column's last row now (`()` and `=` moved to the top) — it needs
+  // no bottom margin, same as `historyRow` (the main column's own last row), so the two
+  // columns' six rows still end at the same height instead of the column with a
+  // trailing `accentKey` margin running taller.
+  accentKeyLast: {
+    marginBottom: 0,
+  },
   accentKeyLabel: {
     color: glyphColor,
     fontSize: 20,
@@ -730,7 +740,10 @@ const styles = StyleSheet.create({
   equalsKey: {
     backgroundColor: rolePalette.equals.fill,
     marginHorizontal: 0,
-    marginBottom: 0,
+    // `=` sits second in the accent column now (moved up with `()`), so it needs the
+    // same row-to-row gap as every other accent key; it only lost this when it was
+    // still the column's last row and needed none below it.
+    marginBottom: KEY_GAP,
   },
   confirmOverlay: {
     padding: 12,
