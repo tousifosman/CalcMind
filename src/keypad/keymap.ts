@@ -391,6 +391,17 @@ export function dispatchEditorCommand(command: EditorCommand): void {
         editNumberNode(numberId);
       }
     }
+    // `Create link` follows the same §8.7 rule as `operator` above: a group with a
+    // result can link that result, same eligibility as the keypad button's
+    // `canCreateLink` (`groupContainsResult`).
+    if (command.region === 'createLink') {
+      const { nodes } = useDocumentStore.getState().document;
+      const resultId =
+        [...ui.groupSelectedIds].find((id) => nodes[id]?.kind === 'result') ?? null;
+      if (resultId) {
+        createLinkToValue(resultId);
+      }
+    }
     return;
   }
 
