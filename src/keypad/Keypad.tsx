@@ -330,7 +330,7 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
 
           <View style={styles.digitGrid} testID="keypad-digits">
             {DIGIT_ROWS.map((row) => (
-              <View style={styles.digitRow} key={row.join('')}>
+              <View style={styles.digitRow} key={row.join('')} testID={`keypad-digit-row-${row.join('')}`}>
                 {row.map((value) => (
                   <DigitKey
                     key={value}
@@ -356,7 +356,15 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
                 `keyDisabled` just fades whatever colour is already there (right for the
                 accent-coloured keys), which used to leave these two visibly greenish while
                 every other number key had already gone flat grey. */}
-            <View style={styles.digitRow}>
+            {/* Last row of the main column now that the digit grid follows the
+                number-editing/history rows (§8.5) — `digitRow`'s own marginBottom would
+                otherwise be trailing, wasted space, growing the main column 6px past the
+                accent column's total (they share the same "every row but the last carries
+                the gap" total, which is what keeps them landing on identical row lines) and
+                triggering the browser to stretch/round the shorter column into
+                misalignment. `lastRow` cancels just that trailing margin, the same way
+                `equalsKey` already does for the accent column's own last row. */}
+            <View style={[styles.digitRow, styles.lastRow]} testID="keypad-digit-row-last">
               <Key
                 label={decimalSeparatorFor(locale)}
                 onPress={() => press({ region: 'decimal' })}
@@ -637,6 +645,11 @@ const styles = StyleSheet.create({
   digitRow: {
     flexDirection: 'row',
     marginBottom: KEY_GAP,
+  },
+  // Cancels `digitRow`'s marginBottom for whichever row is actually last in the main
+  // column — see its call site's comment for why a trailing gap there breaks alignment.
+  lastRow: {
+    marginBottom: 0,
   },
   digitKey: {
     flex: 1,
