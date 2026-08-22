@@ -1,11 +1,13 @@
 import { act } from 'react-test-renderer';
 import { SettingsSheet, SettingsOverlay } from './SettingsSheet';
 import { useUiStore } from '../store/uiStore';
+import { usePreferencesStore } from '../store/preferencesStore';
 import { renderNode, unmountAll } from '../nodes/testUtils';
 import { version } from '../../package.json';
 
 function resetStore() {
   useUiStore.setState({ settingsVisible: false });
+  usePreferencesStore.setState({ autoPanToEditedCell: true });
 }
 
 beforeEach(resetStore);
@@ -72,6 +74,32 @@ describe('SettingsSheet (mode-strip cog)', () => {
 
     expect(renderer.root.findByProps({ testID: 'settings-row-about' })).toBeTruthy();
     expect(renderer.root.findAllByProps({ testID: 'settings-about-name' })).toHaveLength(0);
+  });
+});
+
+describe('Auto-pan to Edited Cell (§7 P7 follow-up)', () => {
+  test('reflects the current preference value', () => {
+    usePreferencesStore.setState({ autoPanToEditedCell: false });
+    const renderer = renderNode(<SettingsSheet onDismiss={jest.fn()} />);
+
+    expect(renderer.root.findByProps({ testID: 'settings-auto-pan-toggle' }).props.value).toBe(
+      false,
+    );
+  });
+
+  test('toggling it calls setAutoPanToEditedCell and updates the rendered value', () => {
+    const renderer = renderNode(<SettingsSheet onDismiss={jest.fn()} />);
+    const toggle = renderer.root.findByProps({ testID: 'settings-auto-pan-toggle' });
+
+    expect(toggle.props.value).toBe(true);
+    act(() => {
+      toggle.props.onValueChange(false);
+    });
+
+    expect(usePreferencesStore.getState().autoPanToEditedCell).toBe(false);
+    expect(renderer.root.findByProps({ testID: 'settings-auto-pan-toggle' }).props.value).toBe(
+      false,
+    );
   });
 });
 

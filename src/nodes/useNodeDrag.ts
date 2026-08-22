@@ -57,15 +57,17 @@ import {
   type SelectionUnits,
 } from './dragLifecycle';
 import { useNodeSelected } from './useNodeSelected';
+import { useSourceIdentityHue } from './useIdentityHue';
 
 /** Screen pixels of movement before a press becomes a node drag. Below this,
  *  Canvas's Tap still wins (select / create); above it, the node claims the gesture
  *  and should stop the canvas pan from also moving. */
 const NODE_DRAG_ACTIVATION_DISTANCE = 6;
 
-/** Idle selected / group-selected node stacks above flush chain neighbours so
- *  Cell's outset focus ring is not painted under the next member (P7.2 follow-up).
- *  Below connectors (500) and a live drag (1000). */
+/** Idle selected / group-selected node, or one showing its own outset identity ring
+ *  (§11.1), stacks above flush chain neighbours so Cell's outset ring chrome is not
+ *  painted under the next member (P7.2 follow-up). Below connectors (500) and a live
+ *  drag (1000). */
 export const SELECTED_NODE_Z_INDEX = 10;
 
 export interface NodeDragHandle {
@@ -102,8 +104,14 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
   // Selection elevates idle z-index (see SELECTED_NODE_Z_INDEX). Read here rather
   // than in NodeLayer so the animated style can clear it explicitly on every frame —
   // omitting zIndex after a drag would leave 1000 stuck, same class of bug as the
-  // transform reset below.
+  // transform reset below. An unselected declaring cell showing its own outset
+  // identity ring (Cell.tsx) needs the same elevation for the same reason the
+  // comment above SELECTED_NODE_Z_INDEX names — the ring is outset chrome now,
+  // not just the selection focus ring, so it is just as paintable-over by a flush
+  // neighbour that happens to come later in `nodeIds`.
   const selected = useNodeSelected(nodeId);
+  const hasIdentityRing = useSourceIdentityHue(nodeId) !== undefined;
+  const elevate = selected || hasIdentityRing;
 
   const dragX = useSharedValue(0);
   const dragY = useSharedValue(0);
@@ -449,10 +457,10 @@ export function useNodeDrag(nodeId: NodeId): NodeDragHandle {
       };
     }
     return {
-      zIndex: selected ? SELECTED_NODE_Z_INDEX : 0,
+      zIndex: elevate ? SELECTED_NODE_Z_INDEX : 0,
       transform: [{ translateX: 0 }, { translateY: 0 }],
     };
-  }, [selected]);
+  }, [elevate]);
 
   return { gesture, animatedStyle, dragging };
 }

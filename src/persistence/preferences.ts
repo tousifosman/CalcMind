@@ -10,10 +10,12 @@
 // no backup/atomicity requirement. A failed `read()` or `write()` is swallowed by the
 // caller (the preferences store), which just stays on in-memory defaults.
 
-/** Currently holds only the numeral font size (§1.2 `tokens.numeralFontSize`'s live
- *  override). Optional so a partially-written or older file still parses. */
+/** Holds the numeral font size (§1.2 `tokens.numeralFontSize`'s live override) and the
+ *  auto-pan-to-edited-cell toggle (§7 P7 follow-up). Both optional so a partially-written
+ *  or older file still parses. */
 export interface Preferences {
   numeralFontSize?: number;
+  autoPanToEditedCell?: boolean;
 }
 
 export interface PreferencesAdapter {

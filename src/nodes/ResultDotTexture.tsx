@@ -6,10 +6,30 @@
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import Svg, { Defs, Pattern, Rect } from 'react-native-svg';
-import { resultDotColor, tokens } from '../ui/tokens';
+import { resultDotColor, tokens, nodeHeightFor } from '../ui/tokens';
+import { sideBorderWidths } from './Cell';
+import type { GroupPosition } from './useGroupPosition';
 
 /** Tile edge in SVG user units — matches §1.2 and the reference pattern. */
 export const RESULT_DOT_TILE = 4;
+
+/** Inner `(width, height)` for this texture, sized to a cell's actual content box: the
+ *  band's own width minus whichever of its left/right border `groupPosition` (§1.1)
+ *  leaves switched on — not always both, now that a chain's interior seams carry no
+ *  side border — and the cell height minus its always-present top/bottom border.
+ *  Shared by `ResultNode` and any `ReferenceNode` showing this same pattern (§11.1)
+ *  so the two don't each hand-derive the same box-model math. */
+export function textureSize(
+  bandWidth: number,
+  fontSize: number,
+  groupPosition: GroupPosition,
+): { width: number; height: number } {
+  const { borderLeftWidth, borderRightWidth } = sideBorderWidths(groupPosition, tokens.borderBand);
+  return {
+    width: bandWidth - borderLeftWidth - borderRightWidth,
+    height: nodeHeightFor(fontSize) - 2 * tokens.borderBand,
+  };
+}
 
 interface ResultDotTextureProps {
   /** Inner band width (cell width minus the structural border on both sides). */

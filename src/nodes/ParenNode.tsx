@@ -12,7 +12,8 @@ import { useNode } from '../store/selectors';
 import { tokens, rolePalette, glyphColor, lightenHex } from '../ui/tokens';
 import { Cell, useGlyphTextStyle } from './Cell';
 import { useSourceIdentityHue } from './useIdentityHue';
-import { useNodeSelected } from './useNodeSelected';
+import { useNodeSelected, useNodeGroupSelected } from './useNodeSelected';
+import { useGroupPosition } from './useGroupPosition';
 
 interface ParenNodeProps {
   id: NodeId;
@@ -37,6 +38,8 @@ function ParenNodeComponent({ id, depth = 0 }: ParenNodeProps) {
   const node = useNode(id);
   const identityHue = useSourceIdentityHue(id);
   const selected = useNodeSelected(id);
+  const groupSelected = useNodeGroupSelected(id);
+  const groupPosition = useGroupPosition(id, node?.chainId ?? null);
   const glyphTextStyle = useGlyphTextStyle();
   if (!node || node.kind !== 'paren') return null;
 
@@ -51,6 +54,8 @@ function ParenNodeComponent({ id, depth = 0 }: ParenNodeProps) {
       label={node.label}
       identityHue={identityHue}
       selected={selected}
+      groupSelected={groupSelected}
+      groupPosition={groupPosition}
     >
       <Text style={[glyphTextStyle, { color: glyphColor }]}>
         {node.side === 'open' ? '(' : ')'}
