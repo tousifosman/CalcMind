@@ -149,12 +149,15 @@ export function Keypad({ locale = 'en-US', onKeyPress }: KeypadProps) {
   // reference — same eligibility as the context-menu action of the same name
   // (`createLinkToValue`) and as `dispatchEditorCommand`'s `createLink` handler. A
   // dangling reference (target gone) does not count: there is nothing live to re-link.
+  // In group mode it follows `operatorsEnabled`'s rule: a group containing a result
+  // can link that result, same as it can continue from it (§8.7).
   const selectedIsLiveReference =
     selectedNode?.kind === 'reference' && nodes[selectedNode.targetNodeId] !== undefined;
   const canCreateLink =
     !dataEntryLocked &&
-    !groupMode &&
-    (selectedKind === 'number' || selectedKind === 'result' || selectedIsLiveReference);
+    (groupMode
+      ? groupContainsResult(groupSelectedIds, nodes)
+      : selectedKind === 'number' || selectedKind === 'result' || selectedIsLiveReference);
   // §8.7: an operator here is about to *create a new linked cell* (a fresh reference,
   // via `continueFromValue`) rather than extend the current chain in place — true for a
   // selected result, or a selected *free* number that isn't being edited (chainId ===
